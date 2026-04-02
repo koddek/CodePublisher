@@ -1,17 +1,20 @@
-# Maui App Publisher
+# DotNet App Publisher
 
-![Maui App Publisher icon](docs/maui-app-publisher-icon.png)
+![DotNet App Publisher icon](docs/maui-app-publisher-icon.png)
 
-Maui App Publisher is a desktop utility for .NET MAUI developers who want a faster, safer way to build Android publish commands, inspect exactly what will run, and handle a few common emulator tasks without living in the terminal.
+DotNet App Publisher is a desktop utility for .NET developers who want a faster, safer way to build publish commands, inspect exactly what will run, and handle common platform workflows without living in the terminal.
 
-It is built with Avalonia and currently focuses on Android publishing workflows for MAUI projects.
+It is built with Avalonia and currently supports Android, macOS, Windows, and iOS publish workflows for .NET projects.
 
 ## What it does
 
-- Select a MAUI project folder and auto-detect the `.csproj`
-- Read Android app metadata such as package id and target framework
-- Generate APK, AAB, or both
-- Toggle common Android publish settings including trimming, AOT, profiled AOT, linker mode, shrinker, dex compiler, and cleanup behavior
+- Select a .NET project folder and auto-detect the `.csproj`
+- Read project metadata and pick platform-appropriate target framework/runtime combinations
+- Generate Android APK, AAB, or both
+- Generate macOS outputs with optional `.app` bundle creation
+- Generate Windows publish outputs with `.exe` launcher support
+- Generate iOS publish commands with archive/IPA toggles
+- Toggle platform-specific publish settings including trimming, AOT, linker/shrinker, and cleanup behavior
 - Preview the exact `dotnet publish` command before running it
 - Stream live publish output in the app
 - Open the publish folder
@@ -41,9 +44,9 @@ dotnet run --project src/MauiAppPublisher/MauiAppPublisher.Desktop/MauiAppPublis
 
 ### Main workflow
 
-1. Pick the MAUI project directory.
+1. Pick the .NET project directory.
 2. Review the detected `.csproj`, package id, and target framework.
-3. Toggle the Android publish settings you want.
+3. Choose platform (`Android`, `macOS`, `Windows`, or `iOS`) and set the publish options for that slice.
 4. Confirm the command preview looks correct.
 5. Publish and watch the live output panel.
 6. Open the output folder or push the build to an emulator.
@@ -100,19 +103,19 @@ That gives the repo a solid starting point for sharing on GitHub without having 
 
 ### Platform expansion
 
-- Add iOS publish support
-- Add iOS archive/export presets
-- Add simulator discovery and launch
+- Add iOS simulator discovery and launch
+- Add richer iOS signing/export profile support
+- Add Windows installer packaging presets
 - Add platform-specific validation so unsupported options are hidden or disabled automatically
 
 ## Current status
 
-The app is already useful for MAUI Android publish flows and emulator checks, but it is still evolving. The roadmap above reflects the next useful improvements for shipping and store workflows.
+The app is already useful for Android, macOS, Windows, and iOS publish flows, plus Android emulator checks, but it is still evolving. The roadmap above reflects the next useful improvements for shipping and store workflows.
 
 ## Development notes
 
 - The command preview is the source of truth for the publish command the app will run.
-- Some MAUI projects override trim-related properties in custom ways. Maui App Publisher now detects common project-specific trim property patterns so AOT and trimming combinations can be emitted correctly.
+- Some .NET projects override trim-related properties in custom ways. DotNet App Publisher detects common project-specific trim property patterns so AOT and trimming combinations can be emitted correctly.
 
 ## Contributing
 
