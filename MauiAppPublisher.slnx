@@ -1,1 +1,5 @@
-<Solution />
+<Solution>
+  <Project Path="src/MauiAppPublisher/MauiAppPublisher.Browser/MauiAppPublisher.Browser.csproj" />
+  <Project Path="src/MauiAppPublisher/MauiAppPublisher.Desktop/MauiAppPublisher.Desktop.csproj" />
+  <Project Path="src/MauiAppPublisher/MauiAppPublisher/MauiAppPublisher.csproj" />
+</Solution>
