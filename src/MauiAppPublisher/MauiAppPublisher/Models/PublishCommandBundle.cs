@@ -1,4 +1,4 @@
-namespace MauiAppPublisher.Models;
+namespace DotNetAppPublisher.Models;
 
 public sealed record PublishCommandBundle(
     IReadOnlyList<string> CommandArguments,

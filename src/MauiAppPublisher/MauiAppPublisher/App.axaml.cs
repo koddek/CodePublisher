@@ -4,11 +4,11 @@ using Avalonia.Data.Core;
 using Avalonia.Data.Core.Plugins;
 using System.Linq;
 using Avalonia.Markup.Xaml;
-using MauiAppPublisher.Services;
-using MauiAppPublisher.ViewModels;
-using MauiAppPublisher.Views;
+using DotNetAppPublisher.Services;
+using DotNetAppPublisher.ViewModels;
+using DotNetAppPublisher.Views;
 
-namespace MauiAppPublisher;
+namespace DotNetAppPublisher;
 
 public partial class App : Application
 {

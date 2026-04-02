@@ -1,4 +1,4 @@
-namespace MauiAppPublisher.Models;
+namespace DotNetAppPublisher.Models;
 
 public sealed record ProjectMetadata(
     string ProjectFilePath,

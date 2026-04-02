@@ -1,6 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace MauiAppPublisher.ViewModels;
+namespace DotNetAppPublisher.ViewModels;
 
 public abstract class ViewModelBase : ObservableObject
 {

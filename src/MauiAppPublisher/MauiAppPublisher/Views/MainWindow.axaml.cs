@@ -1,6 +1,6 @@
 using Avalonia.Controls;
 
-namespace MauiAppPublisher.Views;
+namespace DotNetAppPublisher.Views;
 
 public partial class MainWindow : Window
 {

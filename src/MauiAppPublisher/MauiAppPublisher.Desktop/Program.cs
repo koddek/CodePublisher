@@ -1,7 +1,7 @@
 ﻿using System;
 using Avalonia;
 
-namespace MauiAppPublisher.Desktop;
+namespace DotNetAppPublisher.Desktop;
 
 sealed class Program
 {

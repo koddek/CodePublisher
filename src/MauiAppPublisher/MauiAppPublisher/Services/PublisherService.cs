@@ -3,12 +3,17 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Avalonia.Controls;
-using MauiAppPublisher.Models;
+using DotNetAppPublisher.Models;
 
-namespace MauiAppPublisher.Services;
+namespace DotNetAppPublisher.Services;
 
 public sealed class PublisherService
 {
+    public const string AndroidPlatform = "Android";
+    public const string MacOsPlatform = "macOS";
+    public const string WindowsPlatform = "Windows";
+    public const string IosPlatform = "iOS";
+
     private static readonly string[] DotnetCandidates =
     [
         "/usr/local/share/dotnet/dotnet",
@@ -58,7 +63,7 @@ public sealed class PublisherService
 
     public string EmulatorStatusText => EmulatorPath is null ? "emulator not found" : $"emulator: {EmulatorPath}";
 
-    public ProjectMetadata LoadProjectMetadata(string projectDirectory, string configuration, string targetFramework, string runtimeIdentifier)
+    public ProjectMetadata LoadProjectMetadata(string projectDirectory, string configuration, string targetFramework, string runtimeIdentifier, string publishPlatform)
     {
         var projectDirectoryPath = CreateProjectDirectory(projectDirectory);
         var projectFile = FindProjectFile(projectDirectoryPath)
@@ -68,7 +73,7 @@ public sealed class PublisherService
             projectFile.FullName,
             GetDefaultOutputDirectory(projectDirectoryPath, configuration, targetFramework, runtimeIdentifier),
             ReadProperty(projectFile, "ApplicationId", "PackageName", "ApplicationIdentifier"),
-            ReadTargetFramework(projectFile));
+            ReadTargetFramework(projectFile, publishPlatform));
     }
 
     public PublishCommandBundle BuildPublishCommandBundle(PublishConfiguration configuration)
@@ -77,11 +82,19 @@ public sealed class PublisherService
         var projectFile = FindProjectFile(projectDirectory)
             ?? throw new InvalidOperationException($"No .csproj found in {projectDirectory}.");
 
-        var formats = GetSelectedFormats(configuration);
-        if (formats.Count == 0)
+        ValidateProjectTargetFramework(projectFile, configuration.TargetFramework);
+
+        var isAndroid = IsAndroidPlatform(configuration.PublishPlatform);
+        var isMacOs = IsMacOsPlatform(configuration.PublishPlatform);
+        var isWindows = IsWindowsPlatform(configuration.PublishPlatform);
+        var isIos = IsIosPlatform(configuration.PublishPlatform);
+        var formats = isAndroid ? GetSelectedFormats(configuration) : [];
+        if (isAndroid && formats.Count == 0)
         {
             throw new InvalidOperationException("Select at least one package format: APK, AAB, or both.");
         }
+
+        ValidateRuntimeForPlatform(configuration);
 
         if (DotnetPath is null)
         {
@@ -93,15 +106,28 @@ public sealed class PublisherService
             : configuration.OutputDirectory.Trim();
 
         var customTrimProperty = DetectCustomTrimProperty(projectFile);
-        var command = BuildBaseCommand(configuration, projectFile.FullName, customTrimProperty);
-        command.Add($"-p:AndroidPackageFormats={string.Join("%3B", formats)}");
+        var command = isAndroid
+            ? BuildAndroidCommand(configuration, projectFile.FullName, customTrimProperty)
+            : isMacOs
+                ? BuildMacOsCommand(configuration, projectFile.FullName, customTrimProperty)
+                : isWindows
+                    ? BuildWindowsCommand(configuration, projectFile.FullName, customTrimProperty)
+                    : isIos
+                        ? BuildIosCommand(configuration, projectFile.FullName, customTrimProperty)
+                        : throw new InvalidOperationException($"Unknown publish platform `{configuration.PublishPlatform}`.");
+
+        if (isAndroid)
+        {
+            command.Add($"-p:AndroidPackageFormats={string.Join("%3B", formats)}");
+        }
+
         command.Add("-o");
         command.Add(outputDirectory);
 
         return new PublishCommandBundle(
             command,
             MaskCommand(command),
-            MaskCommand(BuildVerifiedApkCommand(configuration, projectFile.FullName, outputDirectory, customTrimProperty)),
+            isAndroid ? MaskCommand(BuildVerifiedApkCommand(configuration, projectFile.FullName, outputDirectory, customTrimProperty)) : string.Empty,
             projectFile.FullName,
             outputDirectory);
     }
@@ -114,8 +140,11 @@ public sealed class PublisherService
 
         writeOutput(Environment.NewLine + "=== Publish started ===" + Environment.NewLine);
         writeOutput(bundle.PreviewText + Environment.NewLine + Environment.NewLine);
-        writeOutput("Known-good APK-only command:" + Environment.NewLine);
-        writeOutput(bundle.VerifiedApkPreviewText + Environment.NewLine + Environment.NewLine);
+        if (!string.IsNullOrWhiteSpace(bundle.VerifiedApkPreviewText))
+        {
+            writeOutput("Known-good APK-only command:" + Environment.NewLine);
+            writeOutput(bundle.VerifiedApkPreviewText + Environment.NewLine + Environment.NewLine);
+        }
 
         if (outputDirectory.Exists)
         {
@@ -125,25 +154,28 @@ public sealed class PublisherService
 
         if (configuration.DeleteBin)
         {
-            DeleteDirectoryIfPresent(Path.Combine(projectDirectory.FullName, "bin"), writeOutput);
+            DeleteDirectoryIfPresentSafely(Path.Combine(projectDirectory.FullName, "bin"), writeOutput);
         }
 
         if (configuration.DeleteObj)
         {
-            DeleteDirectoryIfPresent(Path.Combine(projectDirectory.FullName, "obj"), writeOutput);
+            DeleteDirectoryIfPresentSafely(Path.Combine(projectDirectory.FullName, "obj"), writeOutput);
         }
 
-        var staleAndroidDirectory = Path.Combine(
-            projectDirectory.FullName,
-            "obj",
-            configuration.Configuration.Trim(),
-            configuration.TargetFramework.Trim(),
-            configuration.RuntimeIdentifier.Trim(),
-            "android");
-
-        if (Directory.Exists(staleAndroidDirectory))
+        if (IsAndroidPlatform(configuration.PublishPlatform))
         {
-            Directory.Delete(staleAndroidDirectory, recursive: true);
+            var staleAndroidDirectory = Path.Combine(
+                projectDirectory.FullName,
+                "obj",
+                configuration.Configuration.Trim(),
+                configuration.TargetFramework.Trim(),
+                configuration.RuntimeIdentifier.Trim(),
+                "android");
+
+            if (Directory.Exists(staleAndroidDirectory))
+            {
+                Directory.Delete(staleAndroidDirectory, recursive: true);
+            }
         }
 
         writeOutput($"--- Running: {bundle.PreviewText} ---{Environment.NewLine}");
@@ -151,6 +183,20 @@ public sealed class PublisherService
 
         if (exitCode == 0)
         {
+            if (IsMacOsPlatform(configuration.PublishPlatform) && configuration.CreateMacAppBundle)
+            {
+                var createdBundlePath = EnsureMacAppBundle(
+                    bundle.OutputDirectory,
+                    bundle.ProjectFilePath,
+                    configuration.PackageId,
+                    writeOutput);
+
+                if (!string.IsNullOrWhiteSpace(createdBundlePath))
+                {
+                    writeOutput($"macOS app bundle ready: {createdBundlePath}{Environment.NewLine}");
+                }
+            }
+
             writeOutput(Environment.NewLine + "=== Publish completed successfully ===" + Environment.NewLine);
             PlayCompletionSound(success: true);
             return true;
@@ -242,6 +288,30 @@ public sealed class PublisherService
             : $"Launch failed for {packageId}.{Environment.NewLine}{output}";
     }
 
+    public Task<string> DeletePublishedDesktopAppAsync(string outputDirectory, CancellationToken cancellationToken)
+    {
+        _ = cancellationToken;
+
+        if (string.IsNullOrWhiteSpace(outputDirectory) || !Directory.Exists(outputDirectory))
+        {
+            throw new InvalidOperationException($"Publish folder not found: {outputDirectory}");
+        }
+
+        var outputDirectoryInfo = new DirectoryInfo(outputDirectory);
+        var appBundle = outputDirectoryInfo
+            .EnumerateDirectories("*.app", SearchOption.AllDirectories)
+            .OrderByDescending(directory => directory.LastWriteTimeUtc)
+            .FirstOrDefault();
+
+        if (appBundle is null)
+        {
+            throw new InvalidOperationException($"No .app bundle found under {outputDirectory}.");
+        }
+
+        appBundle.Delete(recursive: true);
+        return Task.FromResult($"Deleted desktop app bundle {appBundle.FullName}.");
+    }
+
     public async Task<string> CopyWindowScreenshotToClipboardAsync(Window window, CancellationToken cancellationToken)
     {
         if (!OperatingSystem.IsMacOS())
@@ -286,7 +356,7 @@ public sealed class PublisherService
 
         var filePath = Path.Combine(
             targetDirectory,
-            $"MauiAppPublisher-screenshot-{DateTime.Now:yyyyMMdd-HHmmss}.png");
+            $"DotNetAppPublisher-screenshot-{DateTime.Now:yyyyMMdd-HHmmss}.png");
 
         var scaling = window.DesktopScaling;
         var bounds = window.Bounds;
@@ -384,6 +454,92 @@ public sealed class PublisherService
         return null;
     }
 
+    private static void ValidateProjectTargetFramework(FileInfo projectFile, string targetFramework)
+    {
+        var selectedFramework = targetFramework.Trim();
+        if (string.IsNullOrWhiteSpace(selectedFramework))
+        {
+            throw new InvalidOperationException("Target framework is required.");
+        }
+
+        var singleTarget = ReadProperty(projectFile, "TargetFramework");
+        if (!string.IsNullOrWhiteSpace(singleTarget))
+        {
+            if (!string.Equals(singleTarget.Trim(), selectedFramework, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Target framework `{selectedFramework}` is not declared by {projectFile.Name}. Use `{singleTarget.Trim()}` or switch to a compatible project.");
+            }
+
+            return;
+        }
+
+        var multiTarget = ReadProperty(projectFile, "TargetFrameworks");
+        if (string.IsNullOrWhiteSpace(multiTarget))
+        {
+            return;
+        }
+
+        var frameworks = multiTarget
+            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        if (!frameworks.Any(framework => string.Equals(framework, selectedFramework, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException(
+                $"Target framework `{selectedFramework}` is not in `{projectFile.Name}` target frameworks: {string.Join(", ", frameworks)}.");
+        }
+    }
+
+    private static void ValidateRuntimeForPlatform(PublishConfiguration configuration)
+    {
+        var runtimeIdentifier = configuration.RuntimeIdentifier.Trim();
+        if (string.IsNullOrWhiteSpace(runtimeIdentifier))
+        {
+            throw new InvalidOperationException("Runtime identifier is required.");
+        }
+
+        if (IsAndroidPlatform(configuration.PublishPlatform))
+        {
+            if (!runtimeIdentifier.StartsWith("android-", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Android publishing requires an `android-*` runtime identifier.");
+            }
+
+            return;
+        }
+
+        if (IsMacOsPlatform(configuration.PublishPlatform))
+        {
+            var isMacRuntime = runtimeIdentifier.StartsWith("osx-", StringComparison.OrdinalIgnoreCase)
+                || runtimeIdentifier.StartsWith("maccatalyst-", StringComparison.OrdinalIgnoreCase);
+
+            if (!isMacRuntime)
+            {
+                throw new InvalidOperationException("macOS publishing requires an `osx-*` or `maccatalyst-*` runtime identifier.");
+            }
+
+            return;
+        }
+
+        if (IsWindowsPlatform(configuration.PublishPlatform))
+        {
+            if (!runtimeIdentifier.StartsWith("win-", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Windows publishing requires a `win-*` runtime identifier.");
+            }
+
+            return;
+        }
+
+        if (IsIosPlatform(configuration.PublishPlatform))
+        {
+            if (!runtimeIdentifier.StartsWith("ios-", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("iOS publishing requires an `ios-*` runtime identifier.");
+            }
+        }
+    }
+
     private static string ResolveScreenshotDirectory(string outputDirectory)
     {
         if (!string.IsNullOrWhiteSpace(outputDirectory) && Directory.Exists(outputDirectory))
@@ -456,7 +612,7 @@ public sealed class PublisherService
         return null;
     }
 
-    private static string? ReadTargetFramework(FileInfo projectFile)
+    private static string? ReadTargetFramework(FileInfo projectFile, string publishPlatform)
     {
         var singleTarget = ReadProperty(projectFile, "TargetFramework");
         if (!string.IsNullOrWhiteSpace(singleTarget))
@@ -472,8 +628,34 @@ public sealed class PublisherService
 
         return multiTarget
             .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .FirstOrDefault(framework => framework.Contains("android", StringComparison.OrdinalIgnoreCase))
+            .FirstOrDefault(framework => IsTargetFrameworkForPlatform(framework, publishPlatform))
             ?? multiTarget.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
+    }
+
+    private static bool IsTargetFrameworkForPlatform(string framework, string publishPlatform)
+    {
+        if (IsAndroidPlatform(publishPlatform))
+        {
+            return framework.Contains("android", StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (IsMacOsPlatform(publishPlatform))
+        {
+            return framework.Contains("maccatalyst", StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (IsWindowsPlatform(publishPlatform))
+        {
+            return framework.Contains("windows", StringComparison.OrdinalIgnoreCase)
+                || framework.Equals("net10.0", StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (IsIosPlatform(publishPlatform))
+        {
+            return framework.Contains("ios", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return true;
     }
 
     private static string? DetectCustomTrimProperty(FileInfo projectFile)
@@ -500,7 +682,7 @@ public sealed class PublisherService
         return null;
     }
 
-    private List<string> BuildBaseCommand(PublishConfiguration configuration, string projectFilePath, string? customTrimProperty)
+    private List<string> BuildAndroidCommand(PublishConfiguration configuration, string projectFilePath, string? customTrimProperty)
     {
         var command = new List<string>
         {
@@ -567,6 +749,137 @@ public sealed class PublisherService
             case "Do Not Sign":
                 command.Add("-p:AndroidKeyStore=false");
                 break;
+        }
+
+        return command;
+    }
+
+    private List<string> BuildMacOsCommand(PublishConfiguration configuration, string projectFilePath, string? customTrimProperty)
+    {
+        var targetFramework = configuration.TargetFramework.Trim();
+        var runtimeIdentifier = configuration.RuntimeIdentifier.Trim();
+        var isMacCatalyst = targetFramework.Contains("maccatalyst", StringComparison.OrdinalIgnoreCase)
+            || runtimeIdentifier.Contains("maccatalyst", StringComparison.OrdinalIgnoreCase);
+        var isNativeOsxRid = runtimeIdentifier.StartsWith("osx-", StringComparison.OrdinalIgnoreCase);
+
+        var command = new List<string>
+        {
+            DotnetPath!,
+            "publish",
+            projectFilePath,
+            "-f",
+            targetFramework,
+            "-c",
+            configuration.Configuration.Trim(),
+            "-r",
+            runtimeIdentifier,
+            $"-p:SelfContained={ToLowerInvariant(configuration.SelfContained)}"
+        };
+
+        if (string.IsNullOrWhiteSpace(customTrimProperty))
+        {
+            command.Add($"-p:PublishTrimmed={ToLowerInvariant(configuration.PublishTrimmed)}");
+        }
+        else
+        {
+            command.Add($"-p:{customTrimProperty}={ToLowerInvariant(configuration.PublishTrimmed)}");
+        }
+
+        if (!isMacCatalyst && configuration.PublishReadyToRun)
+        {
+            command.Add("-p:PublishReadyToRun=true");
+        }
+
+        if (!isMacCatalyst && configuration.PublishSingleFile)
+        {
+            command.Add("-p:PublishSingleFile=true");
+        }
+
+        if (!isMacCatalyst && configuration.UseAppHost)
+        {
+            command.Add("-p:UseAppHost=true");
+        }
+
+        if (!isMacCatalyst && isNativeOsxRid && configuration.PublishAot)
+        {
+            command.Add("-p:PublishAot=true");
+        }
+
+        return command;
+    }
+
+    private List<string> BuildWindowsCommand(PublishConfiguration configuration, string projectFilePath, string? customTrimProperty)
+    {
+        var command = new List<string>
+        {
+            DotnetPath!,
+            "publish",
+            projectFilePath,
+            "-f",
+            configuration.TargetFramework.Trim(),
+            "-c",
+            configuration.Configuration.Trim(),
+            "-r",
+            configuration.RuntimeIdentifier.Trim(),
+            $"-p:SelfContained={ToLowerInvariant(configuration.SelfContained)}",
+            $"-p:UseAppHost={ToLowerInvariant(configuration.CreateWindowsExecutable)}"
+        };
+
+        if (string.IsNullOrWhiteSpace(customTrimProperty))
+        {
+            command.Add($"-p:PublishTrimmed={ToLowerInvariant(configuration.PublishTrimmed)}");
+        }
+        else
+        {
+            command.Add($"-p:{customTrimProperty}={ToLowerInvariant(configuration.PublishTrimmed)}");
+        }
+
+        if (configuration.PublishReadyToRun)
+        {
+            command.Add("-p:PublishReadyToRun=true");
+        }
+
+        if (configuration.PublishSingleFile)
+        {
+            command.Add("-p:PublishSingleFile=true");
+        }
+
+        return command;
+    }
+
+    private List<string> BuildIosCommand(PublishConfiguration configuration, string projectFilePath, string? customTrimProperty)
+    {
+        var command = new List<string>
+        {
+            DotnetPath!,
+            "publish",
+            projectFilePath,
+            "-f",
+            configuration.TargetFramework.Trim(),
+            "-c",
+            configuration.Configuration.Trim(),
+            "-r",
+            configuration.RuntimeIdentifier.Trim(),
+            $"-p:SelfContained={ToLowerInvariant(configuration.SelfContained)}"
+        };
+
+        if (string.IsNullOrWhiteSpace(customTrimProperty))
+        {
+            command.Add($"-p:PublishTrimmed={ToLowerInvariant(configuration.PublishTrimmed)}");
+        }
+        else
+        {
+            command.Add($"-p:{customTrimProperty}={ToLowerInvariant(configuration.PublishTrimmed)}");
+        }
+
+        if (configuration.ArchiveOnBuild)
+        {
+            command.Add("-p:ArchiveOnBuild=true");
+        }
+
+        if (configuration.BuildIpa)
+        {
+            command.Add("-p:BuildIpa=true");
         }
 
         return command;
@@ -686,15 +999,239 @@ public sealed class PublisherService
         return value ? "true" : "false";
     }
 
-    private static void DeleteDirectoryIfPresent(string path, Action<string> writeOutput)
+    private static bool IsAndroidPlatform(string publishPlatform)
+    {
+        return string.Equals(publishPlatform, AndroidPlatform, StringComparison.Ordinal);
+    }
+
+    private static bool IsMacOsPlatform(string publishPlatform)
+    {
+        return string.Equals(publishPlatform, MacOsPlatform, StringComparison.Ordinal);
+    }
+
+    private static bool IsWindowsPlatform(string publishPlatform)
+    {
+        return string.Equals(publishPlatform, WindowsPlatform, StringComparison.Ordinal);
+    }
+
+    private static bool IsIosPlatform(string publishPlatform)
+    {
+        return string.Equals(publishPlatform, IosPlatform, StringComparison.Ordinal);
+    }
+
+    private static void DeleteDirectoryIfPresentSafely(string path, Action<string> writeOutput)
     {
         if (!Directory.Exists(path))
         {
             return;
         }
 
+        if (IsCurrentProcessInsideDirectory(path))
+        {
+            writeOutput($"Skipping delete for active runtime folder {path}{Environment.NewLine}");
+            return;
+        }
+
         writeOutput($"Deleting {path}{Environment.NewLine}");
         Directory.Delete(path, recursive: true);
+    }
+
+    private static bool IsCurrentProcessInsideDirectory(string directoryPath)
+    {
+        var processPath = Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(processPath))
+        {
+            return false;
+        }
+
+        var fullDirectoryPath = Path.GetFullPath(directoryPath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+
+        var fullProcessPath = Path.GetFullPath(processPath);
+        return fullProcessPath.StartsWith(fullDirectoryPath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? EnsureMacAppBundle(
+        string outputDirectory,
+        string projectFilePath,
+        string packageId,
+        Action<string> writeOutput)
+    {
+        if (!OperatingSystem.IsMacOS())
+        {
+            return null;
+        }
+
+        if (!Directory.Exists(outputDirectory))
+        {
+            return null;
+        }
+
+        var normalizedOutput = Path.GetFullPath(outputDirectory);
+        var appMarker = $"{Path.DirectorySeparatorChar}.app{Path.DirectorySeparatorChar}Contents{Path.DirectorySeparatorChar}MacOS";
+        var macOsIndex = normalizedOutput.IndexOf(appMarker, StringComparison.OrdinalIgnoreCase);
+        if (macOsIndex >= 0)
+        {
+            return normalizedOutput[..(macOsIndex + 4)];
+        }
+
+        var existingBundle = FindNewestAppBundle(outputDirectory);
+        if (existingBundle is not null)
+        {
+            return existingBundle.FullName;
+        }
+
+        var projectName = Path.GetFileNameWithoutExtension(projectFilePath);
+        var bundlePath = Path.Combine(outputDirectory, $"{projectName}.app");
+        var contentsPath = Path.Combine(bundlePath, "Contents");
+        var macOsPath = Path.Combine(contentsPath, "MacOS");
+        var resourcesPath = Path.Combine(contentsPath, "Resources");
+        Directory.CreateDirectory(macOsPath);
+        Directory.CreateDirectory(resourcesPath);
+
+        foreach (var sourceFilePath in Directory.EnumerateFiles(outputDirectory, "*", SearchOption.TopDirectoryOnly))
+        {
+            var sourceFileName = Path.GetFileName(sourceFilePath);
+            var destinationFilePath = Path.Combine(macOsPath, sourceFileName);
+            if (string.Equals(sourceFilePath, destinationFilePath, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            File.Copy(sourceFilePath, destinationFilePath, overwrite: true);
+        }
+
+        var executableName = DetermineExecutableName(macOsPath, projectName);
+        if (!string.IsNullOrWhiteSpace(executableName))
+        {
+            var executablePath = Path.Combine(macOsPath, executableName);
+            TryMarkExecutable(executablePath);
+        }
+
+        var bundleIdentifier = BuildBundleIdentifier(packageId, projectName);
+        var plistPath = Path.Combine(contentsPath, "Info.plist");
+        File.WriteAllText(
+            plistPath,
+            BuildInfoPlist(projectName, executableName ?? projectName, bundleIdentifier));
+
+        writeOutput($"Created .app bundle at {bundlePath}{Environment.NewLine}");
+        return bundlePath;
+    }
+
+    private static DirectoryInfo? FindNewestAppBundle(string outputDirectory)
+    {
+        var directory = new DirectoryInfo(outputDirectory);
+        if (!directory.Exists)
+        {
+            return null;
+        }
+
+        return directory
+            .EnumerateDirectories("*.app", SearchOption.AllDirectories)
+            .OrderByDescending(bundle => bundle.LastWriteTimeUtc)
+            .FirstOrDefault();
+    }
+
+    private static string? DetermineExecutableName(string macOsPath, string projectName)
+    {
+        var preferredPath = Path.Combine(macOsPath, projectName);
+        if (File.Exists(preferredPath))
+        {
+            return projectName;
+        }
+
+        var candidate = Directory
+            .EnumerateFiles(macOsPath, "*", SearchOption.TopDirectoryOnly)
+            .Select(path => new FileInfo(path))
+            .Where(file => !file.Name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+            .Where(file => !file.Name.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase))
+            .Where(file => !file.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            .Where(file => !file.Name.EndsWith(".dylib", StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(file => file.Length)
+            .FirstOrDefault();
+
+        return candidate?.Name;
+    }
+
+    private static void TryMarkExecutable(string executablePath)
+    {
+        try
+        {
+            if (!OperatingSystem.IsMacOS() && !OperatingSystem.IsLinux())
+            {
+                return;
+            }
+
+            if (!File.Exists(executablePath))
+            {
+                return;
+            }
+
+            File.SetUnixFileMode(
+                executablePath,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+                UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+                UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+        }
+        catch
+        {
+            // Best effort.
+        }
+    }
+
+    private static string BuildBundleIdentifier(string packageId, string projectName)
+    {
+        if (!string.IsNullOrWhiteSpace(packageId))
+        {
+            var normalizedPackageId = packageId.Trim().Replace('_', '.');
+            if (normalizedPackageId.Contains('.', StringComparison.Ordinal))
+            {
+                return normalizedPackageId;
+            }
+        }
+
+        var normalizedName = Regex.Replace(projectName.ToLowerInvariant(), @"[^a-z0-9]+", string.Empty);
+        if (string.IsNullOrWhiteSpace(normalizedName))
+        {
+            normalizedName = "dotnetapppublisher";
+        }
+
+        return $"com.{normalizedName}.app";
+    }
+
+    private static string BuildInfoPlist(string projectName, string executableName, string bundleIdentifier)
+    {
+        return $$"""
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
+  <key>CFBundleExecutable</key>
+  <string>{{executableName}}</string>
+  <key>CFBundleIdentifier</key>
+  <string>{{bundleIdentifier}}</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>CFBundleName</key>
+  <string>{{projectName}}</string>
+  <key>CFBundleDisplayName</key>
+  <string>{{projectName}}</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>0.1.0</string>
+  <key>CFBundleVersion</key>
+  <string>0.1.0</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>12.0</string>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+</dict>
+</plist>
+""";
     }
 
     private static FileInfo? FindBestApk(string outputDirectory)

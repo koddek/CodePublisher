@@ -1,8 +1,10 @@
-namespace MauiAppPublisher.Models;
+namespace DotNetAppPublisher.Models;
 
 public sealed record PublishConfiguration
 {
     public required string ProjectDirectory { get; init; }
+
+    public required string PublishPlatform { get; init; }
 
     public required string TargetFramework { get; init; }
 
@@ -21,6 +23,22 @@ public sealed record PublishConfiguration
     public required bool SelfContained { get; init; }
 
     public required bool PublishTrimmed { get; init; }
+
+    public required bool PublishAot { get; init; }
+
+    public required bool PublishReadyToRun { get; init; }
+
+    public required bool PublishSingleFile { get; init; }
+
+    public required bool UseAppHost { get; init; }
+
+    public required bool CreateMacAppBundle { get; init; }
+
+    public required bool CreateWindowsExecutable { get; init; }
+
+    public required bool BuildIpa { get; init; }
+
+    public required bool ArchiveOnBuild { get; init; }
 
     public required bool RunAotCompilation { get; init; }
 

@@ -1,6 +1,6 @@
 {
     "profiles": {
-    "MauiAppPublisher.Browser": {
+    "DotNetAppPublisher.Browser": {
         "commandName": "Project",
         "launchBrowser": true,
         "environmentVariables": {

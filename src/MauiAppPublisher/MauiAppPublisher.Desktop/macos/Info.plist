@@ -6,15 +6,15 @@
   <key>CFBundleDevelopmentRegion</key>
   <string>en</string>
   <key>CFBundleExecutable</key>
-  <string>MauiAppPublisher.Desktop</string>
+  <string>DotNetAppPublisher.Desktop</string>
   <key>CFBundleIdentifier</key>
-  <string>com.mauiapppublisher.desktop</string>
+  <string>com.dotnetapppublisher.desktop</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>Maui Publisher</string>
+  <string>DotNet Publisher</string>
   <key>CFBundleDisplayName</key>
-  <string>Maui App Publisher</string>
+  <string>DotNet App Publisher</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
@@ -22,7 +22,7 @@
   <key>CFBundleVersion</key>
   <string>0.1.0</string>
   <key>CFBundleIconFile</key>
-  <string>maui-app-publisher</string>
+  <string>dotnet-app-publisher</string>
   <key>LSMinimumSystemVersion</key>
   <string>12.0</string>
   <key>NSHighResolutionCapable</key>

@@ -4,7 +4,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 
-namespace MauiAppPublisher.Services;
+namespace DotNetAppPublisher.Services;
 
 public sealed class DesktopInteractionService
 {
@@ -63,6 +63,11 @@ public sealed class DesktopInteractionService
     public Task ShowErrorAsync(string title, string message)
     {
         return ShowDialogAsync(title, message);
+    }
+
+    public async Task CopyTextToClipboardAsync(string text)
+    {
+        await Window.Clipboard!.SetTextAsync(text);
     }
 
     private async Task<IStorageFolder?> TryGetFolderAsync(string? startPath)

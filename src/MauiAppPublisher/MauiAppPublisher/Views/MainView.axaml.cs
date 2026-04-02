@@ -2,9 +2,9 @@ using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Threading;
-using MauiAppPublisher.ViewModels;
+using DotNetAppPublisher.ViewModels;
 
-namespace MauiAppPublisher.Views;
+namespace DotNetAppPublisher.Views;
 
 public partial class MainView : UserControl
 {

@@ -3,15 +3,16 @@ using System.Text;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using MauiAppPublisher.Models;
-using MauiAppPublisher.Services;
+using DotNetAppPublisher.Models;
+using DotNetAppPublisher.Services;
 
-namespace MauiAppPublisher.ViewModels;
+namespace DotNetAppPublisher.ViewModels;
 
 public partial class MainViewModel : ViewModelBase
 {
     private static readonly HashSet<string> PreviewSensitiveProperties =
     [
+        nameof(PublishPlatform),
         nameof(ProjectDirectory),
         nameof(TargetFramework),
         nameof(RuntimeIdentifier),
@@ -21,6 +22,14 @@ public partial class MainViewModel : ViewModelBase
         nameof(IncludeAab),
         nameof(SelfContained),
         nameof(PublishTrimmed),
+        nameof(PublishAot),
+        nameof(PublishReadyToRun),
+        nameof(PublishSingleFile),
+        nameof(UseAppHost),
+        nameof(CreateMacAppBundle),
+        nameof(CreateWindowsExecutable),
+        nameof(BuildIpa),
+        nameof(ArchiveOnBuild),
         nameof(RunAotCompilation),
         nameof(EnableProfiledAot),
         nameof(AndroidLinkMode),
@@ -48,10 +57,18 @@ public partial class MainViewModel : ViewModelBase
         DotnetStatus = publisherService.DotnetStatusText;
         AdbStatus = publisherService.AdbStatusText;
         EmulatorStatus = publisherService.EmulatorStatusText;
-        StatusMessage = "Select a MAUI project folder to start building your publish command.";
+        StatusMessage = "Select a .NET project folder to start building your publish command.";
         RefreshCommandPreview();
         _ = RefreshEmulatorsAsync();
     }
+
+    public IReadOnlyList<string> PublishPlatformOptions { get; } =
+    [
+        PublisherService.AndroidPlatform,
+        PublisherService.MacOsPlatform,
+        PublisherService.WindowsPlatform,
+        PublisherService.IosPlatform
+    ];
 
     public IReadOnlyList<string> ConfigurationOptions { get; } = ["Release", "Debug"];
 
@@ -62,6 +79,26 @@ public partial class MainViewModel : ViewModelBase
     public IReadOnlyList<string> DexToolOptions { get; } = ["d8", "dx"];
 
     public IReadOnlyList<string> SignModeOptions { get; } = ["Auto", "Sign", "Do Not Sign"];
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(PublishCommand))]
+    [NotifyCanExecuteChangedFor(nameof(InstallLatestApkCommand))]
+    [NotifyCanExecuteChangedFor(nameof(UninstallAppCommand))]
+    [NotifyCanExecuteChangedFor(nameof(LaunchAppCommand))]
+    [NotifyCanExecuteChangedFor(nameof(DeleteDesktopAppCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RefreshEmulatorsCommand))]
+    [NotifyCanExecuteChangedFor(nameof(LaunchEmulatorCommand))]
+    [NotifyPropertyChangedFor(nameof(IsAndroidPlatform))]
+    [NotifyPropertyChangedFor(nameof(IsMacOsPlatform))]
+    [NotifyPropertyChangedFor(nameof(IsAndroidActionsVisible))]
+    [NotifyPropertyChangedFor(nameof(IsDesktopActionsVisible))]
+    [NotifyPropertyChangedFor(nameof(IsAndroidPublishOptionsVisible))]
+    [NotifyPropertyChangedFor(nameof(IsMacOsPublishOptionsVisible))]
+    [NotifyPropertyChangedFor(nameof(IsWindowsPublishOptionsVisible))]
+    [NotifyPropertyChangedFor(nameof(IsIosPublishOptionsVisible))]
+    [NotifyPropertyChangedFor(nameof(IsSigningCardVisible))]
+    [NotifyPropertyChangedFor(nameof(IsKnownGoodApkVisible))]
+    private string _publishPlatform = PublisherService.AndroidPlatform;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ReloadProjectMetadataCommand))]
@@ -111,6 +148,38 @@ public partial class MainViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(PublishCommand))]
+    private bool _publishAot;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(PublishCommand))]
+    private bool _publishReadyToRun;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(PublishCommand))]
+    private bool _publishSingleFile = true;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(PublishCommand))]
+    private bool _useAppHost = true;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(PublishCommand))]
+    private bool _createMacAppBundle = true;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(PublishCommand))]
+    private bool _createWindowsExecutable = true;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(PublishCommand))]
+    private bool _buildIpa;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(PublishCommand))]
+    private bool _archiveOnBuild = true;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(PublishCommand))]
     private bool _runAotCompilation;
 
     [ObservableProperty]
@@ -155,6 +224,7 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(PublishCommand))]
     [NotifyPropertyChangedFor(nameof(IsSigningEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsSigningCardVisible))]
     private string _signMode = "Auto";
 
     [ObservableProperty]
@@ -222,8 +292,12 @@ public partial class MainViewModel : ViewModelBase
     [NotifyCanExecuteChangedFor(nameof(InstallLatestApkCommand))]
     [NotifyCanExecuteChangedFor(nameof(UninstallAppCommand))]
     [NotifyCanExecuteChangedFor(nameof(LaunchAppCommand))]
+    [NotifyCanExecuteChangedFor(nameof(DeleteDesktopAppCommand))]
     [NotifyCanExecuteChangedFor(nameof(CopyWindowScreenshotCommand))]
     [NotifyCanExecuteChangedFor(nameof(SaveWindowScreenshotToDiskCommand))]
+    [NotifyCanExecuteChangedFor(nameof(CopyCommandPreviewCommand))]
+    [NotifyCanExecuteChangedFor(nameof(CopyKnownGoodApkCommand))]
+    [NotifyCanExecuteChangedFor(nameof(CopyLiveOutputCommand))]
     [NotifyCanExecuteChangedFor(nameof(RefreshEmulatorsCommand))]
     [NotifyCanExecuteChangedFor(nameof(LaunchEmulatorCommand))]
     [NotifyPropertyChangedFor(nameof(IsEditorEnabled))]
@@ -245,7 +319,27 @@ public partial class MainViewModel : ViewModelBase
 
     public bool HasProjectSelection => !string.IsNullOrWhiteSpace(ProjectDirectory);
 
+    public bool IsAndroidPlatform => string.Equals(PublishPlatform, PublisherService.AndroidPlatform, StringComparison.Ordinal);
+
+    public bool IsMacOsPlatform => string.Equals(PublishPlatform, PublisherService.MacOsPlatform, StringComparison.Ordinal);
+
+    public bool IsAndroidActionsVisible => IsAndroidPlatform;
+
+    public bool IsDesktopActionsVisible => IsMacOsPlatform;
+
+    public bool IsAndroidPublishOptionsVisible => IsAndroidPlatform;
+
+    public bool IsMacOsPublishOptionsVisible => IsMacOsPlatform;
+
+    public bool IsWindowsPublishOptionsVisible => string.Equals(PublishPlatform, PublisherService.WindowsPlatform, StringComparison.Ordinal);
+
+    public bool IsIosPublishOptionsVisible => string.Equals(PublishPlatform, PublisherService.IosPlatform, StringComparison.Ordinal);
+
     public bool IsSigningEnabled => string.Equals(SignMode, "Sign", StringComparison.Ordinal);
+
+    public bool IsSigningCardVisible => IsAndroidPlatform && IsSigningEnabled;
+
+    public bool IsKnownGoodApkVisible => IsAndroidPlatform;
 
     public bool IsShrinkerSettingsEnabled => !string.Equals(AndroidLinkMode, "None", StringComparison.Ordinal);
 
@@ -259,10 +353,58 @@ public partial class MainViewModel : ViewModelBase
         }
     }
 
+    partial void OnPublishPlatformChanged(string value)
+    {
+        if (string.Equals(value, PublisherService.AndroidPlatform, StringComparison.Ordinal))
+        {
+            if (!TargetFramework.Contains("android", StringComparison.OrdinalIgnoreCase))
+            {
+                TargetFramework = "net10.0-android";
+            }
+
+            if (!RuntimeIdentifier.Contains("android", StringComparison.OrdinalIgnoreCase))
+            {
+                RuntimeIdentifier = "android-arm64";
+            }
+        }
+        else
+        {
+            if (string.Equals(value, PublisherService.MacOsPlatform, StringComparison.Ordinal))
+            {
+                if (TargetFramework.Contains("android", StringComparison.OrdinalIgnoreCase))
+                {
+                    TargetFramework = "net10.0";
+                }
+
+                if (RuntimeIdentifier.Contains("android", StringComparison.OrdinalIgnoreCase))
+                {
+                    RuntimeIdentifier = "osx-arm64";
+                }
+            }
+            else if (string.Equals(value, PublisherService.WindowsPlatform, StringComparison.Ordinal))
+            {
+                TargetFramework = "net10.0-windows";
+                RuntimeIdentifier = "win-x64";
+            }
+            else if (string.Equals(value, PublisherService.IosPlatform, StringComparison.Ordinal))
+            {
+                TargetFramework = "net10.0-ios";
+                RuntimeIdentifier = "ios-arm64";
+            }
+        }
+
+        OutputDirectory = string.Empty;
+
+        if (!string.IsNullOrWhiteSpace(ProjectDirectory))
+        {
+            _ = ReloadProjectMetadataAsync();
+        }
+    }
+
     [RelayCommand]
     private async Task BrowseProjectDirectoryAsync()
     {
-        var selected = await _desktopInteractionService.PickFolderAsync("Select MAUI project directory", ProjectDirectory);
+        var selected = await _desktopInteractionService.PickFolderAsync("Select .NET project directory", ProjectDirectory);
         if (string.IsNullOrWhiteSpace(selected))
         {
             return;
@@ -297,7 +439,7 @@ public partial class MainViewModel : ViewModelBase
     {
         try
         {
-            var metadata = _publisherService.LoadProjectMetadata(ProjectDirectory, Configuration, TargetFramework, RuntimeIdentifier);
+            var metadata = _publisherService.LoadProjectMetadata(ProjectDirectory, Configuration, TargetFramework, RuntimeIdentifier, PublishPlatform);
             SelectedProjectFile = metadata.ProjectFilePath;
 
             if (string.IsNullOrWhiteSpace(OutputDirectory))
@@ -313,6 +455,32 @@ public partial class MainViewModel : ViewModelBase
             if (!string.IsNullOrWhiteSpace(metadata.TargetFramework))
             {
                 TargetFramework = metadata.TargetFramework;
+            }
+
+            if (IsAndroidPlatform && !RuntimeIdentifier.Contains("android", StringComparison.OrdinalIgnoreCase))
+            {
+                RuntimeIdentifier = "android-arm64";
+            }
+
+            if (IsMacOsPlatform)
+            {
+                RuntimeIdentifier = TargetFramework.Contains("maccatalyst", StringComparison.OrdinalIgnoreCase)
+                    ? "maccatalyst-arm64"
+                    : "osx-arm64";
+            }
+            else if (string.Equals(PublishPlatform, PublisherService.WindowsPlatform, StringComparison.Ordinal))
+            {
+                if (!RuntimeIdentifier.StartsWith("win-", StringComparison.OrdinalIgnoreCase))
+                {
+                    RuntimeIdentifier = "win-x64";
+                }
+            }
+            else if (string.Equals(PublishPlatform, PublisherService.IosPlatform, StringComparison.Ordinal))
+            {
+                if (!RuntimeIdentifier.StartsWith("ios-", StringComparison.OrdinalIgnoreCase))
+                {
+                    RuntimeIdentifier = "ios-arm64";
+                }
             }
 
             StatusMessage = "Project metadata loaded. Review the command preview before publishing.";
@@ -388,7 +556,7 @@ public partial class MainViewModel : ViewModelBase
 
     private bool CanInstallLatestApk()
     {
-        return !IsBusy && !string.IsNullOrWhiteSpace(OutputDirectory);
+        return IsAndroidPlatform && !IsBusy && !string.IsNullOrWhiteSpace(OutputDirectory);
     }
 
     [RelayCommand(CanExecute = nameof(CanUsePackageIdActions))]
@@ -409,7 +577,20 @@ public partial class MainViewModel : ViewModelBase
 
     private bool CanUsePackageIdActions()
     {
-        return !IsBusy && !string.IsNullOrWhiteSpace(PackageId);
+        return IsAndroidPlatform && !IsBusy && !string.IsNullOrWhiteSpace(PackageId);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanDeleteDesktopApp))]
+    private async Task DeleteDesktopAppAsync()
+    {
+        await RunQuickActionAsync(
+            async () => await _publisherService.DeletePublishedDesktopAppAsync(OutputDirectory, CancellationToken.None),
+            "Delete desktop app");
+    }
+
+    private bool CanDeleteDesktopApp()
+    {
+        return IsMacOsPlatform && !IsBusy && !string.IsNullOrWhiteSpace(OutputDirectory);
     }
 
     [RelayCommand(CanExecute = nameof(CanCopyWindowScreenshot))]
@@ -484,14 +665,50 @@ public partial class MainViewModel : ViewModelBase
         return !IsBusy;
     }
 
+    [RelayCommand(CanExecute = nameof(CanCopyCommandPreview))]
+    private async Task CopyCommandPreviewAsync()
+    {
+        await _desktopInteractionService.CopyTextToClipboardAsync(CommandPreview);
+        StatusMessage = "Command preview copied.";
+    }
+
+    private bool CanCopyCommandPreview()
+    {
+        return !IsBusy && !string.IsNullOrWhiteSpace(CommandPreview);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanCopyKnownGoodApk))]
+    private async Task CopyKnownGoodApkAsync()
+    {
+        await _desktopInteractionService.CopyTextToClipboardAsync(KnownGoodApkCommand);
+        StatusMessage = "Known-good APK command copied.";
+    }
+
+    private bool CanCopyKnownGoodApk()
+    {
+        return IsAndroidPlatform && !IsBusy && !string.IsNullOrWhiteSpace(KnownGoodApkCommand);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanCopyLiveOutput))]
+    private async Task CopyLiveOutputAsync()
+    {
+        await _desktopInteractionService.CopyTextToClipboardAsync(LiveOutput);
+        StatusMessage = "Live output copied.";
+    }
+
+    private bool CanCopyLiveOutput()
+    {
+        return !IsBusy && !string.IsNullOrWhiteSpace(LiveOutput);
+    }
+
     private bool CanRefreshEmulators()
     {
-        return !IsBusy;
+        return IsAndroidPlatform && !IsBusy;
     }
 
     private bool CanLaunchEmulator()
     {
-        return !IsBusy && !string.IsNullOrWhiteSpace(SelectedEmulator);
+        return IsAndroidPlatform && !IsBusy && !string.IsNullOrWhiteSpace(SelectedEmulator);
     }
 
     private async Task RunQuickActionAsync(Func<Task<string>> action, string actionName)
@@ -543,6 +760,7 @@ public partial class MainViewModel : ViewModelBase
     {
         return new PublishConfiguration
         {
+            PublishPlatform = PublishPlatform,
             ProjectDirectory = ProjectDirectory,
             TargetFramework = TargetFramework,
             RuntimeIdentifier = RuntimeIdentifier,
@@ -553,6 +771,14 @@ public partial class MainViewModel : ViewModelBase
             IncludeAab = IncludeAab,
             SelfContained = SelfContained,
             PublishTrimmed = PublishTrimmed,
+            PublishAot = PublishAot,
+            PublishReadyToRun = PublishReadyToRun,
+            PublishSingleFile = PublishSingleFile,
+            UseAppHost = UseAppHost,
+            CreateMacAppBundle = CreateMacAppBundle,
+            CreateWindowsExecutable = CreateWindowsExecutable,
+            BuildIpa = BuildIpa,
+            ArchiveOnBuild = ArchiveOnBuild,
             RunAotCompilation = RunAotCompilation,
             EnableProfiledAot = EnableProfiledAot,
             AndroidLinkMode = AndroidLinkMode,

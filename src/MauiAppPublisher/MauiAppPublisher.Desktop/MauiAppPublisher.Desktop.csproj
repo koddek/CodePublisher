@@ -5,6 +5,8 @@
         See https://docs.avaloniaui.net/docs/guides/platforms/platform-specific-code/dotnet for more details.-->
         <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
+        <AssemblyName>DotNetAppPublisher.Desktop</AssemblyName>
+        <RootNamespace>DotNetAppPublisher.Desktop</RootNamespace>
     </PropertyGroup>
 
     <PropertyGroup>
@@ -15,7 +17,7 @@
     <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
         <UseAppHost>true</UseAppHost>
         <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-        <OutputPath>bin/$(Configuration)/Maui App Publisher.app/Contents/MacOS/</OutputPath>
+        <OutputPath>bin/$(Configuration)/DotNet App Publisher.app/Contents/MacOS/</OutputPath>
     </PropertyGroup>
 
     <ItemGroup>
@@ -34,6 +36,6 @@
     <Target Name="PrepareMacBundle" AfterTargets="Build" Condition="$([MSBuild]::IsOSPlatform('OSX'))">
         <MakeDir Directories="$(OutputPath)../Resources"/>
         <Copy SourceFiles="macos/Info.plist" DestinationFiles="$(OutputPath)../Info.plist"/>
-        <Copy SourceFiles="..\MauiAppPublisher\Assets\maui-app-publisher.icns" DestinationFiles="$(OutputPath)../Resources/maui-app-publisher.icns"/>
+        <Copy SourceFiles="..\MauiAppPublisher\Assets\maui-app-publisher.icns" DestinationFiles="$(OutputPath)../Resources/dotnet-app-publisher.icns"/>
     </Target>
 </Project>
