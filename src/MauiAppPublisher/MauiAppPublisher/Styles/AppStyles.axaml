@@ -1,0 +1,330 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Fluent Design System Resources -->
+    <Design.PreviewWith>
+        <Border Padding="20">
+            <!-- Preview Content -->
+        </Border>
+    </Design.PreviewWith>
+    
+    <Styles.Resources>
+        <ResourceDictionary>
+            <!-- Fluent Typography Scale -->
+            <x:Double x:Key="FontSizeXXLarge">34</x:Double>
+            <x:Double x:Key="FontSizeXLarge">24</x:Double>
+            <x:Double x:Key="FontSizeLarge">20</x:Double>
+            <x:Double x:Key="FontSizeMedium">16</x:Double>
+            <x:Double x:Key="FontSizeSmall">13</x:Double>
+            <x:Double x:Key="FontSizeXSmall">11</x:Double>
+
+            <!-- Fluent Spacing System (4px increments) -->
+            <x:Double x:Key="SpacingXXSmall">2</x:Double>
+            <x:Double x:Key="SpacingXSmall">4</x:Double>
+            <x:Double x:Key="SpacingSmall">8</x:Double>
+            <x:Double x:Key="SpacingMedium">12</x:Double>
+            <x:Double x:Key="SpacingLarge">16</x:Double>
+            <x:Double x:Key="SpacingXLarge">20</x:Double>
+            <x:Double x:Key="SpacingXXLarge">24</x:Double>
+
+            <!-- Fluent Padding Tokens -->
+            <Thickness x:Key="PaddingXXSmall">2</Thickness>
+            <Thickness x:Key="PaddingXSmall">4</Thickness>
+            <Thickness x:Key="PaddingSmall">8</Thickness>
+            <Thickness x:Key="PaddingMedium">12</Thickness>
+            <Thickness x:Key="PaddingLarge">16</Thickness>
+            <Thickness x:Key="PaddingXLarge">20</Thickness>
+            <Thickness x:Key="PaddingXXLarge">24</Thickness>
+
+            <!-- Fluent Corner Radius -->
+            <CornerRadius x:Key="CornerRadiusNone">0</CornerRadius>
+            <CornerRadius x:Key="CornerRadiusSmall">2</CornerRadius>
+            <CornerRadius x:Key="CornerRadiusMedium">4</CornerRadius>
+            <CornerRadius x:Key="CornerRadiusLarge">6</CornerRadius>
+            <CornerRadius x:Key="CornerRadiusExtraLarge">8</CornerRadius>
+            <CornerRadius x:Key="CornerRadiusCircle">999</CornerRadius>
+        </ResourceDictionary>
+    </Styles.Resources>
+    
+    <!-- Base Styles -->
+    <Style Selector="Window">
+        <Setter Property="Background">
+            <Setter.Value>
+                <DynamicResource ResourceKey="ThemeBackgroundColor" />
+            </Setter.Value>
+        </Setter>
+    </Style>
+    
+    <Style Selector="TextBlock">
+        <Setter Property="Foreground">
+            <Setter.Value>
+                <DynamicResource ResourceKey="ThemeForegroundColor" />
+            </Setter.Value>
+        </Setter>
+        <Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI, system-ui, sans-serif" />
+    </Style>
+    
+    <!-- Fluent TextBlock Styles -->
+    <Style Selector="TextBlock.title">
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeXXLarge}" />
+        <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+    
+    <Style Selector="TextBlock.subtitle">
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeXLarge}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    
+    <Style Selector="TextBlock.body">
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeLarge}" />
+        <Setter Property="FontWeight" Value="Normal" />
+    </Style>
+    
+    <Style Selector="TextBlock.caption">
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeMedium}" />
+        <Setter Property="FontWeight" Value="Normal" />
+    </Style>
+    
+    <Style Selector="Button">
+        <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="{DynamicResource PaddingMedium}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusExtraLarge}" />
+        <Setter Property="MinHeight" Value="36" />
+        <Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI, system-ui, sans-serif" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeMedium}" />
+    </Style>
+    
+    <Style Selector="Button:pointerover">
+        <Setter Property="Background" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="Opacity" Value="0.8" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+    </Style>
+    
+    <Style Selector="Button:focus">
+        <Setter Property="BorderThickness" Value="2" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+    </Style>
+    
+    <Style Selector="Button:focus-within">
+        <Setter Property="BorderThickness" Value="2" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+    </Style>
+    
+    <Style Selector="Button.primary">
+        <Setter Property="Background" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="Foreground" Value="{DynamicResource ThemeBackgroundColor}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Padding" Value="{DynamicResource PaddingLarge}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusExtraLarge}" />
+        <Setter Property="MinHeight" Value="40" />
+        <Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI, system-ui, sans-serif" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeMedium}" />
+    </Style>
+    
+    <Style Selector="Button.primary:pointerover">
+        <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+        <Setter Property="Opacity" Value="0.8" />
+    </Style>
+    
+    <Style Selector="Button:disabled">
+        <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="Opacity" Value="0.5" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+    </Style>
+    
+    <Style Selector="ComboBox">
+        <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusExtraLarge}" />
+        <Setter Property="Padding" Value="{DynamicResource PaddingMedium}" />
+        <Setter Property="MinHeight" Value="36" />
+        <Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI, system-ui, sans-serif" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeMedium}" />
+    </Style>
+    
+    <Style Selector="ComboBox:pointerover">
+        <Setter Property="Opacity" Value="0.8" />
+    </Style>
+    
+    <Style Selector="ComboBox:focus">
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="Opacity" Value="0.8" />
+    </Style>
+    
+    <Style Selector="ComboBox:focus-within">
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+    </Style>
+    
+    <Style Selector="TextBox">
+        <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusExtraLarge}" />
+        <Setter Property="Padding" Value="{DynamicResource PaddingMedium}" />
+        <Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI, system-ui, sans-serif" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeMedium}" />
+    </Style>
+    
+    <Style Selector="TextBox:focus">
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="Opacity" Value="0.8" />
+    </Style>
+    
+    <Style Selector="CheckBox">
+        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI, system-ui, sans-serif" />
+    </Style>
+    
+    <Style Selector="ProgressBar">
+        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+        <Setter Property="Height" Value="6" />
+    </Style>
+    
+    <Style Selector="ScrollBar">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    
+    <Style Selector="ScrollBar /template/ Thumb">
+        <Setter Property="Background" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="Width" Value="8" />
+    </Style>
+    
+    <Style Selector="Border.card">
+        <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="18" />
+        <Setter Property="Padding" Value="18" />
+        <Setter Property="BoxShadow" Value="0 14 28 0 #110E1726" />
+    </Style>
+    
+    <Style Selector="Border.badge">
+        <Setter Property="Background" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="Opacity" Value="0.2" />
+        <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusCircle}" />
+        <Setter Property="Padding" Value="{DynamicResource PaddingMedium}" />
+        <Setter Property="MinHeight" Value="28" />
+        <Setter Property="MinWidth" Value="28" />
+    </Style>
+    
+    <Style Selector="Grid.main-grid">
+        <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+    </Style>
+    
+    <Style Selector="TextBlock.section-title">
+        <Setter Property="FontSize" Value="18" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundColor}" />
+    </Style>
+    
+    <Style Selector="TextBlock.section-copy">
+        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="Opacity" Value="0.7" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    
+    <Style Selector="TextBlock.badge-text-dotnet">
+        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="Opacity" Value="0.8" />
+    </Style>
+    
+    <Style Selector="TextBlock.badge-text-adb">
+        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="Opacity" Value="0.8" />
+    </Style>
+    
+    <Style Selector="TextBlock.badge-text-emulator">
+        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="Opacity" Value="0.8" />
+    </Style>
+    
+    <Style Selector="TextBlock.progress-text">
+        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundColor}" />
+    </Style>
+
+    <Style Selector="Border.status-banner">
+        <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="16" />
+        <Setter Property="Padding" Value="16,14" />
+    </Style>
+
+    <Style Selector="Border.config-surface">
+        <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+    </Style>
+
+    <Style Selector="Border.action-group-shell">
+        <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="14" />
+        <Setter Property="Padding" Value="14" />
+    </Style>
+
+    <Style Selector="Border.console-shell">
+        <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="Padding" Value="0" />
+    </Style>
+
+    <Style Selector="ScrollViewer.console-scroll">
+        <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+    </Style>
+    
+    <Style Selector="SelectableTextBlock.console-text">
+        <Setter Property="FontFamily" Value="Cascadia Code, Menlo, Consolas, monospace" />
+        <Setter Property="Foreground" Value="#E2E8F0" />
+        <Setter Property="SelectionBrush" Value="#2563EB" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="Margin" Value="12" />
+    </Style>
+    
+    <Style Selector="TextBox.console-textbox">
+        <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="10" />
+        <Setter Property="FontFamily" Value="Cascadia Code, Menlo, Consolas, monospace" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="IsReadOnly" Value="True" />
+    </Style>
+
+    <Style Selector="Border.card.output-card:pointerover">
+        <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+    </Style>
+
+    <Style Selector="Border.card.output-card:focus-within">
+        <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+    </Style>
+
+    <Style Selector="UserControl.compact StackPanel.page-stack">
+        <Setter Property="Margin" Value="12,12,12,18" />
+        <Setter Property="Spacing" Value="12" />
+    </Style>
+
+    <Style Selector="UserControl.compact Border.card.responsive-card">
+        <Setter Property="Padding" Value="14" />
+        <Setter Property="CornerRadius" Value="14" />
+    </Style>
+
+    <Style Selector="UserControl.compact Border.action-group-shell">
+        <Setter Property="Padding" Value="12" />
+    </Style>
+
+</Styles>
