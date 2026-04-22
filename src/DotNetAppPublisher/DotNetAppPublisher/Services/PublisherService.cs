@@ -458,72 +458,16 @@ public sealed class PublisherService
         return Task.FromResult($"Deleted desktop app bundle {appBundle.FullName}.");
     }
 
+    private readonly AvaloniaScreenshotService _screenshotService = new();
+
     public async Task<string> CopyWindowScreenshotToClipboardAsync(Window window, CancellationToken cancellationToken)
     {
-        if (!OperatingSystem.IsMacOS())
-        {
-            return "Window screenshot-to-clipboard is currently implemented for macOS only.";
-        }
-
-        var scaling = window.DesktopScaling;
-        var bounds = window.Bounds;
-        var position = window.Position;
-        var x = (int)Math.Max(0, Math.Round(position.X * scaling));
-        var y = (int)Math.Max(0, Math.Round(position.Y * scaling));
-        var width = (int)Math.Max(1, Math.Round(bounds.Width * scaling));
-        var height = (int)Math.Max(1, Math.Round(bounds.Height * scaling));
-        var region = $"{x},{y},{width},{height}";
-
-        var exitCode = await RunProcessAsync(
-            ["screencapture", "-x", "-c", "-R", region],
-            _ => { },
-            cancellationToken);
-
-        if (exitCode == 0)
-        {
-            return "Window screenshot copied to the clipboard.";
-        }
-
-        exitCode = await RunProcessAsync(["screencapture", "-x", "-c"], _ => { }, cancellationToken);
-        return exitCode == 0
-            ? "Window region capture failed, so a full-screen screenshot was copied instead."
-            : "Screenshot capture failed. Check macOS Screen Recording permissions for the app.";
+        return await _screenshotService.CaptureWindowToClipboardAsync(window, cancellationToken);
     }
 
     public async Task<string> SaveWindowScreenshotToDiskAsync(Window window, string outputDirectory, CancellationToken cancellationToken)
     {
-        if (!OperatingSystem.IsMacOS())
-        {
-            return "Window screenshot-to-disk is currently implemented for macOS only.";
-        }
-
-        var targetDirectory = ResolveScreenshotDirectory(outputDirectory);
-        Directory.CreateDirectory(targetDirectory);
-
-        var filePath = Path.Combine(
-            targetDirectory,
-            $"DotNetAppPublisher-screenshot-{DateTime.Now:yyyyMMdd-HHmmss}.png");
-
-        var scaling = window.DesktopScaling;
-        var bounds = window.Bounds;
-        var position = window.Position;
-        var x = (int)Math.Max(0, Math.Round(position.X * scaling));
-        var y = (int)Math.Max(0, Math.Round(position.Y * scaling));
-        var width = (int)Math.Max(1, Math.Round(bounds.Width * scaling));
-        var height = (int)Math.Max(1, Math.Round(bounds.Height * scaling));
-        var region = $"{x},{y},{width},{height}";
-
-        var exitCode = await RunProcessAsync(
-            ["screencapture", "-x", "-R", region, filePath],
-            _ => { },
-            cancellationToken);
-
-        if (exitCode != 0)
-        {
-            return "Screenshot-to-disk failed. Check macOS Screen Recording permissions for the app.";
-        }
-
-        return $"Window screenshot saved to {filePath}.";
+        return await _screenshotService.CaptureWindowToDiskAsync(window, outputDirectory, cancellationToken);
     }
 
     public async Task<IReadOnlyList<string>> DiscoverEmulatorsAsync(CancellationToken cancellationToken)
@@ -1143,9 +1087,9 @@ public sealed class PublisherService
             if (!runtimeIdentifier.StartsWith("ios-", StringComparison.OrdinalIgnoreCase)
                 && !runtimeIdentifier.StartsWith("iossimulator-", StringComparison.OrdinalIgnoreCase))
             {
-                throw new InvalidOperationException("iOS publishing requires an `ios-*` or `iossimulator-*` runtime identifier.");
-            }
+throw new InvalidOperationException("iOS publishing requires an `ios-*` or `iossimulator-*` runtime identifier.");
         }
+    }
     }
 
     private static string ResolveScreenshotDirectory(string outputDirectory)
