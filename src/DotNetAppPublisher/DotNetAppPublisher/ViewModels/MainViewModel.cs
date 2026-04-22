@@ -9,6 +9,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DotNetAppPublisher.Models;
 using DotNetAppPublisher.Services;
+using DotNetAppPublisher.Views;
 
 namespace DotNetAppPublisher.ViewModels;
 
@@ -316,6 +317,12 @@ private string _projectDirectory = string.Empty;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SharedProgressValue))]
     private double _screenshotCountdownProgress;
+
+    [ObservableProperty]
+    private bool _isScreenshotDialogVisible;
+
+    [ObservableProperty]
+    private string _screenshotDialogMessage = string.Empty;
 
     public ObservableCollection<string> AvailableEmulators { get; } = [];
     public ObservableCollection<AndroidDeviceInfo> AvailableAndroidDevices { get; } = [];
@@ -1004,25 +1011,51 @@ private string _projectDirectory = string.Empty;
     [RelayCommand(CanExecute = nameof(CanCopyWindowScreenshot))]
     private async Task CopyWindowScreenshotAsync()
     {
-        await RunQuickActionAsync(
-            async () =>
-            {
-                await RunScreenshotCountdownAsync();
-                return await _publisherService.CopyWindowScreenshotToClipboardAsync(_desktopInteractionService.Window, CancellationToken.None);
-            },
-            "Screenshot");
+        await RunScreenshotActionAsync(
+            async () => await _publisherService.CopyWindowScreenshotToClipboardAsync(_desktopInteractionService.Window, CancellationToken.None),
+            "Screenshot to clipboard");
     }
 
     [RelayCommand(CanExecute = nameof(CanCopyWindowScreenshot))]
     private async Task SaveWindowScreenshotToDiskAsync()
     {
-        await RunQuickActionAsync(
-            async () =>
-            {
-                await RunScreenshotCountdownAsync();
-                return await _publisherService.SaveWindowScreenshotToDiskAsync(_desktopInteractionService.Window, OutputDirectory, CancellationToken.None);
-            },
+        await RunScreenshotActionAsync(
+            async () => await _publisherService.SaveWindowScreenshotToDiskAsync(_desktopInteractionService.Window, OutputDirectory, CancellationToken.None),
             "Screenshot to disk");
+    }
+
+    private async Task RunScreenshotActionAsync(Func<Task<string>> action, string actionName)
+    {
+        try
+        {
+            IsBusy = true;
+            
+            // Create and show the screenshot dialog
+            var dialog = new ScreenshotDialog();
+            
+            // Run the countdown and screenshot capture
+            var message = await dialog.ShowCountdownAndCaptureAsync(5, async () =>
+            {
+                return await action();
+            });
+            
+            // Update status
+            StatusMessage = IsFailureMessage(message)
+                ? $"{actionName} failed. Check Live Output for details."
+                : $"✓ {actionName} complete!";
+            
+            AppendLog(Environment.NewLine + $"[{actionName}] {message}" + Environment.NewLine);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"{actionName} failed.";
+            await _desktopInteractionService.ShowErrorAsync(actionName, ex.Message);
+        }
+        finally
+        {
+            ResetScreenshotCountdown();
+            IsBusy = false;
+        }
     }
 
     [RelayCommand(CanExecute = nameof(CanLaunchEmulator))]
@@ -1102,26 +1135,8 @@ private string _projectDirectory = string.Empty;
         }
         finally
         {
-            ResetScreenshotCountdown();
             IsBusy = false;
         }
-    }
-
-    private async Task RunScreenshotCountdownAsync()
-    {
-        IsScreenshotCountdownVisible = true;
-        ScreenshotCountdownProgress = 100;
-
-        for (var secondsRemaining = 5; secondsRemaining >= 1; secondsRemaining--)
-        {
-            ScreenshotCountdownText = $"Screenshot in {secondsRemaining}s";
-            ScreenshotCountdownProgress = secondsRemaining * 20;
-            StatusMessage = $"Preparing screenshot. Capturing in {secondsRemaining} second(s).";
-            await Task.Delay(1000);
-        }
-
-        ScreenshotCountdownText = "Capturing screenshot...";
-        ScreenshotCountdownProgress = 0;
     }
 
     private void ResetScreenshotCountdown()
