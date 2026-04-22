@@ -1,0 +1,42 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <!--If you are willing to use platform-specific APIs, use conditional compilation.
+        See https://docs.avaloniaui.net/docs/guides/platforms/platform-specific-code/dotnet for more details.-->
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <AssemblyName>DotNetAppPublisher.Desktop</AssemblyName>
+        <RootNamespace>DotNetAppPublisher.Desktop</RootNamespace>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <ApplicationManifest>app.manifest</ApplicationManifest>
+        <ApplicationIcon>..\DotNetAppPublisher\Assets\dotnet-app-publisher.ico</ApplicationIcon>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+        <UseAppHost>true</UseAppHost>
+        <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+        <OutputPath>bin/$(Configuration)/DotNetAppPublisher.app/Contents/MacOS/</OutputPath>
+        <MacBundleContentsDir>bin/$(Configuration)/DotNetAppPublisher.app/Contents</MacBundleContentsDir>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Avalonia.Desktop"/>
+        <!--Condition below is needed to remove Avalonia.Diagnostics package from build output in Release configuration.-->
+        <PackageReference Include="Avalonia.Diagnostics">
+            <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
+            <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
+        </PackageReference>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\DotNetAppPublisher\DotNetAppPublisher.csproj"/>
+    </ItemGroup>
+
+    <Target Name="PrepareMacBundle" AfterTargets="Build" Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+        <MakeDir Directories="$(MacBundleContentsDir)/Resources"/>
+        <Copy SourceFiles="macos/Info.plist" DestinationFiles="$(MacBundleContentsDir)/Info.plist"/>
+        <Copy SourceFiles="..\DotNetAppPublisher\Assets\dotnet-app-publisher.icns" DestinationFiles="$(MacBundleContentsDir)/Resources/dotnet-app-publisher.icns"/>
+    </Target>
+</Project>

@@ -1,0 +1,31 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:DotNetAppPublisher"
+             x:Class="DotNetAppPublisher.App"
+             Name=".NET App Publisher"
+             RequestedThemeVariant="Default">
+
+    <Application.DataTemplates>
+        <local:ViewLocator/>
+    </Application.DataTemplates>
+
+    <Application.Styles>
+        <FluentTheme />
+        <StyleInclude Source="avares://DotNetAppPublisher/Styles/AppStyles.axaml"/>
+    </Application.Styles>
+
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="ThemeBackgroundColor">#0F172A</SolidColorBrush>
+                    <SolidColorBrush x:Key="ThemeForegroundColor">#F1F5F9</SolidColorBrush>
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="ThemeBackgroundColor">#EEF4F8</SolidColorBrush>
+                    <SolidColorBrush x:Key="ThemeForegroundColor">#334155</SolidColorBrush>
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

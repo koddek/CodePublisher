@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="src/DotNetAppPublisher/DotNetAppPublisher.Browser/DotNetAppPublisher.Browser.csproj" />
+  <Project Path="src/DotNetAppPublisher/DotNetAppPublisher.Desktop/DotNetAppPublisher.Desktop.csproj" />
+  <Project Path="src/DotNetAppPublisher/DotNetAppPublisher/DotNetAppPublisher.csproj" />
+</Solution>

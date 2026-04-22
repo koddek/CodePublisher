@@ -1,8 +1,8 @@
-# DotNet App Publisher
+# .NET App Publisher
 
-![DotNet App Publisher icon](docs/maui-app-publisher-icon.png)
+![.NET App Publisher icon](docs/dotnet-app-publisher-icon.png)
 
-DotNet App Publisher is a desktop utility for .NET developers who want a faster, safer way to build publish commands, inspect exactly what will run, and handle common platform workflows without living in the terminal.
+.NET App Publisher is a desktop utility for .NET developers who want a faster, safer way to build publish commands, inspect exactly what will run, and handle common platform workflows without living in the terminal.
 
 It is built with Avalonia and currently supports Android, macOS, Windows, and iOS publish workflows for .NET projects.
 
@@ -38,8 +38,8 @@ MAUI Android publish commands can become long and easy to get wrong, especially 
 ### Run locally
 
 ```bash
-dotnet build MauiAppPublisher.slnx
-dotnet run --project src/MauiAppPublisher/MauiAppPublisher.Desktop/MauiAppPublisher.Desktop.csproj
+dotnet build DotNetAppPublisher.slnx
+dotnet run --project src/DotNetAppPublisher/DotNetAppPublisher.Desktop/DotNetAppPublisher.Desktop.csproj
 ```
 
 ### Main workflow
@@ -54,17 +54,17 @@ dotnet run --project src/MauiAppPublisher/MauiAppPublisher.Desktop/MauiAppPublis
 ## Project structure
 
 ```text
-MauiAppPublisher/
+DotNetAppPublisher/
 ├── .github/
 │   └── workflows/
 ├── docs/
-│   └── maui-app-publisher-icon.png
-├── MauiAppPublisher.slnx
+│   └── dotnet-app-publisher-icon.png
+├── DotNetAppPublisher.slnx
 └── src/
-    └── MauiAppPublisher/
-        ├── MauiAppPublisher/
-        ├── MauiAppPublisher.Browser/
-        └── MauiAppPublisher.Desktop/
+    └── DotNetAppPublisher/
+        ├── DotNetAppPublisher/
+        ├── DotNetAppPublisher.Browser/
+        └── DotNetAppPublisher.Desktop/
 ```
 
 ## GitHub Actions
@@ -115,7 +115,7 @@ The app is already useful for Android, macOS, Windows, and iOS publish flows, pl
 ## Development notes
 
 - The command preview is the source of truth for the publish command the app will run.
-- Some .NET projects override trim-related properties in custom ways. DotNet App Publisher detects common project-specific trim property patterns so AOT and trimming combinations can be emitted correctly.
+- Some .NET projects override trim-related properties in custom ways. .NET App Publisher detects common project-specific trim property patterns so AOT and trimming combinations can be emitted correctly.
 
 ## Contributing
 

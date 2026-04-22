@@ -1,0 +1,47 @@
+{
+    // .NET Meteor resolves TFMs by matching the STATUS BAR device to the ACTIVE PROJECT:
+    // - Active project MUST be DotNetAppPublisher.Desktop (not Browser: net10.0-browser always contains "-" so Meteor never finds a match).
+    // - Device MUST be your Mac under "Mac Catalyst" (hostname + Apple silicon or Intel). Do NOT pick an iOS simulator or Android emulator for the desktop app.
+    // If Meteor still errors, use "Desktop (C# …)" — that path does not use Meteor's device picker.
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Desktop (C# debugger)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build-desktop",
+            "program": "${workspaceFolder}/src/DotNetAppPublisher/DotNetAppPublisher.Desktop/bin/Debug/net10.0/DotNetAppPublisher.Desktop.dll",
+            "cwd": "${workspaceFolder}/src/DotNetAppPublisher/DotNetAppPublisher.Desktop/bin/Debug/net10.0",
+            "osx": {
+                "program": "${workspaceFolder}/src/DotNetAppPublisher/DotNetAppPublisher.Desktop/bin/Debug/DotNetAppPublisher.app/Contents/MacOS/DotNetAppPublisher.Desktop.dll",
+                "cwd": "${workspaceFolder}/src/DotNetAppPublisher/DotNetAppPublisher.Desktop/bin/Debug/DotNetAppPublisher.app/Contents/MacOS"
+            }
+        },
+        {
+            "name": "Desktop (C# no debug)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build-desktop",
+            "noDebug": true,
+            "program": "${workspaceFolder}/src/DotNetAppPublisher/DotNetAppPublisher.Desktop/bin/Debug/net10.0/DotNetAppPublisher.Desktop.dll",
+            "cwd": "${workspaceFolder}/src/DotNetAppPublisher/DotNetAppPublisher.Desktop/bin/Debug/net10.0",
+            "osx": {
+                "program": "${workspaceFolder}/src/DotNetAppPublisher/DotNetAppPublisher.Desktop/bin/Debug/DotNetAppPublisher.app/Contents/MacOS/DotNetAppPublisher.Desktop.dll",
+                "cwd": "${workspaceFolder}/src/DotNetAppPublisher/DotNetAppPublisher.Desktop/bin/Debug/DotNetAppPublisher.app/Contents/MacOS"
+            }
+        },
+        {
+            "name": "Meteor: Desktop — pick Mac Catalyst device",
+            "type": "dotnet-meteor.debugger",
+            "request": "launch",
+            "preLaunchTask": "dotnet-meteor: Build"
+        },
+        {
+            "name": "Meteor: Desktop (no debug) — pick Mac Catalyst device",
+            "type": "dotnet-meteor.debugger",
+            "request": "launch",
+            "preLaunchTask": "dotnet-meteor: Build",
+            "noDebug": true
+        }
+    ]
+}

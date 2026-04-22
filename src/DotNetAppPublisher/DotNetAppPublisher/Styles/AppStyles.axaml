@@ -1,0 +1,540 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Fluent Design System Resources -->
+    <Design.PreviewWith>
+        <Border Padding="20">
+            <!-- Preview Content -->
+        </Border>
+    </Design.PreviewWith>
+    
+    <Styles.Resources>
+        <ResourceDictionary>
+            <!-- Fluent Typography Scale -->
+            <x:Double x:Key="FontSizeXXLarge">34</x:Double>
+            <x:Double x:Key="FontSizeXLarge">24</x:Double>
+            <x:Double x:Key="FontSizeLarge">20</x:Double>
+            <x:Double x:Key="FontSizeMedium">16</x:Double>
+            <x:Double x:Key="FontSizeSmall">13</x:Double>
+            <x:Double x:Key="FontSizeXSmall">11</x:Double>
+
+            <!-- Fluent Spacing System (4px increments) -->
+            <x:Double x:Key="SpacingXXSmall">2</x:Double>
+            <x:Double x:Key="SpacingXSmall">4</x:Double>
+            <x:Double x:Key="SpacingSmall">8</x:Double>
+            <x:Double x:Key="SpacingMedium">12</x:Double>
+            <x:Double x:Key="SpacingLarge">16</x:Double>
+            <x:Double x:Key="SpacingXLarge">20</x:Double>
+            <x:Double x:Key="SpacingXXLarge">24</x:Double>
+
+            <!-- Fluent Padding Tokens -->
+            <Thickness x:Key="PaddingXXSmall">2</Thickness>
+            <Thickness x:Key="PaddingXSmall">4</Thickness>
+            <Thickness x:Key="PaddingSmall">8</Thickness>
+            <Thickness x:Key="PaddingMedium">12</Thickness>
+            <Thickness x:Key="PaddingLarge">16</Thickness>
+            <Thickness x:Key="PaddingXLarge">20</Thickness>
+            <Thickness x:Key="PaddingXXLarge">24</Thickness>
+
+            <!-- Fluent Corner Radius -->
+            <CornerRadius x:Key="CornerRadiusNone">0</CornerRadius>
+            <CornerRadius x:Key="CornerRadiusSmall">2</CornerRadius>
+            <CornerRadius x:Key="CornerRadiusMedium">4</CornerRadius>
+            <CornerRadius x:Key="CornerRadiusLarge">6</CornerRadius>
+            <CornerRadius x:Key="CornerRadiusExtraLarge">8</CornerRadius>
+            <CornerRadius x:Key="CornerRadiusCircle">999</CornerRadius>
+        </ResourceDictionary>
+    </Styles.Resources>
+    
+    <!-- Base Styles -->
+    <Style Selector="Window">
+        <Setter Property="Background">
+            <Setter.Value>
+                <DynamicResource ResourceKey="ThemeBackgroundColor" />
+            </Setter.Value>
+        </Setter>
+    </Style>
+    
+    <Style Selector="TextBlock">
+        <Setter Property="Foreground">
+            <Setter.Value>
+                <DynamicResource ResourceKey="ThemeForegroundColor" />
+            </Setter.Value>
+        </Setter>
+        <Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI, system-ui, sans-serif" />
+    </Style>
+    
+  <!-- Fluent TextBlock Styles -->
+  <Style Selector="TextBlock.title">
+    <Setter Property="FontSize" Value="{StaticResource FontSizeXXLarge}" />
+    <Setter Property="FontWeight" Value="Bold" />
+  </Style>
+
+  <Style Selector="TextBlock.subtitle">
+    <Setter Property="FontSize" Value="{StaticResource FontSizeXLarge}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+
+  <Style Selector="TextBlock.body">
+    <Setter Property="FontSize" Value="{StaticResource FontSizeLarge}" />
+    <Setter Property="FontWeight" Value="Normal" />
+  </Style>
+
+  <Style Selector="TextBlock.caption">
+    <Setter Property="FontSize" Value="{StaticResource FontSizeMedium}" />
+    <Setter Property="FontWeight" Value="Normal" />
+  </Style>
+    
+  <Style Selector="Button">
+    <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+    <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundColor}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="Padding" Value="{StaticResource PaddingMedium}" />
+    <Setter Property="CornerRadius" Value="{StaticResource CornerRadiusExtraLarge}" />
+    <Setter Property="MinHeight" Value="36" />
+    <Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI, system-ui, sans-serif" />
+    <Setter Property="FontSize" Value="{StaticResource FontSizeMedium}" />
+  </Style>
+    
+    <Style Selector="Button:pointerover">
+        <Setter Property="Background" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="Opacity" Value="0.8" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+    </Style>
+    
+    <Style Selector="Button:focus">
+        <Setter Property="BorderThickness" Value="2" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+    </Style>
+    
+    <Style Selector="Button:focus-within">
+        <Setter Property="BorderThickness" Value="2" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+    </Style>
+    
+    <Style Selector="Button.primary">
+        <Setter Property="Background" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="Foreground" Value="{DynamicResource ThemeBackgroundColor}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Padding" Value="{StaticResource PaddingLarge}" />
+        <Setter Property="CornerRadius" Value="{StaticResource CornerRadiusExtraLarge}" />
+        <Setter Property="MinHeight" Value="40" />
+        <Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI, system-ui, sans-serif" />
+        <Setter Property="FontSize" Value="{StaticResource FontSizeMedium}" />
+    </Style>
+    
+    <Style Selector="Button.primary:pointerover">
+        <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+        <Setter Property="Opacity" Value="0.8" />
+    </Style>
+    
+    <Style Selector="Button:disabled">
+        <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="Opacity" Value="0.5" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+    </Style>
+    
+    <Style Selector="ComboBox">
+        <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource CornerRadiusExtraLarge}" />
+        <Setter Property="Padding" Value="{StaticResource PaddingMedium}" />
+        <Setter Property="MinHeight" Value="36" />
+        <Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI, system-ui, sans-serif" />
+        <Setter Property="FontSize" Value="{StaticResource FontSizeMedium}" />
+    </Style>
+    
+    <Style Selector="ComboBox:pointerover">
+        <Setter Property="Opacity" Value="0.8" />
+    </Style>
+    
+    <Style Selector="ComboBox:focus">
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="Opacity" Value="0.8" />
+    </Style>
+    
+    <Style Selector="ComboBox:focus-within">
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+    </Style>
+    
+    <Style Selector="TextBox">
+        <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource CornerRadiusExtraLarge}" />
+        <Setter Property="Padding" Value="{StaticResource PaddingMedium}" />
+        <Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI, system-ui, sans-serif" />
+        <Setter Property="FontSize" Value="{StaticResource FontSizeMedium}" />
+    </Style>
+    
+    <Style Selector="TextBox:focus">
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="Opacity" Value="0.8" />
+    </Style>
+    
+    <Style Selector="CheckBox">
+        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI, system-ui, sans-serif" />
+    </Style>
+    
+    <Style Selector="ProgressBar">
+        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+        <Setter Property="Height" Value="6" />
+    </Style>
+    
+    <Style Selector="ScrollBar">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    
+    <Style Selector="ScrollBar /template/ Thumb">
+        <Setter Property="Background" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="Width" Value="8" />
+    </Style>
+    
+  <Style Selector="Border.card">
+    <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="18" />
+    <Setter Property="Padding" Value="18" />
+    <Setter Property="BoxShadow" Value="0 14 28 0 #110E1726" />
+  </Style>
+
+  <Style Selector="Border.page-hero">
+    <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+  </Style>
+
+  <Style Selector="Border.badge">
+    <Setter Property="Background" Value="{DynamicResource ThemeForegroundColor}" />
+    <Setter Property="Opacity" Value="0.2" />
+    <Setter Property="CornerRadius" Value="{StaticResource CornerRadiusCircle}" />
+    <Setter Property="Padding" Value="{StaticResource PaddingMedium}" />
+    <Setter Property="MinHeight" Value="28" />
+    <Setter Property="MinWidth" Value="28" />
+  </Style>
+
+  <Style Selector="Border.badge-adb">
+    <Setter Property="Background" Value="#25D366" />
+  </Style>
+
+  <Style Selector="Border.badge-emulator">
+    <Setter Property="Background" Value="#3DDC84" />
+  </Style>
+    
+    <Style Selector="Grid.main-grid">
+        <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+    </Style>
+    
+    <Style Selector="TextBlock.section-title">
+        <Setter Property="FontSize" Value="18" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundColor}" />
+    </Style>
+    
+    <Style Selector="TextBlock.section-copy">
+        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="Opacity" Value="0.7" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    
+    <Style Selector="TextBlock.badge-text-dotnet">
+        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="Opacity" Value="0.8" />
+    </Style>
+    
+    <Style Selector="TextBlock.badge-text-adb">
+        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="Opacity" Value="0.8" />
+    </Style>
+    
+    <Style Selector="TextBlock.badge-text-emulator">
+        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="Opacity" Value="0.8" />
+    </Style>
+    
+    <Style Selector="TextBlock.progress-text">
+        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundColor}" />
+    </Style>
+
+    <Style Selector="Border.status-banner">
+        <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="16" />
+        <Setter Property="Padding" Value="16,14" />
+    </Style>
+
+    <Style Selector="Border.config-surface">
+        <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+    </Style>
+
+    <Style Selector="Border.action-group-shell">
+        <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="14" />
+        <Setter Property="Padding" Value="14" />
+    </Style>
+
+    <Style Selector="Border.console-shell">
+        <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="Padding" Value="0" />
+    </Style>
+
+    <Style Selector="ScrollViewer.console-scroll">
+        <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+    </Style>
+    
+    <Style Selector="SelectableTextBlock.console-text">
+        <Setter Property="FontFamily" Value="Cascadia Code, Menlo, Consolas, monospace" />
+        <Setter Property="Foreground" Value="#E2E8F0" />
+        <Setter Property="SelectionBrush" Value="#2563EB" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="Margin" Value="12" />
+    </Style>
+    
+    <Style Selector="TextBox.console-textbox">
+        <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="10" />
+        <Setter Property="FontFamily" Value="Cascadia Code, Menlo, Consolas, monospace" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="IsReadOnly" Value="True" />
+    </Style>
+
+    <Style Selector="Border.card.output-card:pointerover">
+        <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+    </Style>
+
+    <Style Selector="Border.card.output-card:focus-within">
+        <Setter Property="Background" Value="{DynamicResource ThemeBackgroundColor}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+    </Style>
+
+    <Style Selector="UserControl.compact StackPanel.page-stack">
+        <Setter Property="Margin" Value="12,12,12,18" />
+        <Setter Property="Spacing" Value="12" />
+    </Style>
+
+    <Style Selector="UserControl.compact Border.card.responsive-card">
+        <Setter Property="Padding" Value="14" />
+        <Setter Property="CornerRadius" Value="14" />
+    </Style>
+
+  <Style Selector="UserControl.compact Border.action-group-shell">
+    <Setter Property="Padding" Value="12" />
+  </Style>
+
+<Style Selector="Border.theme-switcher">
+<Setter Property="Background">
+<Setter.Value>
+<SolidColorBrush Color="#888888" Opacity="0.1" />
+</Setter.Value>
+</Setter>
+<Setter Property="CornerRadius" Value="12" />
+<Setter Property="Padding" Value="4" />
+</Style>
+
+<Style Selector="Border.theme-segment">
+<Setter Property="Background" Value="Transparent" />
+<Setter Property="CornerRadius" Value="8" />
+<Setter Property="Transitions">
+<Transitions>
+<BrushTransition Property="Background" Duration="0:0:0.15" />
+</Transitions>
+</Setter>
+</Style>
+
+<Style Selector="ToggleButton.theme-option">
+<Setter Property="Background" Value="Transparent" />
+<Setter Property="Foreground" Value="{DynamicResource ThemeForegroundColor}" />
+<Setter Property="BorderThickness" Value="0" />
+<Setter Property="Padding" Value="12,10" />
+<Setter Property="CornerRadius" Value="8" />
+<Setter Property="MinWidth" Value="48" />
+<Setter Property="MinHeight" Value="40" />
+<Setter Property="HorizontalContentAlignment" Value="Center" />
+<Setter Property="VerticalContentAlignment" Value="Center" />
+<Setter Property="Transitions">
+<Transitions>
+<BrushTransition Property="Background" Duration="0:0:0.15" />
+</Transitions>
+</Setter>
+</Style>
+
+<Style Selector="ToggleButton.theme-option.light PathIcon">
+    <Setter Property="Data" Value="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58c-.39-.39-1.03-.39-1.41 0-.39.39-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37c-.39-.39-1.03-.39-1.41 0-.39.39-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0 .39-.39.39-1.03 0-1.41l-1.06-1.06zm1.06-10.96c.39-.39.39-1.03 0-1.41-.39-.39-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36c.39-.39.39-1.03 0-1.41-.39-.39-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z" />
+    <Setter Property="Width" Value="20" />
+    <Setter Property="Height" Value="20" />
+    <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" />
+</Style>
+
+<Style Selector="ToggleButton.theme-option.dark PathIcon">
+    <Setter Property="Data" Value="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-3.03 0-5.5-2.47-5.5-5.5 0-1.82.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z" />
+    <Setter Property="Width" Value="20" />
+    <Setter Property="Height" Value="20" />
+    <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" />
+</Style>
+
+<Style Selector="ToggleButton.theme-option.system PathIcon">
+    <Setter Property="Data" Value="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-7h2v2h-2zm0 4h2v2h-2z" />
+    <Setter Property="Width" Value="20" />
+    <Setter Property="Height" Value="20" />
+    <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" />
+</Style>
+
+<Style Selector="ToggleButton.theme-option.light:checked">
+<Setter Property="Background">
+<Setter.Value>
+<SolidColorBrush Color="#FFD700" Opacity="0.25" />
+</Setter.Value>
+</Setter>
+</Style>
+
+<Style Selector="ToggleButton.theme-option.dark:checked">
+<Setter Property="Background">
+<Setter.Value>
+<SolidColorBrush Color="#4B3F72" Opacity="0.35" />
+</Setter.Value>
+</Setter>
+</Style>
+
+<Style Selector="ToggleButton.theme-option.system:checked">
+<Setter Property="Background">
+<Setter.Value>
+<SolidColorBrush Color="#1F1F1F" Opacity="0.2" />
+</Setter.Value>
+</Setter>
+</Style>
+
+<Style Selector="ToggleButton.theme-option.light:checked PathIcon">
+<Setter Property="Foreground" Value="#FFD700" />
+</Style>
+
+<Style Selector="ToggleButton.theme-option.dark:checked PathIcon">
+<Setter Property="Foreground" Value="#A8B4D6" />
+</Style>
+
+<Style Selector="ToggleButton.theme-option.light:pointerover">
+<Setter Property="Background">
+<Setter.Value>
+<SolidColorBrush Color="#FFD700" Opacity="0.15" />
+</Setter.Value>
+</Setter>
+</Style>
+
+<Style Selector="ToggleButton.theme-option.dark:pointerover">
+<Setter Property="Background">
+<Setter.Value>
+<SolidColorBrush Color="#4B3F72" Opacity="0.2" />
+</Setter.Value>
+</Setter>
+</Style>
+
+<Style Selector="ToggleButton.theme-option.system:pointerover">
+<Setter Property="Background">
+<Setter.Value>
+<SolidColorBrush Color="#1F1F1F" Opacity="0.12" />
+</Setter.Value>
+</Setter>
+</Style>
+
+	<Style Selector="ToggleButton.theme-toggle">
+		<Setter Property="Background" Value="Transparent" />
+		<Setter Property="Foreground" Value="{DynamicResource ThemeForegroundColor}" />
+		<Setter Property="BorderThickness" Value="0" />
+		<Setter Property="Padding" Value="10" />
+		<Setter Property="CornerRadius" Value="10" />
+		<Setter Property="MinWidth" Value="44" />
+		<Setter Property="MinHeight" Value="44" />
+		<Setter Property="HorizontalContentAlignment" Value="Center" />
+		<Setter Property="VerticalContentAlignment" Value="Center" />
+		<Setter Property="Transitions">
+			<Transitions>
+				<BrushTransition Property="Background" Duration="0:0:0.2" />
+			</Transitions>
+		</Setter>
+	</Style>
+
+	<Style Selector="ToggleButton.theme-toggle:checked">
+		<Setter Property="Background">
+			<Setter.Value>
+				<SolidColorBrush Color="#1F1F1F" Opacity="0.12" />
+			</Setter.Value>
+		</Setter>
+	</Style>
+
+	<Style Selector="ToggleButton.theme-toggle:pointerover">
+		<Setter Property="Background">
+			<Setter.Value>
+				<SolidColorBrush Color="#1F1F1F" Opacity="0.08" />
+			</Setter.Value>
+		</Setter>
+	</Style>
+
+	<Style Selector="ToggleButton.theme-toggle PathIcon">
+		<Setter Property="Data" Value="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58c-.39-.39-1.03-.39-1.41 0-.39.39-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37c-.39-.39-1.03-.39-1.41 0-.39.39-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0 .39-.39.39-1.03 0-1.41l-1.06-1.06zm1.06-10.96c.39-.39.39-1.03 0-1.41-.39-.39-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36c.39-.39.39-1.03 0-1.41-.39-.39-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z" />
+		<Setter Property="Width" Value="20" />
+		<Setter Property="Height" Value="20" />
+		<Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" />
+	</Style>
+
+	<Style Selector="ToggleButton.theme-toggle:checked PathIcon">
+		<Setter Property="Data" Value="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-3.03 0-5.5-2.47-5.5-5.5 0-1.82.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z" />
+	</Style>
+
+	<Style Selector="Button.theme-auto-btn">
+		<Setter Property="Background" Value="Transparent" />
+		<Setter Property="Foreground" Value="{DynamicResource ThemeForegroundColor}" />
+		<Setter Property="BorderThickness" Value="1" />
+		<Setter Property="BorderBrush" Value="{DynamicResource ThemeForegroundColor}" />
+		<Setter Property="Padding" Value="10" />
+		<Setter Property="CornerRadius" Value="10" />
+		<Setter Property="MinWidth" Value="44" />
+		<Setter Property="MinHeight" Value="44" />
+		<Setter Property="HorizontalContentAlignment" Value="Center" />
+		<Setter Property="VerticalContentAlignment" Value="Center" />
+		<Setter Property="Transitions">
+			<Transitions>
+				<BrushTransition Property="Background" Duration="0:0:0.2" />
+			</Transitions>
+		</Setter>
+	</Style>
+
+	<Style Selector="Button.theme-auto-btn:pointerover">
+		<Setter Property="Background">
+			<Setter.Value>
+				<SolidColorBrush Color="#1F1F1F" Opacity="0.08" />
+			</Setter.Value>
+		</Setter>
+	</Style>
+
+	<Style Selector="Button.theme-auto-btn PathIcon">
+		<Setter Property="Width" Value="18" />
+		<Setter Property="Height" Value="18" />
+		<Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+	</Style>
+
+    <Style Selector="PathIcon.theme-icon">
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.2" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+</Styles>
