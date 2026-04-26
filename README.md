@@ -1,6 +1,6 @@
 # .NET App Publisher
 
-![.NET App Publisher icon](docs/dotnet-app-publisher-icon.png)
+![.NET App Publisher icon](docs/dotnet-app-publisher-icon-v2.png)
 
 .NET App Publisher is a desktop utility for .NET developers who want a faster, safer way to build publish commands, inspect exactly what will run, and handle common platform workflows without living in the terminal.
 
