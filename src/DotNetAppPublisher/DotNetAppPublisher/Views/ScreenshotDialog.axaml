@@ -9,8 +9,7 @@
         Height="280"
         WindowStartupLocation="CenterOwner"
         CanResize="False"
-        ShowInTaskbar="False"
-        IsVisible="{Binding $parent[Window].IsVisible}">
+        ShowInTaskbar="False">
     
     <Window.Styles>
         <Style Selector="Border.dialog-card">

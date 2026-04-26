@@ -7,8 +7,8 @@
           mc:Ignorable="d" d:DesignWidth="1480" d:DesignHeight="980"
           x:Class="DotNetAppPublisher.Views.MainWindow"
           Icon="/Assets/dotnet-app-publisher.ico"
-          Width="1480"
-          Height="980"
+          Width="1024"
+          Height="768"
           MinWidth="320"
           MinHeight="560"
           Title=".NET App Publisher">
