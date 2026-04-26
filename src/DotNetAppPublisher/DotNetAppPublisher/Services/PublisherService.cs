@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Avalonia.Controls;
 using Avalonia.Platform;
+using Avalonia.Threading;
 using DotNetAppPublisher.Models;
 
 namespace DotNetAppPublisher.Services;
@@ -169,36 +170,37 @@ public sealed class PublisherService
         if (outputDirectory.Exists)
         {
             writeOutput($"Clearing output folder {outputDirectory.FullName}{Environment.NewLine}");
-            TryDeleteDirectorySafely(outputDirectory.FullName, writeOutput);
+            await TryDeleteDirectorySafelyAsync(outputDirectory.FullName, writeOutput);
         }
 
         if (configuration.DeleteObj)
         {
-            CleanStalePlatformDirectories(projectDirectory, configuration.Configuration, configuration.TargetFramework, configuration.RuntimeIdentifier, configuration.PublishPlatform, writeOutput);
+            await CleanStalePlatformDirectoriesAsync(projectDirectory, configuration.Configuration, configuration.TargetFramework, configuration.RuntimeIdentifier, configuration.PublishPlatform, writeOutput);
         }
 
         if (configuration.DeleteBin)
         {
-            DeleteDirectoryIfPresentSafely(Path.Combine(projectDirectory.FullName, "bin"), writeOutput);
+            await DeleteDirectoryIfPresentSafelyAsync(Path.Combine(projectDirectory.FullName, "bin"), writeOutput);
         }
 
         if (configuration.DeleteObj)
         {
-            DeleteDirectoryIfPresentSafely(Path.Combine(projectDirectory.FullName, "obj"), writeOutput);
+            await DeleteDirectoryIfPresentSafelyAsync(Path.Combine(projectDirectory.FullName, "obj"), writeOutput);
         }
 
         writeOutput($"--- Running: {bundle.PreviewText} ---{Environment.NewLine}");
         var exitCode = await RunProcessAsync(bundle.CommandArguments, writeOutput, cancellationToken);
 
-        if (exitCode == 0)
+if (exitCode == 0)
         {
             if (IsMacOsPlatform(configuration.PublishPlatform) && configuration.CreateMacAppBundle)
             {
-                var createdBundlePath = EnsureMacAppBundle(
+                var createdBundlePath = await EnsureMacAppBundleAsync(
                     bundle.OutputDirectory,
                     bundle.ProjectFilePath,
                     configuration.PackageId,
-                    writeOutput);
+                    writeOutput,
+                    cancellationToken);
 
                 if (!string.IsNullOrWhiteSpace(createdBundlePath))
                 {
@@ -211,7 +213,7 @@ public sealed class PublisherService
             return true;
         }
 
-        writeOutput(Environment.NewLine + $"=== Publish failed (exit code {exitCode}) ===" + Environment.NewLine);
+        writeOutput(Environment.NewLine + "=== Publish failed (exit code {exitCode}) ===" + Environment.NewLine);
         PlayCompletionSound(success: false);
         return false;
     }
@@ -1677,7 +1679,7 @@ throw new InvalidOperationException("iOS publishing requires an `ios-*` or `ioss
         }
     }
 
-    private static string? FindProcessesLockingDirectory(string path)
+    private static async Task<string?> FindProcessesLockingDirectoryAsync(string path)
     {
         try
         {
@@ -1702,8 +1704,8 @@ throw new InvalidOperationException("iOS publishing requires an `ios-*` or `ioss
                 return null;
             }
 
-            var output = process.StandardOutput.ReadToEnd();
-            process.WaitForExit(3000);
+            var output = await process.StandardOutput.ReadToEndAsync();
+            await process.WaitForExitAsync(CancellationToken.None);
 
             if (string.IsNullOrWhiteSpace(output))
             {
@@ -1734,7 +1736,7 @@ throw new InvalidOperationException("iOS publishing requires an `ios-*` or `ioss
         }
     }
 
-    private static bool TryDeleteDirectorySafely(string path, Action<string> writeOutput)
+    private static async Task<bool> TryDeleteDirectorySafelyAsync(string path, Action<string> writeOutput)
     {
         if (!Directory.Exists(path))
         {
@@ -1760,16 +1762,16 @@ throw new InvalidOperationException("iOS publishing requires an `ios-*` or `ioss
                 if (attempt == 0)
                 {
                     writeOutput($"File lock detected on {path}, retrying...{Environment.NewLine}");
-                    Thread.Sleep(500);
+                    await Task.Delay(500);
                     continue;
                 }
 
-                var lockingProcesses = FindProcessesLockingDirectory(path);
+                var lockingProcesses = await FindProcessesLockingDirectoryAsync(path);
                 if (!string.IsNullOrWhiteSpace(lockingProcesses))
                 {
                     writeOutput($"Warning: Could not delete {path}{Environment.NewLine}");
-                    writeOutput($"  Files are in use by: {lockingProcesses}{Environment.NewLine}");
-                    writeOutput($"  Close the process and retry, or proceed anyway.{Environment.NewLine}");
+                    writeOutput($" Files are in use by: {lockingProcesses}{Environment.NewLine}");
+                    writeOutput($" Close the process and retry, or proceed anyway.{Environment.NewLine}");
                 }
                 else
                 {
@@ -1780,12 +1782,12 @@ throw new InvalidOperationException("iOS publishing requires an `ios-*` or `ioss
             }
             catch (UnauthorizedAccessException ex)
             {
-                var lockingProcesses = FindProcessesLockingDirectory(path);
+                var lockingProcesses = await FindProcessesLockingDirectoryAsync(path);
                 if (!string.IsNullOrWhiteSpace(lockingProcesses))
                 {
                     writeOutput($"Warning: Could not delete {path}{Environment.NewLine}");
-                    writeOutput($"  Files are in use by: {lockingProcesses}{Environment.NewLine}");
-                    writeOutput($"  Close the process and retry, or proceed anyway.{Environment.NewLine}");
+                    writeOutput($" Files are in use by: {lockingProcesses}{Environment.NewLine}");
+                    writeOutput($" Close the process and retry, or proceed anyway.{Environment.NewLine}");
                 }
                 else
                 {
@@ -1799,7 +1801,7 @@ throw new InvalidOperationException("iOS publishing requires an `ios-*` or `ioss
         return false;
     }
 
-    private static void CleanStalePlatformDirectories(DirectoryInfo projectDirectory, string configuration, string targetFramework, string runtimeIdentifier, string publishPlatform, Action<string> writeOutput)
+    private static async Task CleanStalePlatformDirectoriesAsync(DirectoryInfo projectDirectory, string configuration, string targetFramework, string runtimeIdentifier, string publishPlatform, Action<string> writeOutput)
     {
         var objConfigPath = Path.Combine(projectDirectory.FullName, "obj", configuration.Trim());
         if (!Directory.Exists(objConfigPath))
@@ -1828,12 +1830,12 @@ throw new InvalidOperationException("iOS publishing requires an `ios-*` or `ioss
                 }
 
                 writeOutput($"Cleaning stale platform directory: {ridDirectory}{Environment.NewLine}");
-                TryDeleteDirectorySafely(ridDirectory, writeOutput);
+                await TryDeleteDirectorySafelyAsync(ridDirectory, writeOutput);
             }
 
             if (!Directory.EnumerateFileSystemEntries(tfmDirectory).Any())
             {
-                TryDeleteDirectorySafely(tfmDirectory, writeOutput);
+                await TryDeleteDirectorySafelyAsync(tfmDirectory, writeOutput);
             }
         }
     }
@@ -1881,14 +1883,14 @@ throw new InvalidOperationException("iOS publishing requires an `ios-*` or `ioss
         return false;
     }
 
-    private static void DeleteDirectoryIfPresentSafely(string path, Action<string> writeOutput)
+    private static async Task DeleteDirectoryIfPresentSafelyAsync(string path, Action<string> writeOutput)
     {
         if (!Directory.Exists(path))
         {
             return;
         }
 
-        TryDeleteDirectorySafely(path, writeOutput);
+        await TryDeleteDirectorySafelyAsync(path, writeOutput);
     }
 
     private static bool IsCurrentProcessInsideDirectory(string directoryPath)
@@ -1973,6 +1975,79 @@ throw new InvalidOperationException("iOS publishing requires an `ios-*` or `ioss
 
         writeOutput($"Created .app bundle at {bundlePath}{Environment.NewLine}");
         return bundlePath;
+    }
+
+    private static async Task<string?> EnsureMacAppBundleAsync(
+        string outputDirectory,
+        string projectFilePath,
+        string packageId,
+        Action<string> writeOutput,
+        CancellationToken cancellationToken)
+    {
+        return await Task.Run(() =>
+        {
+            if (!OperatingSystem.IsMacOS())
+            {
+                return (string?)null;
+            }
+
+            if (!Directory.Exists(outputDirectory))
+            {
+                return null;
+            }
+
+            var normalizedOutput = Path.GetFullPath(outputDirectory);
+            var appMarker = $"{Path.DirectorySeparatorChar}.app{Path.DirectorySeparatorChar}Contents{Path.DirectorySeparatorChar}MacOS";
+            var macOsIndex = normalizedOutput.IndexOf(appMarker, StringComparison.OrdinalIgnoreCase);
+            if (macOsIndex >= 0)
+            {
+                return normalizedOutput[..(macOsIndex + 4)];
+            }
+
+            var existingBundle = FindNewestAppBundle(outputDirectory);
+            if (existingBundle is not null)
+            {
+                return existingBundle.FullName;
+            }
+
+            var projectName = Path.GetFileNameWithoutExtension(projectFilePath);
+            var bundlePath = Path.Combine(outputDirectory, $"{projectName}.app");
+            var contentsPath = Path.Combine(bundlePath, "Contents");
+            var macOsPath = Path.Combine(contentsPath, "MacOS");
+            var resourcesPath = Path.Combine(contentsPath, "Resources");
+            Directory.CreateDirectory(macOsPath);
+            Directory.CreateDirectory(resourcesPath);
+            CopyMacAppIcon(resourcesPath);
+
+            foreach (var sourceFilePath in Directory.EnumerateFiles(outputDirectory, "*", SearchOption.TopDirectoryOnly))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var sourceFileName = Path.GetFileName(sourceFilePath);
+                var destinationFilePath = Path.Combine(macOsPath, sourceFileName);
+                if (string.Equals(sourceFilePath, destinationFilePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                File.Copy(sourceFilePath, destinationFilePath, overwrite: true);
+            }
+
+            var executableName = DetermineExecutableName(macOsPath, projectName);
+            if (!string.IsNullOrWhiteSpace(executableName))
+            {
+                var executablePath = Path.Combine(macOsPath, executableName);
+                TryMarkExecutable(executablePath);
+            }
+
+            var bundleIdentifier = BuildBundleIdentifier(packageId, projectName);
+            var plistPath = Path.Combine(contentsPath, "Info.plist");
+            File.WriteAllText(
+                plistPath,
+                BuildInfoPlist(projectName, executableName ?? projectName, bundleIdentifier));
+
+        writeOutput($"Created .app bundle at {bundlePath}{Environment.NewLine}");
+        return bundlePath;
+        }, cancellationToken);
     }
 
     private static void CopyMacAppIcon(string resourcesPath)
