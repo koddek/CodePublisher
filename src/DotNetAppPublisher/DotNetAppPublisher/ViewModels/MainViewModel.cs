@@ -52,8 +52,13 @@ public partial class MainViewModel : ViewModelBase
     ];
 
     private readonly StringBuilder _logBuilder = new();
+    private readonly object _logLock = new();
+    private bool _logFlushScheduled;
+    private long _lastLogFlushTicks;
+    private const int LogFlushIntervalMs = 150;
     private readonly DesktopInteractionService _desktopInteractionService;
     private readonly PublisherService _publisherService;
+    private CancellationTokenSource? _publishCts;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(InstallLatestApkCommand))]
@@ -779,14 +784,26 @@ private string _projectDirectory = string.Empty;
     }
 
     [RelayCommand]
-    private async Task CancelPublishAsync()
+    private void CancelPublish()
     {
-        StatusMessage = "Publish cancelled.";
+        if (_publishCts is null)
+        {
+            return;
+        }
+
+        StatusMessage = "Cancelling publish...";
+        _publishCts.Cancel();
     }
 
     public bool IsPublishing => IsBusy;
 
-    public bool CanCancelPublish => IsBusy;
+    public bool CanCancelPublish => _publishCts is not null;
+
+    private void NotifyPublishStateChanged()
+    {
+        OnPropertyChanged(nameof(CanCancelPublish));
+        CancelPublishCommand.NotifyCanExecuteChanged();
+    }
 
     [RelayCommand(CanExecute = nameof(CanReloadProjectMetadata))]
     private async Task ReloadProjectMetadataAsync()
@@ -866,16 +883,33 @@ private string _projectDirectory = string.Empty;
     [RelayCommand(CanExecute = nameof(CanPublish))]
     private async Task PublishAsync()
     {
+        IsBusy = true;
+        ClearLog();
+        AppendLog("Preparing publish workflow..." + Environment.NewLine);
+
+        _publishCts = new CancellationTokenSource();
+        NotifyPublishStateChanged();
+        var token = _publishCts.Token;
+
         try
         {
-            IsBusy = true;
-            ClearLog();
-            AppendLog("Preparing publish workflow..." + Environment.NewLine);
-            var success = await _publisherService.PublishAsync(CreateConfiguration(), text => Dispatcher.UIThread.Post(() => AppendLog(text)), CancellationToken.None);
+            var success = await Task.Run(async () =>
+            {
+                return await _publisherService.PublishAsync(
+                    CreateConfiguration(),
+                    AppendLog,
+                    token);
+            }, token);
+
             StatusMessage = success
                 ? "Publish completed successfully."
                 : "Publish failed. Check the live output for the exact toolchain error.";
             RefreshCommandPreview();
+        }
+        catch (OperationCanceledException)
+        {
+            StatusMessage = "Publish cancelled.";
+            AppendLog(Environment.NewLine + "=== Publish cancelled ===" + Environment.NewLine);
         }
         catch (Exception ex)
         {
@@ -884,6 +918,10 @@ private string _projectDirectory = string.Empty;
         }
         finally
         {
+            FlushLogFinal();
+            _publishCts?.Dispose();
+            _publishCts = null;
+            NotifyPublishStateChanged();
             IsBusy = false;
         }
     }
@@ -1314,13 +1352,84 @@ private string _projectDirectory = string.Empty;
 
     private void AppendLog(string text)
     {
-        _logBuilder.Append(text);
+        lock (_logLock)
+        {
+            _logBuilder.Append(text);
+        }
+
+        ScheduleLogFlush();
+    }
+
+    private void ScheduleLogFlush()
+    {
+        if (!ShouldFlushNow())
+        {
+            return;
+        }
+
+        lock (_logLock)
+        {
+            if (_logFlushScheduled)
+            {
+                return;
+            }
+
+            _logFlushScheduled = true;
+        }
+
+        Dispatcher.UIThread.Post(FlushLog, DispatcherPriority.Background);
+    }
+
+    private bool ShouldFlushNow()
+    {
+        var nowTicks = Environment.TickCount64;
+        var previousTicks = Interlocked.Read(ref _lastLogFlushTicks);
+
+        if (nowTicks - previousTicks < LogFlushIntervalMs)
+        {
+            return false;
+        }
+
+        return Interlocked.CompareExchange(ref _lastLogFlushTicks, nowTicks, previousTicks) == previousTicks;
+    }
+
+    private void FlushLog()
+    {
+        lock (_logLock)
+        {
+            _logFlushScheduled = false;
+        }
+
         LiveOutput = _logBuilder.ToString();
+    }
+
+    private void FlushLogFinal()
+    {
+        Interlocked.Exchange(ref _lastLogFlushTicks, Environment.TickCount64);
+
+        lock (_logLock)
+        {
+            _logFlushScheduled = false;
+        }
+
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            LiveOutput = _logBuilder.ToString();
+            return;
+        }
+
+        Dispatcher.UIThread.Invoke(() => LiveOutput = _logBuilder.ToString());
     }
 
     private void ClearLog()
     {
-        _logBuilder.Clear();
+        lock (_logLock)
+        {
+            _logBuilder.Clear();
+            _logFlushScheduled = false;
+        }
+
+        Interlocked.Exchange(ref _lastLogFlushTicks, 0);
         LiveOutput = string.Empty;
     }
 }

@@ -1,7 +1,6 @@
 using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Threading;
 using DotNetAppPublisher.ViewModels;
 
 namespace DotNetAppPublisher.Views;
@@ -41,13 +40,10 @@ public partial class MainView : UserControl
             return;
         }
 
-        Dispatcher.UIThread.Post(() =>
+        if (this.FindControl<ScrollViewer>("LiveOutputScrollViewer") is { } scrollViewer)
         {
-            if (this.FindControl<ScrollViewer>("LiveOutputScrollViewer") is { } scrollViewer)
-            {
-                scrollViewer.Offset = new Vector(scrollViewer.Offset.X, scrollViewer.Extent.Height);
-            }
-        }, DispatcherPriority.Background);
+            scrollViewer.Offset = new Vector(scrollViewer.Offset.X, scrollViewer.Extent.Height);
+        }
     }
 
     private void UnsubscribeViewModel()
