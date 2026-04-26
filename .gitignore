@@ -159,6 +159,13 @@ Network Trash Folder
 Temporary Items
 .apdisk
 
+# Local tooling and one-off workspace artifacts
+.kilo/
+icon.png
+\!AvaloniaResources
+.idea/
+.vscode/
+
 ### macOS Patch ###
 # iCloud generated files
 *.icloud

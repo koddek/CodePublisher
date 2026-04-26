@@ -42,6 +42,14 @@ dotnet build DotNetAppPublisher.slnx
 dotnet run --project src/DotNetAppPublisher/DotNetAppPublisher.Desktop/DotNetAppPublisher.Desktop.csproj
 ```
 
+## Commands
+
+| Command | Purpose |
+| --- | --- |
+| `dotnet restore DotNetAppPublisher.slnx` | Restore NuGet packages |
+| `dotnet build DotNetAppPublisher.slnx` | Build the solution |
+| `dotnet run --project src/DotNetAppPublisher/DotNetAppPublisher.Desktop/DotNetAppPublisher.Desktop.csproj` | Launch the desktop app |
+
 ### Main workflow
 
 1. Pick the .NET project directory.
@@ -120,6 +128,8 @@ The app is already useful for Android, macOS, Windows, and iOS publish flows, pl
 ## Contributing
 
 Small focused improvements are welcome, especially around publish validation, emulator ergonomics, packaging support, and release automation.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for local setup and pull request expectations.
 
 ## License
 

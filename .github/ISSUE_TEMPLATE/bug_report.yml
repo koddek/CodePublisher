@@ -1,0 +1,61 @@
+name: Bug report
+description: Report a defect or regression in .NET App Publisher
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What went wrong?
+      placeholder: A clear and concise description of the issue.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include the project type, target platform, and the actions you took.
+      placeholder: |
+        1. Open the app
+        2. Select project ...
+        3. Choose platform ...
+        4. Click Publish ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Target platform
+      options:
+        - Android
+        - macOS
+        - Windows
+        - iOS
+        - Mixed / multiple
+    validations:
+      required: true
+  - type: input
+    id: sdk
+    attributes:
+      label: .NET SDK version
+      placeholder: dotnet --version
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Paste relevant output from the live publish panel or attach screenshots.
+      render: shell
