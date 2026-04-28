@@ -1377,7 +1377,7 @@ throw new InvalidOperationException("iOS publishing requires an `ios-*` or `ioss
             command.Add($"-p:{customTrimProperty}={ToLowerInvariant(configuration.PublishTrimmed)}");
         }
 
-        if (!isMacCatalyst && configuration.PublishReadyToRun)
+        if (!isMacCatalyst && configuration.PublishReadyToRun && !configuration.PublishAot)
         {
             command.Add("-p:PublishReadyToRun=true");
         }
@@ -1385,6 +1385,12 @@ throw new InvalidOperationException("iOS publishing requires an `ios-*` or `ioss
         if (!isMacCatalyst && configuration.PublishSingleFile)
         {
             command.Add("-p:PublishSingleFile=true");
+            
+            // Ensure native libraries are included when using AOT + SingleFile
+            if (configuration.PublishAot)
+            {
+                command.Add("-p:IncludeNativeLibrariesForSelfExtract=true");
+            }
         }
 
         if (!isMacCatalyst && configuration.UseAppHost)

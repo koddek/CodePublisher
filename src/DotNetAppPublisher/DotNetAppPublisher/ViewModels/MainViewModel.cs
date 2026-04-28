@@ -71,6 +71,7 @@ public partial class MainViewModel : ViewModelBase
     {
         _publisherService = publisherService;
         _desktopInteractionService = desktopInteractionService;
+        EnsureXamlBindingsPreserved();
         IsProjectInternalVersionSupported = GetDefaultInternalVersionSupport(PublishPlatform);
         DotnetStatus = publisherService.DotnetStatusText;
         AdbStatus = publisherService.AdbStatusText;
@@ -78,6 +79,36 @@ public partial class MainViewModel : ViewModelBase
         StatusMessage = "Select a .NET project folder to start building your publish command.";
         RefreshCommandPreview();
         _ = RefreshEmulatorsAsync();
+    }
+
+    // Keep command properties referenced from code so trimmed builds retain members used only from XAML.
+    private void EnsureXamlBindingsPreserved()
+    {
+        _ = BrowseProjectDirectoryCommand;
+        _ = ReloadProjectMetadataCommand;
+        _ = RefreshDevicesCommand;
+        _ = RefreshIosSimulatorsCommand;
+        _ = LaunchDeviceCommand;
+        _ = LaunchIosSimulatorCommand;
+        _ = PublishCommand;
+        _ = CancelPublishCommand;
+        _ = OpenPublishFolderCommand;
+        _ = InstallLatestApkCommand;
+        _ = UninstallAppCommand;
+        _ = LaunchAppCommand;
+        _ = CopyFileToAndroidDeviceCommand;
+        _ = InstallIosAppCommand;
+        _ = UninstallIosAppCommand;
+        _ = LaunchIosAppCommand;
+        _ = CopyFileToIosDeviceCommand;
+        _ = DeleteDesktopAppCommand;
+        _ = CopyCommandPreviewCommand;
+        _ = CopyKnownGoodApkCommand;
+        _ = CopyLiveOutputCommand;
+        _ = CopyWindowScreenshotCommand;
+        _ = SaveWindowScreenshotToDiskCommand;
+        _ = BrowseOutputDirectoryCommand;
+        _ = BrowseKeystoreCommand;
     }
 
     public IReadOnlyList<string> PublishPlatformOptions { get; } =
@@ -1432,4 +1463,26 @@ private string _projectDirectory = string.Empty;
         Interlocked.Exchange(ref _lastLogFlushTicks, 0);
         LiveOutput = string.Empty;
     }
+
+    partial void OnPublishAotChanged(bool value)
+    {
+        if (value)
+        {
+            PublishReadyToRun = false;
+        }
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsReadyToRunEnabled)));
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsReadyToRunCheckBoxEnabled)));
+    }
+
+    partial void OnPublishReadyToRunChanged(bool value)
+    {
+        // Prevent enabling R2R when AOT is enabled
+        if (value && PublishAot)
+        {
+            PublishReadyToRun = false;
+        }
+    }
+
+    public bool IsReadyToRunEnabled => !PublishAot;
+    public bool IsReadyToRunCheckBoxEnabled => IsEditorEnabled && IsReadyToRunEnabled;
 }

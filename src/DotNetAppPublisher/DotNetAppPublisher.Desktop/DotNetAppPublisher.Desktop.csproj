@@ -21,6 +21,13 @@
         <MacBundleContentsDir>bin/$(Configuration)/DotNetAppPublisher.app/Contents</MacBundleContentsDir>
     </PropertyGroup>
 
+    <!-- Default publish properties for macOS self-contained release -->
+    <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('OSX')) AND '$(Configuration)' == 'Release'">
+        <PublishSingleFile>true</PublishSingleFile>
+        <SelfContained>true</SelfContained>
+        <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
+    </PropertyGroup>
+
     <ItemGroup>
         <PackageReference Include="Avalonia.Desktop"/>
         <!--Condition below is needed to remove Avalonia.Diagnostics package from build output in Release configuration.-->
@@ -34,9 +41,36 @@
         <ProjectReference Include="..\DotNetAppPublisher\DotNetAppPublisher.csproj"/>
     </ItemGroup>
 
+    <ItemGroup>
+        <TrimmerRootDescriptor Include="..\DotNetAppPublisher\Trimming\LinkerDescriptor.xml" />
+        <TrimmerRootAssembly Include="DotNetAppPublisher" />
+    </ItemGroup>
+
     <Target Name="PrepareMacBundle" AfterTargets="Build" Condition="$([MSBuild]::IsOSPlatform('OSX'))">
-        <MakeDir Directories="$(MacBundleContentsDir)/Resources"/>
-        <Copy SourceFiles="macos/Info.plist" DestinationFiles="$(MacBundleContentsDir)/Info.plist"/>
-        <Copy SourceFiles="..\DotNetAppPublisher\Assets\dotnet-app-publisher.icns" DestinationFiles="$(MacBundleContentsDir)/Resources/dotnet-app-publisher.icns"/>
+        <PropertyGroup>
+            <AppBundleDir>bin/$(Configuration)/DotNetAppPublisher.app</AppBundleDir>
+            <AppContentsDir>$(AppBundleDir)/Contents</AppContentsDir>
+            <AppResourcesDir>$(AppContentsDir)/Resources</AppResourcesDir>
+        </PropertyGroup>
+        <MakeDir Directories="$(AppResourcesDir)"/>
+        <Copy SourceFiles="macos/Info.plist" DestinationFiles="$(AppContentsDir)/Info.plist"/>
+        <Copy SourceFiles="..\DotNetAppPublisher\Assets\dotnet-app-publisher.icns" DestinationFiles="$(AppResourcesDir)/dotnet-app-publisher.icns"/>
+    </Target>
+
+    <Target Name="CreateMacAppBundleAfterPublish" AfterTargets="Publish" Condition="$([MSBuild]::IsOSPlatform('OSX')) AND '$(SelfContained)' == 'true'">
+        <PropertyGroup>
+            <AppBundleDir>$(PublishDir)DotNetAppPublisher.app</AppBundleDir>
+            <AppContentsDir>$(AppBundleDir)/Contents</AppContentsDir>
+            <AppMacOsDir>$(AppContentsDir)/MacOS</AppMacOsDir>
+            <AppResourcesDir>$(AppContentsDir)/Resources</AppResourcesDir>
+        </PropertyGroup>
+        <MakeDir Directories="$(AppMacOsDir);$(AppResourcesDir)"/>
+        <!-- Copy all publish outputs to MacOS directory, excluding the .app bundle itself -->
+        <ItemGroup>
+            <PublishFiles Include="$(PublishDir)**\*" Exclude="$(PublishDir)**\DotNetAppPublisher.app\**\*" />
+        </ItemGroup>
+        <Copy SourceFiles="@(PublishFiles)" DestinationFolder="$(AppMacOsDir)/%(RecursiveDir)" SkipUnchangedFiles="true" />
+        <Copy SourceFiles="macos/Info.plist" DestinationFiles="$(AppContentsDir)/Info.plist"/>
+        <Copy SourceFiles="..\DotNetAppPublisher\Assets\dotnet-app-publisher.icns" DestinationFiles="$(AppResourcesDir)/dotnet-app-publisher.icns"/>
     </Target>
 </Project>

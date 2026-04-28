@@ -3,11 +3,14 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:conv="using:DotNetAppPublisher.Converters"
+             xmlns:vm="using:DotNetAppPublisher.ViewModels"
+             xmlns:services="using:DotNetAppPublisher.Services"
              mc:Ignorable="d"
              d:DesignWidth="1480"
              d:DesignHeight="980"
              x:Class="DotNetAppPublisher.Views.MainView"
-             x:CompileBindings="False">
+             x:CompileBindings="True"
+             x:DataType="vm:MainViewModel">
     <UserControl.Resources>
         <conv:ThemeSegmentConverter x:Key="ThemeSegmentConverter" />
     </UserControl.Resources>
@@ -174,8 +177,8 @@
                                           MinWidth="320"
                                           HorizontalAlignment="Stretch"
                                           IsVisible="{Binding IsAndroidPlatform}">
-                                    <ComboBox.ItemTemplate>
-                                        <DataTemplate>
+                                <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="services:AndroidDeviceInfo">
                                             <TextBlock Text="{Binding DisplayName}" />
                                         </DataTemplate>
                                     </ComboBox.ItemTemplate>
@@ -426,10 +429,23 @@
                                           IsEnabled="{Binding IsEditorEnabled}" />
                                 <CheckBox Width="220" Content="PublishTrimmed" IsChecked="{Binding PublishTrimmed}"
                                           IsEnabled="{Binding IsEditorEnabled}" />
-                                <CheckBox Width="220" Content="PublishAot" IsChecked="{Binding PublishAot}"
-                                          IsEnabled="{Binding IsEditorEnabled}" />
+                                <CheckBox Width="220" Content="PublishAot"
+                                          IsChecked="{Binding PublishAot}" IsEnabled="{Binding IsEditorEnabled}" />
+                                 <Border Background="#33FFA500" 
+                                        BorderBrush="Orange" 
+                                        BorderThickness="1" 
+                                        CornerRadius="4"
+                                        Padding="8,6"
+                                        Margin="0,4,0,4"
+                                        IsVisible="{Binding PublishAot}">
+                                    <TextBlock Text="⚠ AOT may cause issues with Avalonia's reflection-based features (XAML, bindings). Use with caution."
+                                               Foreground="Orange"
+                                               FontSize="11"
+                                               TextWrapping="Wrap" />
+                                </Border>
                                 <CheckBox Width="220" Content="PublishReadyToRun"
-                                          IsChecked="{Binding PublishReadyToRun}" IsEnabled="{Binding IsEditorEnabled}" />
+                                          IsChecked="{Binding PublishReadyToRun}" IsEnabled="{Binding IsReadyToRunCheckBoxEnabled}"
+                                          ToolTip.Tip="Disabled when PublishAot is enabled (AOT and ReadyToRun are mutually exclusive)" />
                                 <CheckBox Width="220" Content="PublishSingleFile"
                                           IsChecked="{Binding PublishSingleFile}" IsEnabled="{Binding IsEditorEnabled}" />
                                 <CheckBox Width="220" Content="UseAppHost" IsChecked="{Binding UseAppHost}"

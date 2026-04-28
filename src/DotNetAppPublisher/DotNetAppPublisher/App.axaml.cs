@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Data.Core;
 using Avalonia.Data.Core.Plugins;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using Avalonia.Markup.Xaml;
 using DotNetAppPublisher.Services;
@@ -17,6 +18,12 @@ public partial class App : Application
         AvaloniaXamlLoader.Load(this);
     }
 
+    [DynamicDependency(
+        DynamicallyAccessedMemberTypes.PublicProperties |
+        DynamicallyAccessedMemberTypes.NonPublicProperties |
+        DynamicallyAccessedMemberTypes.PublicMethods |
+        DynamicallyAccessedMemberTypes.NonPublicMethods,
+        typeof(MainViewModel))]
     public override void OnFrameworkInitializationCompleted()
     {
         var desktopInteractionService = new DesktopInteractionService();

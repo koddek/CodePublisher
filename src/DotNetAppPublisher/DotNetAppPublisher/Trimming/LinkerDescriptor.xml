@@ -1,0 +1,5 @@
+<linker>
+  <assembly fullname="DotNetAppPublisher">
+    <type fullname="DotNetAppPublisher.ViewModels.MainViewModel" preserve="all" />
+  </assembly>
+</linker>

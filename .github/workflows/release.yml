@@ -51,7 +51,7 @@ jobs:
         shell: bash
         run: |
           ditto -c -k --sequesterRsrc --keepParent \
-            "src/DotNetAppPublisher/DotNetAppPublisher.Desktop/bin/Release/DotNetAppPublisher.app" \
+            "artifacts/${{ matrix.artifact_name }}/DotNetAppPublisher.app" \
             "artifacts/${{ matrix.artifact_name }}.zip"
 
       - name: Package non-macOS release archive
