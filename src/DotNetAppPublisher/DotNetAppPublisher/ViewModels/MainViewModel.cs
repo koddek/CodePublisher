@@ -397,6 +397,7 @@ private string _projectDirectory = string.Empty;
     [NotifyCanExecuteChangedFor(nameof(CopyFileToIosDeviceCommand))]
     [NotifyCanExecuteChangedFor(nameof(CancelPublishCommand))]
     [NotifyPropertyChangedFor(nameof(IsEditorEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsReadyToRunCheckBoxEnabled))]
     [NotifyPropertyChangedFor(nameof(IsSharedProgressVisible))]
     [NotifyPropertyChangedFor(nameof(IsSharedProgressIndeterminate))]
     [NotifyPropertyChangedFor(nameof(SharedProgressText))]
@@ -493,18 +494,23 @@ private string _projectDirectory = string.Empty;
         }
         else
         {
-            if (string.Equals(value, PublisherService.MacOsPlatform, StringComparison.Ordinal))
+        if (string.Equals(value, PublisherService.MacOsPlatform, StringComparison.Ordinal))
+        {
+            if (TargetFramework.Contains("android", StringComparison.OrdinalIgnoreCase))
             {
-                if (TargetFramework.Contains("android", StringComparison.OrdinalIgnoreCase))
-                {
-                    TargetFramework = "net10.0";
-                }
-
-                if (RuntimeIdentifier.Contains("android", StringComparison.OrdinalIgnoreCase))
-                {
-                    RuntimeIdentifier = "osx-arm64";
-                }
+                TargetFramework = "net10.0";
             }
+
+            if (RuntimeIdentifier.Contains("android", StringComparison.OrdinalIgnoreCase))
+            {
+                RuntimeIdentifier = "osx-arm64";
+            }
+
+            PublishReadyToRun = false;
+
+            OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsReadyToRunEnabled)));
+            OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsReadyToRunCheckBoxEnabled)));
+        }
             else if (string.Equals(value, PublisherService.WindowsPlatform, StringComparison.Ordinal))
             {
                 TargetFramework = "net10.0-windows";
@@ -1468,12 +1474,22 @@ private string _projectDirectory = string.Empty;
         LiveOutput = string.Empty;
     }
 
+    private static bool GetReadyToRunDefault(string publishPlatform)
+    {
+        return !string.Equals(publishPlatform, PublisherService.MacOsPlatform, StringComparison.Ordinal);
+    }
+
     partial void OnPublishAotChanged(bool value)
     {
         if (value)
         {
             PublishReadyToRun = false;
         }
+        else if (!GetReadyToRunDefault(PublishPlatform))
+        {
+            PublishReadyToRun = false;
+        }
+
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsReadyToRunEnabled)));
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsReadyToRunCheckBoxEnabled)));
     }
