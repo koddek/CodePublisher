@@ -1426,30 +1426,34 @@ private string _projectDirectory = string.Empty;
 
     private void FlushLog()
     {
+        string output;
         lock (_logLock)
         {
             _logFlushScheduled = false;
+            output = _logBuilder.ToString();
         }
 
-        LiveOutput = _logBuilder.ToString();
+        LiveOutput = output;
     }
 
     private void FlushLogFinal()
     {
         Interlocked.Exchange(ref _lastLogFlushTicks, Environment.TickCount64);
 
+        string output;
         lock (_logLock)
         {
             _logFlushScheduled = false;
+            output = _logBuilder.ToString();
         }
 
         if (Dispatcher.UIThread.CheckAccess())
         {
-            LiveOutput = _logBuilder.ToString();
+            LiveOutput = output;
             return;
         }
 
-        Dispatcher.UIThread.Invoke(() => LiveOutput = _logBuilder.ToString());
+        Dispatcher.UIThread.Invoke(() => LiveOutput = output);
     }
 
     private void ClearLog()

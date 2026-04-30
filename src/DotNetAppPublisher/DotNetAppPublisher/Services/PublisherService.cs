@@ -1368,13 +1368,34 @@ throw new InvalidOperationException("iOS publishing requires an `ios-*` or `ioss
             $"-p:SelfContained={ToLowerInvariant(configuration.SelfContained)}"
         };
 
-        if (string.IsNullOrWhiteSpace(customTrimProperty))
+        if (isMacCatalyst)
         {
-            command.Add($"-p:PublishTrimmed={ToLowerInvariant(configuration.PublishTrimmed)}");
+            // Mac Catalyst SDK requires PublishTrimmed=true (enforced by Xamarin.Shared.Sdk.targets).
+            // If trimming should be disabled, use MtouchLink=None instead.
+            command.Add("-p:PublishTrimmed=true");
+
+            if (!configuration.PublishTrimmed)
+            {
+                command.Add("-p:MtouchLink=None");
+            }
+
+            // Also pass the custom trim property if the project defines one,
+            // so project-level overrides are respected alongside the required PublishTrimmed=true.
+            if (!string.IsNullOrWhiteSpace(customTrimProperty))
+            {
+                command.Add($"-p:{customTrimProperty}={ToLowerInvariant(configuration.PublishTrimmed)}");
+            }
         }
         else
         {
-            command.Add($"-p:{customTrimProperty}={ToLowerInvariant(configuration.PublishTrimmed)}");
+            if (string.IsNullOrWhiteSpace(customTrimProperty))
+            {
+                command.Add($"-p:PublishTrimmed={ToLowerInvariant(configuration.PublishTrimmed)}");
+            }
+            else
+            {
+                command.Add($"-p:{customTrimProperty}={ToLowerInvariant(configuration.PublishTrimmed)}");
+            }
         }
 
         if (!isMacCatalyst && configuration.PublishReadyToRun && !configuration.PublishAot)
