@@ -1,5 +1,28 @@
 <linker>
+  <!-- ViewModels: preserve all members because XAML binds to generated properties/commands -->
   <assembly fullname="DotNetAppPublisher">
     <type fullname="DotNetAppPublisher.ViewModels.MainViewModel" preserve="all" />
+    <type fullname="DotNetAppPublisher.ViewModels.ViewModelBase" preserve="all" />
+
+    <!-- Views: Avalonia XAML loader needs type metadata at runtime -->
+    <type fullname="DotNetAppPublisher.Views.MainView" preserve="all" />
+    <type fullname="DotNetAppPublisher.Views.MainWindow" preserve="all" />
+    <type fullname="DotNetAppPublisher.Views.ScreenshotDialog" preserve="all" />
+
+    <!-- Converters: referenced as XAML resources, not from code -->
+    <type fullname="DotNetAppPublisher.Converters.ThemeSegmentConverter" preserve="all" />
+
+    <!-- Services: AndroidDeviceInfo.DisplayName is bound in DataTemplate -->
+    <type fullname="DotNetAppPublisher.Services.AndroidDeviceInfo" preserve="all" />
+    <type fullname="DotNetAppPublisher.Services.PublisherService" preserve="all" />
+    <type fullname="DotNetAppPublisher.Services.DesktopInteractionService" preserve="all" />
+
+    <!-- Models: may be reflected by serializers or debug displays -->
+    <type fullname="DotNetAppPublisher.Models.PublishConfiguration" preserve="all" />
+    <type fullname="DotNetAppPublisher.Models.PublishCommandBundle" preserve="all" />
+    <type fullname="DotNetAppPublisher.Models.ProjectMetadata" preserve="all" />
+
+    <!-- ViewLocator: uses Activator.CreateInstance to resolve views from view-model names -->
+    <type fullname="DotNetAppPublisher.ViewLocator" preserve="all" />
   </assembly>
 </linker>

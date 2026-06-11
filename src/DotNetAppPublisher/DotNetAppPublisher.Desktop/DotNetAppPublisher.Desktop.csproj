@@ -21,12 +21,16 @@
         <MacBundleContentsDir>bin/$(Configuration)/DotNetAppPublisher.app/Contents</MacBundleContentsDir>
     </PropertyGroup>
 
-    <!-- Default publish properties for macOS self-contained release -->
-    <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('OSX')) AND '$(Configuration)' == 'Release'">
-        <PublishSingleFile>true</PublishSingleFile>
-        <SelfContained>true</SelfContained>
-        <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
-    </PropertyGroup>
+  <!-- Default publish properties for macOS self-contained release -->
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('OSX')) AND '$(Configuration)' == 'Release'">
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
+    <!-- Partial trim: trims framework assemblies but leaves the app assembly intact.
+         The app relies on XAML bindings, CommunityToolkit.Mvvm source-generated commands,
+         and DataTemplate bindings that require full type metadata at runtime. -->
+    <TrimMode>partial</TrimMode>
+  </PropertyGroup>
 
     <ItemGroup>
         <PackageReference Include="Avalonia.Desktop"/>
