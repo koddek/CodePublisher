@@ -2,7 +2,6 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             xmlns:conv="using:DotNetAppPublisher.Converters"
              xmlns:vm="using:DotNetAppPublisher.ViewModels"
              xmlns:services="using:DotNetAppPublisher.Services"
              mc:Ignorable="d"
@@ -11,9 +10,6 @@
              x:Class="DotNetAppPublisher.Views.MainView"
              x:CompileBindings="True"
              x:DataType="vm:MainViewModel">
-    <UserControl.Resources>
-        <conv:ThemeSegmentConverter x:Key="ThemeSegmentConverter" />
-    </UserControl.Resources>
     <ScrollViewer VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Disabled">
         <StackPanel x:Name="PageStack"
@@ -42,31 +38,12 @@
                                    VerticalAlignment="Center"
                                    ItemSpacing="{StaticResource SpacingSmall}"
                                    LineSpacing="{StaticResource SpacingSmall}">
-                            <Border Classes="theme-switcher" VerticalAlignment="Center">
-                                <Grid ColumnDefinitions="Auto,Auto,Auto" ColumnSpacing="2">
-                                    <Border Classes="theme-segment" Grid.Column="0">
-                                        <ToggleButton Classes="theme-option light"
-                                                      IsChecked="{Binding Theme, Converter={StaticResource ThemeSegmentConverter}, ConverterParameter='Light', Mode=TwoWay}"
-                                                      ToolTip.Tip="Light Theme">
-                                            <PathIcon />
-                                        </ToggleButton>
-                                    </Border>
-                                    <Border Classes="theme-segment" Grid.Column="1">
-                                        <ToggleButton Classes="theme-option dark"
-                                                      IsChecked="{Binding Theme, Converter={StaticResource ThemeSegmentConverter}, ConverterParameter='Dark', Mode=TwoWay}"
-                                                      ToolTip.Tip="Dark Theme">
-                                            <PathIcon />
-                                        </ToggleButton>
-                                    </Border>
-                                    <Border Classes="theme-segment" Grid.Column="2">
-                                        <ToggleButton Classes="theme-option system"
-                                                      IsChecked="{Binding Theme, Converter={StaticResource ThemeSegmentConverter}, ConverterParameter='System', Mode=TwoWay}"
-                                                      ToolTip.Tip="System Theme">
-                                            <PathIcon />
-                                        </ToggleButton>
-                                    </Border>
-                                </Grid>
-                            </Border>
+                            <Button Classes="theme-toggle-button"
+                                    Command="{Binding ToggleThemeCommand}"
+                                    ToolTip.Tip="{Binding Theme, StringFormat='Switch from {0} theme'}"
+                                    VerticalAlignment="Center">
+                                <PathIcon x:Name="ThemeIcon" />
+                            </Button>
                             <Border Classes="badge" VerticalAlignment="Center">
                                 <TextBlock Text="{Binding DotnetStatus}" Classes="badge-text-dotnet caption" />
                             </Border>

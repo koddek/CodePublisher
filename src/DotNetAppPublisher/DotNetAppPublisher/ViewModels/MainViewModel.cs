@@ -109,6 +109,7 @@ public partial class MainViewModel : ViewModelBase
         _ = SaveWindowScreenshotToDiskCommand;
         _ = BrowseOutputDirectoryCommand;
         _ = BrowseKeystoreCommand;
+        _ = ToggleThemeCommand;
     }
 
     public IReadOnlyList<string> PublishPlatformOptions { get; } =
@@ -543,6 +544,17 @@ private string _projectDirectory = string.Empty;
             "Light" => ThemeVariant.Light,
             "Dark" => ThemeVariant.Dark,
             _ => ThemeVariant.Default
+        };
+    }
+
+    [RelayCommand]
+    private void ToggleTheme()
+    {
+        Theme = Theme switch
+        {
+            "Light" => "Dark",
+            "Dark" => "System",
+            _ => "Light"
         };
     }
 

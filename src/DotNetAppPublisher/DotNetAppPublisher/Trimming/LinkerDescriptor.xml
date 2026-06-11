@@ -9,9 +9,6 @@
     <type fullname="DotNetAppPublisher.Views.MainWindow" preserve="all" />
     <type fullname="DotNetAppPublisher.Views.ScreenshotDialog" preserve="all" />
 
-    <!-- Converters: referenced as XAML resources, not from code -->
-    <type fullname="DotNetAppPublisher.Converters.ThemeSegmentConverter" preserve="all" />
-
     <!-- Services: AndroidDeviceInfo.DisplayName is bound in DataTemplate -->
     <type fullname="DotNetAppPublisher.Services.AndroidDeviceInfo" preserve="all" />
     <type fullname="DotNetAppPublisher.Services.PublisherService" preserve="all" />
