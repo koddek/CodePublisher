@@ -17,13 +17,48 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.ThemeDictionaries>
+                <!-- Dark Theme: Black and Grays -->
                 <ResourceDictionary x:Key="Dark">
-                    <SolidColorBrush x:Key="ThemeBackgroundColor">#0F172A</SolidColorBrush>
-                    <SolidColorBrush x:Key="ThemeForegroundColor">#F1F5F9</SolidColorBrush>
+                    <!-- Primary surfaces -->
+                    <SolidColorBrush x:Key="ThemeBackgroundColor">#1A1A1A</SolidColorBrush>
+                    <SolidColorBrush x:Key="SurfaceColor">#242424</SolidColorBrush>
+                    <SolidColorBrush x:Key="SurfaceVariantColor">#2D2D2D</SolidColorBrush>
+                    
+                    <!-- Text & Foreground -->
+                    <SolidColorBrush x:Key="ThemeForegroundColor">#E0E0E0</SolidColorBrush>
+                    <SolidColorBrush x:Key="TextSecondaryColor">#A0A0A0</SolidColorBrush>
+                    <SolidColorBrush x:Key="TextTertiaryColor">#757575</SolidColorBrush>
+                    
+                    <!-- Accents -->
+                    <SolidColorBrush x:Key="PrimaryAccentColor">#0078D4</SolidColorBrush>
+                    <SolidColorBrush x:Key="SuccessColor">#107C10</SolidColorBrush>
+                    <SolidColorBrush x:Key="WarningColor">#FFB900</SolidColorBrush>
+                    <SolidColorBrush x:Key="ErrorColor">#F4373F</SolidColorBrush>
+                    
+                    <!-- Borders -->
+                    <SolidColorBrush x:Key="BorderColor">#3D3D3D</SolidColorBrush>
                 </ResourceDictionary>
+                
+                <!-- Light Theme: White and Grays -->
                 <ResourceDictionary x:Key="Light">
-                    <SolidColorBrush x:Key="ThemeBackgroundColor">#EEF4F8</SolidColorBrush>
-                    <SolidColorBrush x:Key="ThemeForegroundColor">#334155</SolidColorBrush>
+                    <!-- Primary surfaces -->
+                    <SolidColorBrush x:Key="ThemeBackgroundColor">#FFFFFF</SolidColorBrush>
+                    <SolidColorBrush x:Key="SurfaceColor">#F8F8F8</SolidColorBrush>
+                    <SolidColorBrush x:Key="SurfaceVariantColor">#EEEEEE</SolidColorBrush>
+                    
+                    <!-- Text & Foreground -->
+                    <SolidColorBrush x:Key="ThemeForegroundColor">#1F1F1F</SolidColorBrush>
+                    <SolidColorBrush x:Key="TextSecondaryColor">#5F5F5F</SolidColorBrush>
+                    <SolidColorBrush x:Key="TextTertiaryColor">#8F8F8F</SolidColorBrush>
+                    
+                    <!-- Accents -->
+                    <SolidColorBrush x:Key="PrimaryAccentColor">#0078D4</SolidColorBrush>
+                    <SolidColorBrush x:Key="SuccessColor">#107C10</SolidColorBrush>
+                    <SolidColorBrush x:Key="WarningColor">#D97706</SolidColorBrush>
+                    <SolidColorBrush x:Key="ErrorColor">#D32F2F</SolidColorBrush>
+                    
+                    <!-- Borders -->
+                    <SolidColorBrush x:Key="BorderColor">#D0D0D0</SolidColorBrush>
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>
