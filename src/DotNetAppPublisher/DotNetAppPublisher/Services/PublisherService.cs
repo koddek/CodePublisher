@@ -189,7 +189,11 @@ public sealed class PublisherService
         }
 
         writeOutput($"--- Running: {bundle.PreviewText} ---{Environment.NewLine}");
-        var exitCode = await RunProcessAsync(bundle.CommandArguments, writeOutput, cancellationToken);
+        var exitCode = await RunProcessAsync(
+            bundle.CommandArguments,
+            writeOutput,
+            cancellationToken,
+            Path.GetDirectoryName(bundle.ProjectFilePath));
 
 if (exitCode == 0)
         {
@@ -227,7 +231,12 @@ if (exitCode == 0)
 
         if (OperatingSystem.IsMacOS())
         {
-            Process.Start(new ProcessStartInfo("open", QuoteArgument(outputDirectory)) { UseShellExecute = false });
+            var openStartInfo = new ProcessStartInfo("open")
+            {
+                UseShellExecute = true
+            };
+            openStartInfo.ArgumentList.Add(outputDirectory);
+            Process.Start(openStartInfo);
             return;
         }
 
@@ -241,7 +250,13 @@ if (exitCode == 0)
             return;
         }
 
-        Process.Start(new ProcessStartInfo("xdg-open", QuoteArgument(outputDirectory)) { UseShellExecute = false });
+        var xdgStartInfo = new ProcessStartInfo("xdg-open")
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        xdgStartInfo.ArgumentList.Add(outputDirectory);
+        Process.Start(xdgStartInfo);
     }
 
     public async Task<string> InstallLatestApkAsync(PublishConfiguration configuration, string? deviceSerial, CancellationToken cancellationToken)
@@ -1922,18 +1937,45 @@ throw new InvalidOperationException("iOS publishing requires an `ios-*` or `ioss
 
     private static bool IsCurrentProcessInsideDirectory(string directoryPath)
     {
-        var processPath = Environment.ProcessPath;
-        if (string.IsNullOrWhiteSpace(processPath))
-        {
-            return false;
-        }
-
         var fullDirectoryPath = Path.GetFullPath(directoryPath)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
             + Path.DirectorySeparatorChar;
 
-        var fullProcessPath = Path.GetFullPath(processPath);
-        return fullProcessPath.StartsWith(fullDirectoryPath, StringComparison.OrdinalIgnoreCase);
+        foreach (var candidate in GetProcessLocationCandidates())
+        {
+            if (candidate.StartsWith(fullDirectoryPath, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static IEnumerable<string> GetProcessLocationCandidates()
+    {
+        var processPath = Environment.ProcessPath;
+        if (!string.IsNullOrWhiteSpace(processPath))
+        {
+            yield return Path.GetFullPath(processPath);
+        }
+
+        string? currentDirectory = null;
+        try
+        {
+            currentDirectory = Environment.CurrentDirectory;
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+
+        if (!string.IsNullOrWhiteSpace(currentDirectory))
+        {
+            yield return Path.GetFullPath(currentDirectory);
+        }
     }
 
     private static string? EnsureMacAppBundle(
@@ -2271,11 +2313,43 @@ throw new InvalidOperationException("iOS publishing requires an `ios-*` or `ioss
         return score;
     }
 
-    private static async Task<int> RunProcessAsync(IReadOnlyList<string> arguments, Action<string> writeOutput, CancellationToken cancellationToken)
+    private static string GetSafeWorkingDirectory(string? preferredDirectory = null)
+    {
+        if (!string.IsNullOrWhiteSpace(preferredDirectory) && Directory.Exists(preferredDirectory))
+        {
+            return Path.GetFullPath(preferredDirectory);
+        }
+
+        try
+        {
+            var currentDirectory = Environment.CurrentDirectory;
+            if (!string.IsNullOrWhiteSpace(currentDirectory) && Directory.Exists(currentDirectory))
+            {
+                return Path.GetFullPath(currentDirectory);
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (!string.IsNullOrWhiteSpace(home) && Directory.Exists(home))
+        {
+            return home;
+        }
+
+        return Path.GetTempPath();
+    }
+
+    private static async Task<int> RunProcessAsync(IReadOnlyList<string> arguments, Action<string> writeOutput, CancellationToken cancellationToken, string? workingDirectory = null)
     {
         var startInfo = new ProcessStartInfo
         {
             FileName = arguments[0],
+            WorkingDirectory = GetSafeWorkingDirectory(workingDirectory),
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -2332,11 +2406,13 @@ throw new InvalidOperationException("iOS publishing requires an `ios-*` or `ioss
             if (OperatingSystem.IsMacOS())
             {
                 var soundName = success ? "Glass" : "Basso";
-                Process.Start(new ProcessStartInfo("afplay", $"/System/Library/Sounds/{soundName}.aiff")
+                var startInfo = new ProcessStartInfo("afplay")
                 {
                     UseShellExecute = false,
                     CreateNoWindow = true
-                });
+                };
+                startInfo.ArgumentList.Add($"/System/Library/Sounds/{soundName}.aiff");
+                Process.Start(startInfo);
                 return;
             }
 

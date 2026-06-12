@@ -2,23 +2,26 @@
     // .NET Meteor resolves TFMs by matching the STATUS BAR device to the ACTIVE PROJECT:
     // - Active project MUST be DotNetAppPublisher.Desktop (not Browser: net10.0-browser always contains "-" so Meteor never finds a match).
     // - Device MUST be your Mac under "Mac Catalyst" (hostname + Apple silicon or Intel). Do NOT pick an iOS simulator or Android emulator for the desktop app.
-    // If Meteor still errors, use "Desktop (C# …)" — that path does not use Meteor's device picker.
+    // If Meteor still errors, use "Desktop (direct executable, generic icon)" — that path does not use Meteor's device picker.
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Desktop (C# debugger)",
+            "name": "Desktop (app bundle + attach)",
+            "type": "coreclr",
+            "request": "attach",
+            "preLaunchTask": "launch-desktop-bundle",
+            "processName": "DotNetAppPublisher.Desktop"
+        },
+        {
+            "name": "Desktop (direct executable, generic icon)",
             "type": "coreclr",
             "request": "launch",
             "preLaunchTask": "build-desktop",
-            "program": "${workspaceFolder}/src/DotNetAppPublisher/DotNetAppPublisher.Desktop/bin/Debug/net10.0/DotNetAppPublisher.Desktop.dll",
-            "cwd": "${workspaceFolder}/src/DotNetAppPublisher/DotNetAppPublisher.Desktop/bin/Debug/net10.0",
-            "osx": {
-                "program": "${workspaceFolder}/src/DotNetAppPublisher/DotNetAppPublisher.Desktop/bin/Debug/DotNetAppPublisher.app/Contents/MacOS/DotNetAppPublisher.Desktop.dll",
-                "cwd": "${workspaceFolder}/src/DotNetAppPublisher/DotNetAppPublisher.Desktop/bin/Debug/DotNetAppPublisher.app/Contents/MacOS"
-            }
+            "program": "${workspaceFolder}/src/DotNetAppPublisher/DotNetAppPublisher.Desktop/bin/Debug/DotNetAppPublisher.app/Contents/MacOS/DotNetAppPublisher.Desktop",
+            "cwd": "${workspaceFolder}/src/DotNetAppPublisher/DotNetAppPublisher.Desktop/bin/Debug/DotNetAppPublisher.app/Contents/MacOS"
         },
         {
-            "name": "Desktop (C# no debug)",
+            "name": "Desktop (direct executable, no debug)",
             "type": "coreclr",
             "request": "launch",
             "preLaunchTask": "build-desktop",

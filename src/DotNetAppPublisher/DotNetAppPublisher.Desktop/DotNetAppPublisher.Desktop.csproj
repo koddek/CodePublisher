@@ -54,9 +54,14 @@
         <PropertyGroup>
             <AppBundleDir>bin/$(Configuration)/DotNetAppPublisher.app</AppBundleDir>
             <AppContentsDir>$(AppBundleDir)/Contents</AppContentsDir>
+            <AppMacOsDir>$(AppContentsDir)/MacOS</AppMacOsDir>
             <AppResourcesDir>$(AppContentsDir)/Resources</AppResourcesDir>
         </PropertyGroup>
-        <MakeDir Directories="$(AppResourcesDir)"/>
+        <MakeDir Directories="$(AppMacOsDir);$(AppResourcesDir)"/>
+        <ItemGroup>
+            <MacBuildOutput Include="$(TargetDir)**/*" Exclude="$(TargetDir)$(TargetFileName).app\**\*" />
+        </ItemGroup>
+        <Copy SourceFiles="@(MacBuildOutput)" DestinationFiles="$(AppMacOsDir)/%(RecursiveDir)%(Filename)%(Extension)" SkipUnchangedFiles="true" />
         <Copy SourceFiles="macos/Info.plist" DestinationFiles="$(AppContentsDir)/Info.plist"/>
         <Copy SourceFiles="..\DotNetAppPublisher\Assets\dotnet-app-publisher.icns" DestinationFiles="$(AppResourcesDir)/dotnet-app-publisher.icns"/>
     </Target>

@@ -20,6 +20,12 @@
             }
         },
         {
+            "label": "launch-desktop-bundle",
+            "type": "shell",
+            "command": "dotnet build \"${workspaceFolder}/src/DotNetAppPublisher/DotNetAppPublisher.Desktop/DotNetAppPublisher.Desktop.csproj\" -c Debug || exit $?; open -n -a \"${workspaceFolder}/src/DotNetAppPublisher/DotNetAppPublisher.Desktop/bin/Debug/DotNetAppPublisher.app\" >/tmp/dotnet-app-publisher-debug-launch.log 2>&1 & echo $! > /tmp/dotnet-app-publisher-debug-launch.pid",
+            "problemMatcher": []
+        },
+        {
             "type": "dotnet-meteor.task",
             "target": "build",
             "label": "dotnet-meteor: Build",
