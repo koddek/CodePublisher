@@ -69,6 +69,11 @@
                             </StackPanel>
 
                             <StackPanel Spacing="10">
+                                <TextBlock Text="Output Layout" FontWeight="SemiBold" FontSize="13"/>
+                                <TextBox Text="{Binding ProjectOutputLayoutSummary}" IsReadOnly="True" PlaceholderText="Output layout not detected" TextWrapping="Wrap"/>
+                            </StackPanel>
+
+                            <StackPanel Spacing="10">
                                 <TextBlock Text="Version" FontWeight="SemiBold" FontSize="13"/>
                                 <TextBox Text="{Binding ProjectVersion}" IsReadOnly="True" PlaceholderText="No version detected"/>
                             </StackPanel>

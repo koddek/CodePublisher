@@ -59,6 +59,9 @@ public partial class MainViewModel : ViewModelBase
     private readonly DesktopInteractionService _desktopInteractionService;
     private readonly PublisherService _publisherService;
     private CancellationTokenSource? _publishCts;
+    private ProjectOutputLayout? _projectOutputLayout;
+    private bool _isAssigningAutomaticOutputDirectory;
+    private bool _isOutputDirectoryManualOverride;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(InstallLatestApkCommand))]
@@ -175,6 +178,9 @@ private string _projectDirectory = string.Empty;
 
     [ObservableProperty]
     private string _selectedProjectFile = string.Empty;
+
+    [ObservableProperty]
+    private string _projectOutputLayoutSummary = string.Empty;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(PublishCommand))]
@@ -477,6 +483,21 @@ private string _projectDirectory = string.Empty;
         }
     }
 
+    partial void OnProjectDirectoryChanged(string value)
+    {
+        _projectOutputLayout = null;
+        ProjectOutputLayoutSummary = string.Empty;
+        SetAutomaticOutputDirectory(string.Empty);
+    }
+
+    partial void OnOutputDirectoryChanged(string value)
+    {
+        if (!_isAssigningAutomaticOutputDirectory)
+        {
+            _isOutputDirectoryManualOverride = !string.IsNullOrWhiteSpace(value);
+        }
+    }
+
     partial void OnPublishPlatformChanged(string value)
     {
         IsProjectInternalVersionSupported = GetDefaultInternalVersionSupport(value);
@@ -524,7 +545,10 @@ private string _projectDirectory = string.Empty;
             }
         }
 
-        OutputDirectory = string.Empty;
+        if (!_isOutputDirectoryManualOverride)
+        {
+            SetAutomaticOutputDirectory(string.Empty);
+        }
 
         if (!string.IsNullOrWhiteSpace(ProjectDirectory))
         {
@@ -859,12 +883,14 @@ private string _projectDirectory = string.Empty;
     {
         try
         {
-            var metadata = _publisherService.LoadProjectMetadata(ProjectDirectory, Configuration, TargetFramework, RuntimeIdentifier, PublishPlatform);
+            var metadata = await _publisherService.LoadProjectMetadataAsync(ProjectDirectory, Configuration, TargetFramework, RuntimeIdentifier, PublishPlatform);
             SelectedProjectFile = metadata.ProjectFilePath;
+            _projectOutputLayout = metadata.OutputLayout;
+            ProjectOutputLayoutSummary = $"{metadata.OutputLayout.Description} Automatic destination: {metadata.DefaultOutputDirectory}";
 
-            if (string.IsNullOrWhiteSpace(OutputDirectory))
+            if (!_isOutputDirectoryManualOverride)
             {
-                OutputDirectory = metadata.DefaultOutputDirectory;
+                SetAutomaticOutputDirectory(metadata.DefaultOutputDirectory);
             }
 
             if (!string.IsNullOrWhiteSpace(metadata.PackageId))
@@ -1346,6 +1372,7 @@ private string _projectDirectory = string.Empty;
             RuntimeIdentifier = RuntimeIdentifier,
             Configuration = Configuration,
             OutputDirectory = OutputDirectory,
+            OutputLayout = _projectOutputLayout,
             PackageId = PackageId,
             IncludeApk = IncludeApk,
             IncludeAab = IncludeAab,
@@ -1384,11 +1411,6 @@ private string _projectDirectory = string.Empty;
         {
             var bundle = _publisherService.BuildPublishCommandBundle(CreateConfiguration());
             SelectedProjectFile = bundle.ProjectFilePath;
-            if (string.IsNullOrWhiteSpace(OutputDirectory))
-            {
-                OutputDirectory = bundle.OutputDirectory;
-            }
-
             CommandPreview = bundle.PreviewText;
             KnownGoodApkCommand = bundle.VerifiedApkPreviewText;
         }
@@ -1397,6 +1419,14 @@ private string _projectDirectory = string.Empty;
             CommandPreview = $"Invalid config: {ex.Message}";
             KnownGoodApkCommand = string.Empty;
         }
+    }
+
+    private void SetAutomaticOutputDirectory(string outputDirectory)
+    {
+        _isAssigningAutomaticOutputDirectory = true;
+        OutputDirectory = outputDirectory;
+        _isAssigningAutomaticOutputDirectory = false;
+        _isOutputDirectoryManualOverride = false;
     }
 
     private void AppendLog(string text)

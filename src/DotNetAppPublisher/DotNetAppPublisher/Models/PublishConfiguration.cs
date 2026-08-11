@@ -14,6 +14,8 @@ public sealed record PublishConfiguration
 
     public required string OutputDirectory { get; init; }
 
+    public ProjectOutputLayout? OutputLayout { get; init; }
+
     public required string PackageId { get; init; }
 
     public required bool IncludeApk { get; init; }

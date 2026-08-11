@@ -7,4 +7,5 @@ public sealed record ProjectMetadata(
     string? TargetFramework,
     string? DisplayVersion,
     string? InternalVersion,
-    bool SupportsInternalVersion);
+    bool SupportsInternalVersion,
+    ProjectOutputLayout OutputLayout);

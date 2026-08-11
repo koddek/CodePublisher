@@ -82,19 +82,35 @@ public sealed class PublisherService
 
     public ProjectMetadata LoadProjectMetadata(string projectDirectory, string configuration, string targetFramework, string runtimeIdentifier, string publishPlatform)
     {
+        return LoadProjectMetadataAsync(projectDirectory, configuration, targetFramework, runtimeIdentifier, publishPlatform)
+            .GetAwaiter()
+            .GetResult();
+    }
+
+    public async Task<ProjectMetadata> LoadProjectMetadataAsync(string projectDirectory, string configuration, string targetFramework, string runtimeIdentifier, string publishPlatform)
+    {
         var projectDirectoryPath = CreateProjectDirectory(projectDirectory);
         var projectFile = FindProjectFile(projectDirectoryPath)
             ?? throw new InvalidOperationException($"No .csproj found in {projectDirectoryPath}.");
         var projectName = Path.GetFileNameWithoutExtension(projectFile.Name);
+        var detectedTargetFramework = ReadTargetFramework(projectFile, publishPlatform);
+        var effectiveTargetFramework = detectedTargetFramework ?? targetFramework;
+        var outputLayout = await ResolveProjectOutputLayoutAsync(
+            projectFile,
+            configuration,
+            effectiveTargetFramework,
+            runtimeIdentifier,
+            CancellationToken.None);
 
         return new ProjectMetadata(
             projectFile.FullName,
-            GetDefaultOutputDirectory(projectDirectoryPath, configuration, targetFramework, runtimeIdentifier),
+            outputLayout.DefaultOutputDirectory,
             GetProjectIdentifier(projectFile, projectName, publishPlatform),
-            ReadTargetFramework(projectFile, publishPlatform),
+            detectedTargetFramework,
             ReadVersion(projectFile, publishPlatform, isDisplay: true),
             ReadVersion(projectFile, publishPlatform, isDisplay: false),
-            SupportsInternalVersion(publishPlatform));
+            SupportsInternalVersion(publishPlatform),
+            outputLayout);
     }
 
     public PublishCommandBundle BuildPublishCommandBundle(PublishConfiguration configuration)
@@ -173,19 +189,36 @@ public sealed class PublisherService
             await TryDeleteDirectorySafelyAsync(outputDirectory.FullName, writeOutput);
         }
 
-        if (configuration.DeleteObj)
+        var outputLayout = configuration.OutputLayout;
+        var usesCentralizedArtifacts = outputLayout?.UsesCentralizedArtifacts == true;
+
+        if (configuration.DeleteObj && !usesCentralizedArtifacts)
         {
             await CleanStalePlatformDirectoriesAsync(projectDirectory, configuration.Configuration, configuration.TargetFramework, configuration.RuntimeIdentifier, configuration.PublishPlatform, writeOutput);
         }
 
         if (configuration.DeleteBin)
         {
-            await DeleteDirectoryIfPresentSafelyAsync(Path.Combine(projectDirectory.FullName, "bin"), writeOutput);
+            var buildOutputDirectory = usesCentralizedArtifacts
+                ? outputLayout!.BuildOutputDirectory
+                : Path.Combine(projectDirectory.FullName, "bin");
+
+            if (!string.IsNullOrWhiteSpace(buildOutputDirectory))
+            {
+                await DeleteDirectoryIfPresentSafelyAsync(buildOutputDirectory, writeOutput);
+            }
         }
 
         if (configuration.DeleteObj)
         {
-            await DeleteDirectoryIfPresentSafelyAsync(Path.Combine(projectDirectory.FullName, "obj"), writeOutput);
+            var intermediateOutputDirectory = usesCentralizedArtifacts
+                ? outputLayout!.IntermediateOutputDirectory
+                : Path.Combine(projectDirectory.FullName, "obj");
+
+            if (!string.IsNullOrWhiteSpace(intermediateOutputDirectory))
+            {
+                await DeleteDirectoryIfPresentSafelyAsync(intermediateOutputDirectory, writeOutput);
+            }
         }
 
         writeOutput($"--- Running: {bundle.PreviewText} ---{Environment.NewLine}");
@@ -1152,6 +1185,128 @@ throw new InvalidOperationException("iOS publishing requires an `ios-*` or `ioss
     private static string GetDefaultOutputDirectory(DirectoryInfo projectDirectory, string configuration, string targetFramework, string runtimeIdentifier)
     {
         return Path.Combine(projectDirectory.FullName, "bin", configuration.Trim(), targetFramework.Trim(), runtimeIdentifier.Trim());
+    }
+
+    private async Task<ProjectOutputLayout> ResolveProjectOutputLayoutAsync(
+        FileInfo projectFile,
+        string configuration,
+        string targetFramework,
+        string runtimeIdentifier,
+        CancellationToken cancellationToken)
+    {
+        var fallbackOutputDirectory = GetDefaultOutputDirectory(
+            projectFile.Directory!,
+            configuration,
+            targetFramework,
+            runtimeIdentifier);
+
+        if (DotnetPath is null)
+        {
+            return CreateUnavailableOutputLayout(fallbackOutputDirectory, "dotnet was not found, so the project output layout could not be detected.");
+        }
+
+        var evaluationOutput = new StringBuilder();
+        var arguments = new List<string>
+        {
+            DotnetPath,
+            "msbuild",
+            projectFile.FullName,
+            "-nologo",
+            "-getProperty:UseArtifactsOutput,PublishDir,OutputPath,IntermediateOutputPath",
+            $"-p:Configuration={configuration.Trim()}",
+            $"-p:TargetFramework={targetFramework.Trim()}",
+            $"-p:RuntimeIdentifier={runtimeIdentifier.Trim()}"
+        };
+
+        try
+        {
+            var exitCode = await RunProcessAsync(
+                arguments,
+                text => evaluationOutput.Append(text),
+                cancellationToken,
+                projectFile.DirectoryName);
+
+            if (exitCode != 0)
+            {
+                return CreateUnavailableOutputLayout(
+                    fallbackOutputDirectory,
+                    "MSBuild could not evaluate the project output layout. The standard output folder will be used.");
+            }
+
+            using var document = JsonDocument.Parse(evaluationOutput.ToString());
+            if (!document.RootElement.TryGetProperty("Properties", out var properties))
+            {
+                return CreateUnavailableOutputLayout(
+                    fallbackOutputDirectory,
+                    "MSBuild did not return project output properties. The standard output folder will be used.");
+            }
+
+            var usesCentralizedArtifacts = string.Equals(
+                GetMsBuildProperty(properties, "UseArtifactsOutput"),
+                "true",
+                StringComparison.OrdinalIgnoreCase);
+
+            if (!usesCentralizedArtifacts)
+            {
+                return new ProjectOutputLayout(
+                    false,
+                    fallbackOutputDirectory,
+                    null,
+                    null,
+                    "Standard project output detected.");
+            }
+
+            var publishDirectory = NormalizeProjectPath(GetMsBuildProperty(properties, "PublishDir"), projectFile.Directory!);
+            if (string.IsNullOrWhiteSpace(publishDirectory))
+            {
+                return CreateUnavailableOutputLayout(
+                    fallbackOutputDirectory,
+                    "Centralized artifacts were detected, but MSBuild did not resolve a publish directory.");
+            }
+
+            return new ProjectOutputLayout(
+                true,
+                publishDirectory,
+                NormalizeProjectPath(GetMsBuildProperty(properties, "OutputPath"), projectFile.Directory!),
+                NormalizeProjectPath(GetMsBuildProperty(properties, "IntermediateOutputPath"), projectFile.Directory!),
+                "Centralized artifacts detected.");
+        }
+        catch (JsonException)
+        {
+            return CreateUnavailableOutputLayout(
+                fallbackOutputDirectory,
+                "MSBuild returned an unreadable output-layout response. The standard output folder will be used.");
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            return CreateUnavailableOutputLayout(
+                fallbackOutputDirectory,
+                "The project output layout could not be detected. The standard output folder will be used.");
+        }
+    }
+
+    private static ProjectOutputLayout CreateUnavailableOutputLayout(string fallbackOutputDirectory, string description)
+    {
+        return new ProjectOutputLayout(false, fallbackOutputDirectory, null, null, description);
+    }
+
+    private static string? GetMsBuildProperty(JsonElement properties, string name)
+    {
+        return properties.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.String
+            ? property.GetString()
+            : null;
+    }
+
+    private static string? NormalizeProjectPath(string? path, DirectoryInfo projectDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+
+        return Path.GetFullPath(Path.IsPathRooted(path)
+            ? path
+            : Path.Combine(projectDirectory.FullName, path));
     }
 
     private static string? ReadProperty(FileInfo projectFile, params string[] propertyNames)
