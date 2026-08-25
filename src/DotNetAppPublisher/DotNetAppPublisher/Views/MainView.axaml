@@ -16,20 +16,10 @@
         <!-- Header -->
         <Border Grid.Row="0" Padding="16,14" Background="{DynamicResource SurfaceColor}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,0,1">
             <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
-                <StackPanel Spacing="8" VerticalAlignment="Center">
+                <StackPanel Spacing="4" VerticalAlignment="Center">
                     <TextBlock Text=".NET App Publisher" Classes="title" Margin="0" FontSize="22" FontWeight="Bold" TextWrapping="Wrap"/>
-                    <WrapPanel ItemSpacing="8" LineSpacing="8" VerticalAlignment="Center">
-                        <Border Classes="badge">
-                            <TextBlock Text="{Binding DotnetStatus}" Classes="badge-text-dotnet" FontSize="11"/>
-                        </Border>
-                        <Border Classes="badge badge-adb">
-                            <TextBlock Text="{Binding AdbStatus}" Classes="badge-text-adb" FontSize="11"/>
-                        </Border>
-                        <Border Classes="badge badge-emulator">
-                            <TextBlock Text="{Binding EmulatorStatus}" Classes="badge-text-emulator" FontSize="11"/>
-                        </Border>
-                        <TextBlock Text="{Binding SelectedProjectFile}" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}" VerticalAlignment="Center" MaxWidth="380" TextTrimming="CharacterEllipsis" IsVisible="{Binding SelectedProjectFile, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-                    </WrapPanel>
+                    <TextBlock Text="{Binding ProjectDirectory}" FontSize="11" Foreground="{DynamicResource TextSecondaryColor}" VerticalAlignment="Center" MaxWidth="520" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ProjectDirectory}" IsVisible="{Binding ProjectDirectory, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                    <TextBlock Text="No project selected" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}" VerticalAlignment="Center" IsVisible="{Binding !HasProjectSelection}"/>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" HorizontalAlignment="Right">
                     <Button Classes="theme-toggle-button"
@@ -91,6 +81,9 @@
                                 <StackPanel Spacing="16">
                                     <TextBlock Text="Project Setup" Classes="section-title"/>
                                     <TextBlock Text="Select your .NET project to get started" Classes="section-copy"/>
+                                    <Border Classes="badge" HorizontalAlignment="Left" ToolTip.Tip="dotnet SDK used to run publish commands">
+                                        <TextBlock Text="{Binding DotnetStatus}" Classes="badge-text-dotnet" FontSize="11"/>
+                                    </Border>
                                     <StackPanel Spacing="8">
                                         <TextBlock Text="Project Directory" FontWeight="SemiBold" FontSize="13"/>
                                         <TextBox Text="{Binding ProjectDirectory}" IsEnabled="{Binding IsEditorEnabled}" PlaceholderText="Select a .NET project folder"/>
@@ -135,7 +128,7 @@
 
                                     <StackPanel Spacing="8" IsVisible="{Binding IsAndroidPlatform}">
                                         <TextBlock Text="Android Device" FontWeight="SemiBold" FontSize="13"/>
-                                        <WrapPanel ItemSpacing="8" LineSpacing="8">
+                                        <WrapPanel ItemSpacing="8" LineSpacing="8" VerticalAlignment="Center">
                                             <ComboBox MinWidth="280" MaxWidth="380" ItemsSource="{Binding AvailableAndroidDevices}" SelectedItem="{Binding SelectedDevice, Mode=TwoWay}">
                                                 <ComboBox.ItemTemplate>
                                                     <DataTemplate x:DataType="services:AndroidDeviceInfo">
@@ -144,6 +137,14 @@
                                                 </ComboBox.ItemTemplate>
                                             </ComboBox>
                                             <Button Content="Refresh" Command="{Binding RefreshDevicesCommand}" Padding="12,8"/>
+                                        </WrapPanel>
+                                        <WrapPanel ItemSpacing="8" LineSpacing="8" VerticalAlignment="Center">
+                                            <Border Classes="badge badge-adb" ToolTip.Tip="adb tool used for install/uninstall/launch/push">
+                                                <TextBlock Text="{Binding AdbStatus}" Classes="badge-text-adb" FontSize="11"/>
+                                            </Border>
+                                            <Border Classes="badge badge-emulator" ToolTip.Tip="emulator tool used to discover and launch AVDs">
+                                                <TextBlock Text="{Binding EmulatorStatus}" Classes="badge-text-emulator" FontSize="11"/>
+                                            </Border>
                                         </WrapPanel>
                                         <Button Content="Launch Device / Emulator" Command="{Binding LaunchDeviceCommand}" MinWidth="180" IsVisible="{Binding IsAndroidPlatform}"/>
                                     </StackPanel>

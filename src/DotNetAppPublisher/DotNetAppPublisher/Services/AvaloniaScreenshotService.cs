@@ -4,7 +4,6 @@ using Avalonia.Controls;
 using Avalonia.Input.Platform;
 using Avalonia.Media.Imaging;
 using Avalonia.VisualTree;
-
 namespace DotNetAppPublisher.Services;
 
 public class AvaloniaScreenshotService : IScreenshotService
@@ -77,7 +76,7 @@ public class AvaloniaScreenshotService : IScreenshotService
         catch
         {
             using var stream = new MemoryStream();
-            bitmap.Save(stream);
+            bitmap.Save(stream, new PngBitmapEncoderOptions());
             var pngBytes = stream.ToArray();
             var fallbackPath = Path.Combine(Path.GetTempPath(), $"DotNetAppPublisher-screenshot-{DateTime.Now:yyyyMMdd-HHmmss}.png");
             await File.WriteAllBytesAsync(fallbackPath, pngBytes);
@@ -97,7 +96,7 @@ public class AvaloniaScreenshotService : IScreenshotService
 
         using (var fileStream = File.Create(filePath))
         {
-            bitmap.Save(fileStream);
+            bitmap.Save(fileStream, new PngBitmapEncoderOptions());
         }
 
         await Task.CompletedTask;
