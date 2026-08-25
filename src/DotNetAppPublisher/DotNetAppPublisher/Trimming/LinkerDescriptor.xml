@@ -13,13 +13,15 @@
     <type fullname="DotNetAppPublisher.Services.AndroidDeviceInfo" preserve="all" />
     <type fullname="DotNetAppPublisher.Services.PublisherService" preserve="all" />
     <type fullname="DotNetAppPublisher.Services.DesktopInteractionService" preserve="all" />
+    <type fullname="DotNetAppPublisher.Services.PlatformDefaults" preserve="all" />
+    <type fullname="DotNetAppPublisher.Services.PublishOptionRules" preserve="all" />
+    <type fullname="DotNetAppPublisher.ViewModels.NavItem" preserve="all" />
+    <type fullname="DotNetAppPublisher.ViewModels.PublishSection" preserve="all" />
 
     <!-- Models: may be reflected by serializers or debug displays -->
     <type fullname="DotNetAppPublisher.Models.PublishConfiguration" preserve="all" />
     <type fullname="DotNetAppPublisher.Models.PublishCommandBundle" preserve="all" />
     <type fullname="DotNetAppPublisher.Models.ProjectMetadata" preserve="all" />
 
-    <!-- ViewLocator: uses Activator.CreateInstance to resolve views from view-model names -->
-    <type fullname="DotNetAppPublisher.ViewLocator" preserve="all" />
   </assembly>
 </linker>

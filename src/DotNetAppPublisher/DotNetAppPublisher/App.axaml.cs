@@ -26,6 +26,7 @@ public partial class App : Application
         DynamicallyAccessedMemberTypes.PublicMethods | DynamicallyAccessedMemberTypes.NonPublicMethods,
         typeof(MainViewModel))]
     [DynamicDependency(DynamicallyAccessedMemberTypes.PublicProperties, typeof(AndroidDeviceInfo))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicProperties, typeof(NavItem))]
     public override void OnFrameworkInitializationCompleted()
     {
         try
