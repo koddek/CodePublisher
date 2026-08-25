@@ -180,7 +180,7 @@ public sealed class PublisherService
         return new PublishCommandBundle(
             command,
             MaskCommand(command),
-            isAndroid ? MaskCommand(BuildVerifiedApkCommand(configuration, projectFile.FullName, outputDirectory, customTrimProperty)) : string.Empty,
+            MaskCommand(BuildBaselineCommand(configuration, projectFile.FullName, outputDirectory, customTrimProperty)),
             projectFile.FullName,
             outputDirectory);
     }
@@ -193,10 +193,75 @@ public sealed class PublisherService
 
         writeOutput(Environment.NewLine + "=== Publish started ===" + Environment.NewLine);
         writeOutput(bundle.PreviewText + Environment.NewLine + Environment.NewLine);
-        if (!string.IsNullOrWhiteSpace(bundle.VerifiedApkPreviewText))
+        if (!string.IsNullOrWhiteSpace(bundle.BaselinePreviewText))
         {
-            writeOutput("Known-good APK-only command:" + Environment.NewLine);
-            writeOutput(bundle.VerifiedApkPreviewText + Environment.NewLine + Environment.NewLine);
+            writeOutput("Known-good baseline command:" + Environment.NewLine);
+            writeOutput(bundle.BaselinePreviewText + Environment.NewLine + Environment.NewLine);
+        }
+
+        if (RequiresMobileWorkload(configuration.TargetFramework))
+        {
+            var dotnetRoot = Path.GetDirectoryName(DotnetPath!) ?? string.Empty;
+            var canWrite = ElevatedProcessRunner.CanWriteToWorkloadLocation(DotnetPath!);
+            var workloadOutput = new StringBuilder();
+            void WriteWorkloadOutput(string text)
+            {
+                workloadOutput.Append(text);
+                writeOutput(text);
+            }
+
+            int workloadExitCode;
+            if (!canWrite)
+            {
+                writeOutput($"--- Restoring workloads (administrator approval required) ---{Environment.NewLine}");
+                writeOutput($"Workload changes require administrator permission to write to {dotnetRoot}.{Environment.NewLine}");
+                var env = new Dictionary<string, string>
+                {
+                    ["DOTNET_ROOT"] = dotnetRoot,
+                    ["DOTNET_MULTILEVEL_LOOKUP"] = "0"
+                };
+                workloadExitCode = await ElevatedProcessRunner.RunElevatedAsync(
+                    DotnetPath!,
+                    ["workload", "restore", bundle.ProjectFilePath],
+                    Path.GetDirectoryName(bundle.ProjectFilePath),
+                    env,
+                    WriteWorkloadOutput,
+                    cancellationToken);
+            }
+            else
+            {
+                writeOutput($"--- Restoring workloads (dotnet workload restore) ---{Environment.NewLine}");
+                workloadExitCode = await RunProcessAsync(
+                    [DotnetPath!, "workload", "restore", bundle.ProjectFilePath],
+                    WriteWorkloadOutput,
+                    cancellationToken,
+                    Path.GetDirectoryName(bundle.ProjectFilePath));
+            }
+
+            if (workloadExitCode == -128)
+            {
+                writeOutput($"Workload restore cancelled by user. Publish will likely fail with NETSDK1147 unless you use the Known-Good Baseline (no AOT).{Environment.NewLine}");
+            }
+            else if (workloadExitCode != 0)
+            {
+                var combined = workloadOutput.ToString();
+                if (combined.Contains("Inadequate permissions", StringComparison.OrdinalIgnoreCase)
+                    || combined.Contains("elevated privileges", StringComparison.OrdinalIgnoreCase))
+                {
+                    writeOutput(
+                        $"Workload restore needs admin rights (dotnet is in {dotnetRoot}).{Environment.NewLine}" +
+                        $"Run in Terminal: sudo dotnet workload restore \"{bundle.ProjectFilePath}\"{Environment.NewLine}" +
+                        $"Then publish again, or use the Known-Good Baseline command shown above (no AOT — no workload needed).{Environment.NewLine}");
+                }
+                else
+                {
+                    writeOutput($"Workload restore failed (exit code {workloadExitCode}); continuing with publish. If the build fails with NETSDK1147, fix the workload error above first.{Environment.NewLine}");
+                }
+            }
+            else
+            {
+                writeOutput($"Workloads ready.{Environment.NewLine}");
+            }
         }
 
         if (outputDirectory.Exists)
@@ -266,7 +331,7 @@ if (exitCode == 0)
             return true;
         }
 
-        writeOutput(Environment.NewLine + "=== Publish failed (exit code {exitCode}) ===" + Environment.NewLine);
+        writeOutput(Environment.NewLine + $"=== Publish failed (exit code {exitCode}) ===" + Environment.NewLine);
         PlayCompletionSound(success: false);
         return false;
     }
@@ -544,6 +609,16 @@ if (exitCode == 0)
     public async Task<string> SaveElementScreenshotToDiskAsync(Window window, Control element, string outputDirectory, CancellationToken cancellationToken)
     {
         return await _screenshotService.CaptureElementToDiskAsync(window, element, outputDirectory, cancellationToken);
+    }
+
+    public async Task<string> CopyDetailScreenshotToClipboardAsync(Window window, ScrollViewer detailScrollViewer, CancellationToken cancellationToken)
+    {
+        return await _screenshotService.CaptureDetailToClipboardAsync(window, detailScrollViewer, cancellationToken);
+    }
+
+    public async Task<string> SaveDetailScreenshotToDiskAsync(Window window, ScrollViewer detailScrollViewer, string outputDirectory, CancellationToken cancellationToken)
+    {
+        return await _screenshotService.CaptureDetailToDiskAsync(window, detailScrollViewer, outputDirectory, cancellationToken);
     }
 
     public async Task<IReadOnlyList<string>> DiscoverEmulatorsAsync(CancellationToken cancellationToken)
@@ -1504,6 +1579,21 @@ if (exitCode == 0)
 
     private List<string> BuildAndroidCommand(PublishConfiguration configuration, string projectFilePath, string? customTrimProperty)
     {
+        var linkMode = configuration.AndroidLinkMode.Trim();
+        var linkingEnabled = !string.Equals(linkMode, "None", StringComparison.Ordinal);
+
+        if (configuration.RunAotCompilation && !linkingEnabled)
+        {
+            throw new InvalidOperationException(
+                "RunAOTCompilation requires linking. Set Android Link Mode to SdkOnly or Full, or disable RunAOT.");
+        }
+
+        if (configuration.EnableProfiledAot && !configuration.RunAotCompilation)
+        {
+            throw new InvalidOperationException(
+                "Profiled AOT requires RunAOT. Enable RunAOT or disable Profiled AOT.");
+        }
+
         var command = new List<string>
         {
             DotnetPath!,
@@ -1516,7 +1606,7 @@ if (exitCode == 0)
             "-r",
             configuration.RuntimeIdentifier.Trim(),
             $"-p:SelfContained={ToLowerInvariant(configuration.SelfContained)}",
-            $"-p:AndroidLinkMode={configuration.AndroidLinkMode.Trim()}",
+            $"-p:AndroidLinkMode={linkMode}",
             $"-p:RunAOTCompilation={ToLowerInvariant(configuration.RunAotCompilation)}",
             $"-p:AndroidEnableProfiledAot={ToLowerInvariant(configuration.EnableProfiledAot)}"
         };
@@ -1780,7 +1870,91 @@ if (exitCode == 0)
         return command;
     }
 
-    private IReadOnlyList<string> BuildVerifiedApkCommand(PublishConfiguration configuration, string projectFilePath, string outputDirectory, string? customTrimProperty)
+    private IReadOnlyList<string> BuildBaselineCommand(PublishConfiguration configuration, string projectFilePath, string outputDirectory, string? customTrimProperty)
+    {
+        if (IsAndroidPlatform(configuration.PublishPlatform))
+        {
+            return BuildAndroidBaselineCommand(configuration, projectFilePath, outputDirectory, customTrimProperty);
+        }
+
+        var command = new List<string>
+        {
+            DotnetPath!,
+            "publish",
+            projectFilePath,
+            "-f",
+            configuration.TargetFramework.Trim(),
+            "-c",
+            configuration.Configuration.Trim(),
+            "-r",
+            configuration.RuntimeIdentifier.Trim(),
+            "-p:SelfContained=true"
+        };
+
+        if (IsMacOsPlatform(configuration.PublishPlatform))
+        {
+            var isMacCatalyst = PlatformDefaults.IsMacCatalyst(
+                configuration.TargetFramework,
+                configuration.RuntimeIdentifier);
+            var isNativeOsxRid = configuration.RuntimeIdentifier.StartsWith("osx-", StringComparison.OrdinalIgnoreCase);
+
+            if (isMacCatalyst)
+            {
+                // Catalyst SDK forces PublishTrimmed=true; disable linking instead.
+                command.Add("-p:PublishTrimmed=true");
+                command.Add("-p:MtouchLink=None");
+            }
+            else
+            {
+                AddTrimArgument(command, customTrimProperty, false);
+            }
+
+            if (isNativeOsxRid)
+            {
+                command.Add("-p:UseAppHost=true");
+                command.Add("-p:PublishSingleFile=true");
+            }
+        }
+        else if (IsIosPlatform(configuration.PublishPlatform))
+        {
+            var isSimulatorRuntime = configuration.RuntimeIdentifier.StartsWith("iossimulator-", StringComparison.OrdinalIgnoreCase);
+
+            // iOS SDK forces PublishTrimmed=true; simulator builds use the build verb.
+            command.Add("-p:UseAppHost=false");
+            command.Add("-p:PublishTrimmed=true");
+
+            if (isSimulatorRuntime)
+            {
+                command[1] = "build";
+            }
+        }
+        else
+        {
+            // Windows / Linux: plain self-contained single-file apphost publish.
+            command.Add("-p:UseAppHost=true");
+            AddTrimArgument(command, customTrimProperty, false);
+            command.Add("-p:PublishSingleFile=true");
+        }
+
+        command.Add("-o");
+        command.Add(outputDirectory);
+        return command;
+    }
+
+    private static void AddTrimArgument(List<string> command, string? customTrimProperty, bool value)
+    {
+        var text = ToLowerInvariant(value);
+        if (string.IsNullOrWhiteSpace(customTrimProperty))
+        {
+            command.Add($"-p:PublishTrimmed={text}");
+        }
+        else
+        {
+            command.Add($"-p:{customTrimProperty}={text}");
+        }
+    }
+
+    private IReadOnlyList<string> BuildAndroidBaselineCommand(PublishConfiguration configuration, string projectFilePath, string outputDirectory, string? customTrimProperty)
     {
         var command = new List<string>
         {
@@ -1802,14 +1976,7 @@ if (exitCode == 0)
             outputDirectory
         };
 
-        if (string.IsNullOrWhiteSpace(customTrimProperty))
-        {
-            command.Insert(9, "-p:PublishTrimmed=false");
-        }
-        else
-        {
-            command.Insert(9, $"-p:{customTrimProperty}=false");
-        }
+        AddTrimArgument(command, customTrimProperty, false);
 
         return command;
     }
@@ -1917,6 +2084,13 @@ if (exitCode == 0)
     private static bool IsLinuxPlatform(string publishPlatform)
     {
         return string.Equals(publishPlatform, LinuxPlatform, StringComparison.Ordinal);
+    }
+
+    private static bool RequiresMobileWorkload(string targetFramework)
+    {
+        return targetFramework.Contains("android", StringComparison.OrdinalIgnoreCase)
+            || targetFramework.Contains("ios", StringComparison.OrdinalIgnoreCase)
+            || targetFramework.Contains("maccatalyst", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string ExtractSimulatorId(string simulator)
@@ -2527,6 +2701,8 @@ if (exitCode == 0)
   <key>CFBundleVersion</key>
   <string>0.1.0</string>
   <key>CFBundleIconFile</key>
+  <string>{{MacAppIconFileName}}</string>
+  <key>CFBundleIconName</key>
   <string>{{MacAppIconFileName}}</string>
   <key>LSMinimumSystemVersion</key>
   <string>12.0</string>

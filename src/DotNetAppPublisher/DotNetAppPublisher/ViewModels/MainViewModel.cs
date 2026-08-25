@@ -2,6 +2,7 @@ using System.Reflection;
 using System.ComponentModel;
 using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
 using Avalonia;
 using Avalonia.Styling;
 using Avalonia.Threading;
@@ -107,12 +108,13 @@ public partial class MainViewModel : ViewModelBase
         _ = CopyFileToIosDeviceCommand;
         _ = DeleteDesktopAppCommand;
         _ = CopyCommandPreviewCommand;
-        _ = CopyKnownGoodApkCommand;
+        _ = CopyKnownGoodBaselineCommand;
         _ = CopyLiveOutputCommand;
         _ = CopyWindowScreenshotCommand;
         _ = SaveWindowScreenshotToDiskCommand;
         _ = BrowseOutputDirectoryCommand;
         _ = BrowseKeystoreCommand;
+        _ = ResetToSafeDefaultsCommand;
         _ = ToggleThemeCommand;
     }
 
@@ -156,7 +158,7 @@ public partial class MainViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsIosPublishOptionsVisible))]
     [NotifyPropertyChangedFor(nameof(IsLinuxPublishOptionsVisible))]
     [NotifyPropertyChangedFor(nameof(IsSigningCardVisible))]
-    [NotifyPropertyChangedFor(nameof(IsKnownGoodApkVisible))]
+    [NotifyPropertyChangedFor(nameof(IsKnownGoodBaselineVisible))]
     [NotifyPropertyChangedFor(nameof(ProjectInternalVersionLabel))]
     [NotifyPropertyChangedFor(nameof(IsAppVersionVisible))]
     [NotifyPropertyChangedFor(nameof(IsPublishAotEnabled))]
@@ -362,7 +364,7 @@ private string _projectDirectory = string.Empty;
     private string _commandPreview = "Select a project to generate a publish command.";
 
     [ObservableProperty]
-    private string _knownGoodApkCommand = string.Empty;
+    private string _knownGoodBaselineCommand = string.Empty;
 
     [ObservableProperty]
     private string _liveOutput = string.Empty;
@@ -429,7 +431,7 @@ private string _projectDirectory = string.Empty;
     [NotifyCanExecuteChangedFor(nameof(CopyWindowScreenshotCommand))]
     [NotifyCanExecuteChangedFor(nameof(SaveWindowScreenshotToDiskCommand))]
     [NotifyCanExecuteChangedFor(nameof(CopyCommandPreviewCommand))]
-    [NotifyCanExecuteChangedFor(nameof(CopyKnownGoodApkCommand))]
+    [NotifyCanExecuteChangedFor(nameof(CopyKnownGoodBaselineCommand))]
     [NotifyCanExecuteChangedFor(nameof(CopyLiveOutputCommand))]
     [NotifyCanExecuteChangedFor(nameof(RefreshEmulatorsCommand))]
     [NotifyCanExecuteChangedFor(nameof(LaunchEmulatorCommand))]
@@ -496,25 +498,28 @@ private string _projectDirectory = string.Empty;
 
     public bool IsSigningCardVisible => IsAndroidPlatform && IsSigningEnabled;
 
-    public bool IsKnownGoodApkVisible => IsAndroidPlatform;
+    public bool IsKnownGoodBaselineVisible => true;
 
     public bool IsShrinkerSettingsEnabled => PublishOptionRules.IsShrinkerSettingsEnabled(AndroidLinkMode);
 
     public bool IsPublishAotEnabled => PublishOptionRules.IsPublishAotEnabled(PublishPlatform, TargetFramework, RuntimeIdentifier);
     public string PublishAotDisabledReason => PublishOptionRules.PublishAotDisabledReason(PublishPlatform, TargetFramework, RuntimeIdentifier);
 
-    public bool IsPublishTrimmedEnabled => PublishOptionRules.IsPublishTrimmedEnabled(PublishAot, PublishPlatform, TargetFramework, RuntimeIdentifier);
-    public string PublishTrimmedDisabledReason => PublishOptionRules.PublishTrimmedDisabledReason(PublishAot, PublishPlatform, TargetFramework, RuntimeIdentifier);
+    public bool IsPublishTrimmedEnabled => PublishOptionRules.IsPublishTrimmedEnabled(PublishAot, PublishPlatform, TargetFramework, RuntimeIdentifier, AndroidLinkMode);
+    public string PublishTrimmedDisabledReason => PublishOptionRules.PublishTrimmedDisabledReason(PublishAot, PublishPlatform, TargetFramework, RuntimeIdentifier, AndroidLinkMode);
 
     public bool IsProfiledAotEnabled => PublishOptionRules.IsProfiledAotEnabled(RunAotCompilation);
     public string ProfiledAotDisabledReason => PublishOptionRules.ProfiledAotDisabledReason(RunAotCompilation);
+
+    public bool IsRunAotEnabled => !IsAndroidPlatform || PublishOptionRules.IsAndroidAotEnabled(AndroidLinkMode);
+    public string RunAotDisabledReason => PublishOptionRules.AndroidAotDisabledReason(AndroidLinkMode);
 
     public bool IsPublishSingleFileEnabled => PublishOptionRules.IsPublishSingleFileEnabled(PublishAot, PublishPlatform);
     public string PublishSingleFileDisabledReason => IsPublishSingleFileEnabled ? string.Empty : "SingleFile not applicable for this platform.";
 
     public bool IsUseAppHostEnabled => PublishOptionRules.IsUseAppHostEnabled(PublishPlatform);
 
-    public string ReadyToRunDisabledReason => PublishOptionRules.ReadyToRunDisabledReason(PublishAot);
+    public string ReadyToRunDisabledReason => PublishOptionRules.ReadyToRunDisabledReason(PublishAot, PublishPlatform);
 
     public string PackageIdLabel => "Package ID";
 
@@ -563,7 +568,25 @@ private string _projectDirectory = string.Empty;
     {
         IsProjectInternalVersionSupported = GetDefaultInternalVersionSupport(value);
 
-        var defaults = PlatformDefaults.GetDefaults(value);
+        ApplyPlatformDefaults(value);
+
+        if (!_isOutputDirectoryManualOverride)
+        {
+            SetAutomaticOutputDirectory(string.Empty);
+        }
+
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsReadyToRunEnabled)));
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsReadyToRunCheckBoxEnabled)));
+
+        if (!string.IsNullOrWhiteSpace(ProjectDirectory))
+        {
+            _ = ReloadProjectMetadataAsync();
+        }
+    }
+
+    private void ApplyPlatformDefaults(string platform)
+    {
+        var defaults = PlatformDefaults.GetDefaults(platform);
         TargetFramework = defaults.TargetFramework;
         RuntimeIdentifier = defaults.RuntimeIdentifier;
         SelfContained = defaults.SelfContained;
@@ -588,19 +611,13 @@ private string _projectDirectory = string.Empty;
         IncludeApk = defaults.IncludeApk;
         IncludeAab = defaults.IncludeAab;
         SignMode = defaults.SignMode;
+    }
 
-        if (!_isOutputDirectoryManualOverride)
-        {
-            SetAutomaticOutputDirectory(string.Empty);
-        }
-
-        OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsReadyToRunEnabled)));
-        OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsReadyToRunCheckBoxEnabled)));
-
-        if (!string.IsNullOrWhiteSpace(ProjectDirectory))
-        {
-            _ = ReloadProjectMetadataAsync();
-        }
+    [RelayCommand]
+    private void ResetToSafeDefaults()
+    {
+        ApplyPlatformDefaults(PublishPlatform);
+        StatusMessage = $"Reset {PublishPlatform} to known-good baseline options.";
     }
 
     partial void OnThemeChanged(string value)
@@ -1032,7 +1049,7 @@ private string _projectDirectory = string.Empty;
 
             StatusMessage = success
                 ? "Publish completed successfully."
-                : "Publish failed. Check the live output for the exact toolchain error.";
+                : BuildPublishFailureMessage();
             RefreshCommandPreview();
         }
         catch (OperationCanceledException)
@@ -1058,6 +1075,45 @@ private string _projectDirectory = string.Empty;
     private bool CanPublish()
     {
         return !IsBusy;
+    }
+
+    private string BuildPublishFailureMessage()
+    {
+        var output = LiveOutput;
+
+        if (output.Contains("Inadequate permissions", StringComparison.OrdinalIgnoreCase)
+            || output.Contains("elevated privileges", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Publish failed: workload restore needs admin rights. Run `sudo dotnet workload restore <project>` in Terminal, then publish again — or use the Known-Good Baseline (no AOT, no workload).";
+        }
+
+        var workloadMatch = Regex.Match(
+            output,
+            @"workloads must be installed:\s*(?<workloads>[^\r\n\[]+)",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        if (output.Contains("NETSDK1147", StringComparison.OrdinalIgnoreCase) && workloadMatch.Success)
+        {
+            var workloads = workloadMatch.Groups["workloads"].Value.Trim();
+            return $"Publish failed: missing workloads ({workloads}). " +
+                "Run `sudo dotnet workload restore` in the project folder (needs admin on this machine), or use the Known-Good Baseline command (no AOT).";
+        }
+
+        if (output.Contains("NETSDK1147", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Publish failed: missing workloads. Run `sudo dotnet workload restore` in the project folder, or use the Known-Good Baseline command (no AOT).";
+        }
+
+        if (output.Contains("NETSDK1042", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Publish failed: target framework mismatch. Check Target Framework in the Build section against the project file.";
+        }
+
+        if (Regex.IsMatch(output, @"error XA\d{4}", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+        {
+            return "Publish failed with an Android toolchain error. Check the live output for the XA error code.";
+        }
+
+        return "Publish failed. Check the live output for the exact toolchain error.";
     }
 
     [RelayCommand(CanExecute = nameof(CanOpenPublishFolder))]
@@ -1250,16 +1306,16 @@ private string _projectDirectory = string.Empty;
         return !IsBusy && !string.IsNullOrWhiteSpace(CommandPreview);
     }
 
-    [RelayCommand(CanExecute = nameof(CanCopyKnownGoodApk))]
-    private async Task CopyKnownGoodApkAsync()
+    [RelayCommand(CanExecute = nameof(CanCopyKnownGoodBaseline))]
+    private async Task CopyKnownGoodBaselineAsync()
     {
-        await _desktopInteractionService.CopyTextToClipboardAsync(KnownGoodApkCommand);
-        StatusMessage = "Known-good APK command copied.";
+        await _desktopInteractionService.CopyTextToClipboardAsync(KnownGoodBaselineCommand);
+        StatusMessage = "Known-good baseline command copied.";
     }
 
-    private bool CanCopyKnownGoodApk()
+    private bool CanCopyKnownGoodBaseline()
     {
-        return IsAndroidPlatform && !IsBusy && !string.IsNullOrWhiteSpace(KnownGoodApkCommand);
+        return !IsBusy && !string.IsNullOrWhiteSpace(KnownGoodBaselineCommand);
     }
 
     [RelayCommand(CanExecute = nameof(CanCopyLiveOutput))]
@@ -1466,12 +1522,12 @@ private string _projectDirectory = string.Empty;
             var bundle = _publisherService.BuildPublishCommandBundle(CreateConfiguration());
             SelectedProjectFile = bundle.ProjectFilePath;
             CommandPreview = bundle.PreviewText;
-            KnownGoodApkCommand = bundle.VerifiedApkPreviewText;
+            KnownGoodBaselineCommand = bundle.BaselinePreviewText;
         }
         catch (Exception ex)
         {
             CommandPreview = $"Invalid config: {ex.Message}";
-            KnownGoodApkCommand = string.Empty;
+            KnownGoodBaselineCommand = string.Empty;
         }
     }
 
@@ -1619,6 +1675,16 @@ private string _projectDirectory = string.Empty;
     partial void OnAndroidLinkModeChanged(string value)
     {
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsShrinkerSettingsEnabled)));
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsRunAotEnabled)));
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(RunAotDisabledReason)));
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsPublishTrimmedEnabled)));
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(PublishTrimmedDisabledReason)));
+
+        // Link Mode 'None' disables the linker — AOT requires linking, so cascade off.
+        if (string.Equals(value, "None", StringComparison.Ordinal) && RunAotCompilation)
+        {
+            RunAotCompilation = false;
+        }
     }
 
     partial void OnIncludeApkChanged(bool value)
@@ -1645,6 +1711,6 @@ private string _projectDirectory = string.Empty;
         }
     }
 
-    public bool IsReadyToRunEnabled => PublishOptionRules.IsReadyToRunEnabled(PublishAot);
+    public bool IsReadyToRunEnabled => PublishOptionRules.IsReadyToRunEnabled(PublishAot, PublishPlatform);
     public bool IsReadyToRunCheckBoxEnabled => IsEditorEnabled && IsReadyToRunEnabled;
 }

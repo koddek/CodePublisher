@@ -14,12 +14,12 @@
     <Grid RowDefinitions="Auto,*,Auto" Background="{DynamicResource ThemeBackgroundColor}" MinWidth="720">
 
         <!-- Header -->
-        <Border Grid.Row="0" Padding="16,14" Background="{DynamicResource SurfaceColor}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,0,1">
+        <Border Grid.Row="0" Padding="16,10" Background="{DynamicResource SurfaceColor}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,0,1">
             <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
-                <StackPanel Spacing="4" VerticalAlignment="Center">
-                    <TextBlock Text=".NET App Publisher" Classes="title" Margin="0" FontSize="22" FontWeight="Bold" TextWrapping="Wrap"/>
-                    <TextBlock Text="{Binding ProjectDirectory}" FontSize="11" Foreground="{DynamicResource TextSecondaryColor}" VerticalAlignment="Center" MaxWidth="520" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ProjectDirectory}" IsVisible="{Binding ProjectDirectory, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-                    <TextBlock Text="No project selected" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}" VerticalAlignment="Center" IsVisible="{Binding !HasProjectSelection}"/>
+                <StackPanel Grid.Column="0" Spacing="3" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="0">
+                    <TextBlock Text=".NET App Publisher" FontSize="20" FontWeight="Bold" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0" Padding="0"/>
+                    <TextBlock Text="{Binding ProjectDirectory}" FontSize="11" Foreground="{DynamicResource TextSecondaryColor}" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0" Padding="0" MaxWidth="640" TextTrimming="CharacterEllipsis" TextAlignment="Left" ToolTip.Tip="{Binding ProjectDirectory}" IsVisible="{Binding ProjectDirectory, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                    <TextBlock Text="No project selected — choose a .NET project folder in the Project section" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0" Padding="0" IsVisible="{Binding !HasProjectSelection}"/>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" HorizontalAlignment="Right">
                     <Button Classes="theme-toggle-button"
@@ -176,7 +176,10 @@
 
                             <Border Classes="card">
                                 <StackPanel Spacing="16">
-                                    <TextBlock Text="Build Configuration" Classes="section-title"/>
+                                    <WrapPanel ItemSpacing="8" LineSpacing="8" VerticalAlignment="Center">
+                                        <TextBlock Text="Build Configuration" Classes="section-title" VerticalAlignment="Center"/>
+                                        <Button Content="Reset to Known-Good Defaults" Command="{Binding ResetToSafeDefaultsCommand}" Padding="10,6" FontSize="12" ToolTip.Tip="Reset all Build options for this platform to the baseline that reliably publishes"/>
+                                    </WrapPanel>
                                     <TextBlock Text="TFM and RID default per platform; edit only if you know the target SDK." Classes="section-copy"/>
 
                                     <StackPanel Spacing="8">
@@ -247,7 +250,8 @@
                                         <CheckBox Content="Generate APK" IsChecked="{Binding IncludeApk}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
                                         <CheckBox Content="Generate AAB" IsChecked="{Binding IncludeAab}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
                                         <StackPanel Orientation="Horizontal" Spacing="4">
-                                            <CheckBox Content="RunAOT" IsChecked="{Binding RunAotCompilation}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
+                                            <CheckBox Content="RunAOT" IsChecked="{Binding RunAotCompilation}" IsEnabled="{Binding IsRunAotEnabled}" Margin="0,4"/>
+                                            <TextBlock Text="ⓘ" VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}" ToolTip.Tip="{Binding RunAotDisabledReason}" IsVisible="{Binding !IsRunAotEnabled}"/>
                                         </StackPanel>
                                         <StackPanel Orientation="Horizontal" Spacing="4">
                                             <CheckBox Content="Profiled AOT" IsChecked="{Binding EnableProfiledAot}" IsEnabled="{Binding IsProfiledAotEnabled}" Margin="0,4"/>
@@ -396,16 +400,16 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Classes="card" IsVisible="{Binding IsKnownGoodApkVisible}">
+                            <Border Classes="card" IsVisible="{Binding IsKnownGoodBaselineVisible}">
                                 <StackPanel Spacing="16">
                                     <WrapPanel ItemSpacing="8" LineSpacing="8">
                                         <TextBlock Text="Known-Good Baseline" Classes="section-title" VerticalAlignment="Center"/>
-                                        <Button Content="Copy" Command="{Binding CopyKnownGoodApkCommand}" Padding="12,8" MinWidth="80" MinHeight="32"/>
+                                        <Button Content="Copy" Command="{Binding CopyKnownGoodBaselineCommand}" Padding="12,8" MinWidth="80" MinHeight="32"/>
                                     </WrapPanel>
-                                    <TextBlock Text="Conservative APK-only baseline for comparison" Classes="section-copy"/>
+                                    <TextBlock Text="Conservative command for this platform — safe defaults that reliably publish" Classes="section-copy"/>
                                     <Border Classes="console-shell" Padding="0" ClipToBounds="True">
                                         <ScrollViewer Classes="console-scroll">
-                                            <TextBox Classes="console-textbox" Text="{Binding KnownGoodApkCommand}" AcceptsReturn="True" MinHeight="60"/>
+                                            <TextBox Classes="console-textbox" Text="{Binding KnownGoodBaselineCommand}" AcceptsReturn="True" MinHeight="60"/>
                                         </ScrollViewer>
                                     </Border>
                                 </StackPanel>

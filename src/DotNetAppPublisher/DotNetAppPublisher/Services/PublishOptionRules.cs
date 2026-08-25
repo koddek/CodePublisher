@@ -2,14 +2,35 @@ namespace DotNetAppPublisher.Services;
 
 public static class PublishOptionRules
 {
-    public static bool IsReadyToRunEnabled(bool publishAot) => !publishAot;
+    public static bool IsReadyToRunEnabled(bool publishAot, string publishPlatform)
+    {
+        if (publishAot)
+            return false;
+        if (string.Equals(publishPlatform, PublisherService.AndroidPlatform, StringComparison.Ordinal))
+            return false;
+        if (string.Equals(publishPlatform, PublisherService.IosPlatform, StringComparison.Ordinal))
+            return false;
+        return true;
+    }
 
-    public static string ReadyToRunDisabledReason(bool publishAot)
+    public static string ReadyToRunDisabledReason(bool publishAot, string publishPlatform)
     {
         if (publishAot)
             return "Disabled: AOT and ReadyToRun are mutually exclusive (dotnet/runtime#126598).";
+        if (string.Equals(publishPlatform, PublisherService.AndroidPlatform, StringComparison.Ordinal))
+            return "ReadyToRun is not supported for Android — use RunAOT instead.";
+        if (string.Equals(publishPlatform, PublisherService.IosPlatform, StringComparison.Ordinal))
+            return "ReadyToRun is not supported for iOS — the SDK AOTs automatically.";
         return string.Empty;
     }
+
+    public static bool IsAndroidAotEnabled(string androidLinkMode)
+        => !string.Equals(androidLinkMode, "None", StringComparison.Ordinal);
+
+    public static string AndroidAotDisabledReason(string androidLinkMode)
+        => IsAndroidAotEnabled(androidLinkMode)
+            ? string.Empty
+            : "RunAOT requires linking — set Link Mode to SdkOnly or Full first.";
 
     public static bool IsPublishAotEnabled(string publishPlatform, string targetFramework, string runtimeIdentifier)
     {
@@ -39,10 +60,17 @@ public static class PublishOptionRules
         return string.Empty;
     }
 
-    public static bool IsPublishTrimmedEnabled(bool publishAot, string publishPlatform, string targetFramework, string runtimeIdentifier)
+    public static bool IsPublishTrimmedEnabled(
+        bool publishAot,
+        string publishPlatform,
+        string targetFramework,
+        string runtimeIdentifier,
+        string androidLinkMode)
     {
         if (publishAot)
             return false;
+        if (string.Equals(publishPlatform, PublisherService.AndroidPlatform, StringComparison.Ordinal))
+            return IsAndroidAotEnabled(androidLinkMode);
         if (string.Equals(publishPlatform, PublisherService.IosPlatform, StringComparison.Ordinal))
             return false;
         if (string.Equals(publishPlatform, PublisherService.MacOsPlatform, StringComparison.Ordinal)
@@ -51,10 +79,18 @@ public static class PublishOptionRules
         return true;
     }
 
-    public static string PublishTrimmedDisabledReason(bool publishAot, string publishPlatform, string targetFramework, string runtimeIdentifier)
+    public static string PublishTrimmedDisabledReason(
+        bool publishAot,
+        string publishPlatform,
+        string targetFramework,
+        string runtimeIdentifier,
+        string androidLinkMode)
     {
         if (publishAot)
             return "Trimming is implied by Native AOT.";
+        if (string.Equals(publishPlatform, PublisherService.AndroidPlatform, StringComparison.Ordinal)
+            && !IsAndroidAotEnabled(androidLinkMode))
+            return "Android trimming is driven by Link Mode — 'None' disables the linker.";
         if (string.Equals(publishPlatform, PublisherService.IosPlatform, StringComparison.Ordinal))
             return "iOS SDK forces PublishTrimmed=true (Xamarin.Shared.Sdk.targets).";
         if (string.Equals(publishPlatform, PublisherService.MacOsPlatform, StringComparison.Ordinal)
