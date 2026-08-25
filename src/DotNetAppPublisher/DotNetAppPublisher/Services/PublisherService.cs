@@ -23,6 +23,7 @@ public sealed class PublisherService
     public const string MacOsPlatform = "macOS";
     public const string WindowsPlatform = "Windows";
     public const string IosPlatform = "iOS";
+    public const string LinuxPlatform = "Linux";
 
     private const string MacAppIconFileName = "dotnet-app-publisher";
     private const string MacAppIconAssetPath = "avares://DotNetAppPublisher/Assets/dotnet-app-publisher.icns";
@@ -47,12 +48,23 @@ public sealed class PublisherService
         DotnetPath = ResolveExecutable("dotnet", DotnetCandidates);
 
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var androidHome = Environment.GetEnvironmentVariable("ANDROID_HOME")
+            ?? Environment.GetEnvironmentVariable("ANDROID_SDK_ROOT")
+            ?? string.Empty;
+        var androidCandidates = new List<string>();
+        if (!string.IsNullOrWhiteSpace(androidHome))
+        {
+            androidCandidates.Add(Path.Combine(androidHome, "platform-tools/adb"));
+            androidCandidates.Add(Path.Combine(androidHome, "emulator/emulator"));
+        }
+
         AdbPath = ResolveExecutable("adb",
         [
             Path.Combine(home, "Library/Android/sdk/platform-tools/adb"),
             Path.Combine(home, "Android/Sdk/platform-tools/adb"),
             "/opt/homebrew/bin/adb",
-            "/usr/local/bin/adb"
+            "/usr/local/bin/adb",
+            .. androidCandidates.Where(p => p.EndsWith("adb", StringComparison.OrdinalIgnoreCase))
         ]);
 
         EmulatorPath = ResolveExecutable("emulator",
@@ -60,7 +72,8 @@ public sealed class PublisherService
             Path.Combine(home, "Library/Android/sdk/emulator/emulator"),
             Path.Combine(home, "Android/Sdk/emulator/emulator"),
             "/opt/homebrew/bin/emulator",
-            "/usr/local/bin/emulator"
+            "/usr/local/bin/emulator",
+            .. androidCandidates.Where(p => p.EndsWith("emulator", StringComparison.OrdinalIgnoreCase))
         ]) ?? ResolveExecutable("emulator", EmulatorCandidates);
     }
 
@@ -125,6 +138,7 @@ public sealed class PublisherService
         var isMacOs = IsMacOsPlatform(configuration.PublishPlatform);
         var isWindows = IsWindowsPlatform(configuration.PublishPlatform);
         var isIos = IsIosPlatform(configuration.PublishPlatform);
+        var isLinux = IsLinuxPlatform(configuration.PublishPlatform);
         var formats = isAndroid ? GetSelectedFormats(configuration) : [];
         if (isAndroid && formats.Count == 0)
         {
@@ -151,7 +165,9 @@ public sealed class PublisherService
                     ? BuildWindowsCommand(configuration, projectFile.FullName, customTrimProperty)
                     : isIos
                         ? BuildIosCommand(configuration, projectFile.FullName, customTrimProperty)
-                        : throw new InvalidOperationException($"Unknown publish platform `{configuration.PublishPlatform}`.");
+                        : isLinux
+                            ? BuildLinuxCommand(configuration, projectFile.FullName, customTrimProperty)
+                            : throw new InvalidOperationException($"Unknown publish platform `{configuration.PublishPlatform}`.");
 
         if (isAndroid)
         {
@@ -518,6 +534,16 @@ if (exitCode == 0)
     public async Task<string> SaveWindowScreenshotToDiskAsync(Window window, string outputDirectory, CancellationToken cancellationToken)
     {
         return await _screenshotService.CaptureWindowToDiskAsync(window, outputDirectory, cancellationToken);
+    }
+
+    public async Task<string> CopyElementScreenshotToClipboardAsync(Window window, Control element, CancellationToken cancellationToken)
+    {
+        return await _screenshotService.CaptureElementToClipboardAsync(window, element, cancellationToken);
+    }
+
+    public async Task<string> SaveElementScreenshotToDiskAsync(Window window, Control element, string outputDirectory, CancellationToken cancellationToken)
+    {
+        return await _screenshotService.CaptureElementToDiskAsync(window, element, outputDirectory, cancellationToken);
     }
 
     public async Task<IReadOnlyList<string>> DiscoverEmulatorsAsync(CancellationToken cancellationToken)
@@ -955,6 +981,11 @@ if (exitCode == 0)
             return null;
         }
 
+        if (IsLinuxPlatform(publishPlatform))
+        {
+            return null;
+        }
+
         return ReadProperty(projectFile, "FileVersion", "Version");
     }
 
@@ -994,6 +1025,8 @@ if (exitCode == 0)
     private string? ResolveApkSignerPath()
     {
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var androidHome = Environment.GetEnvironmentVariable("ANDROID_HOME")
+            ?? Environment.GetEnvironmentVariable("ANDROID_SDK_ROOT");
         var candidates = new List<string>
         {
             Path.Combine(home, "Library/Android/sdk/build-tools"),
@@ -1001,6 +1034,10 @@ if (exitCode == 0)
             "/opt/homebrew/share/android-commandlinetools/build-tools",
             "/usr/local/share/android-commandlinetools/build-tools"
         };
+        if (!string.IsNullOrWhiteSpace(androidHome))
+        {
+            candidates.Insert(0, Path.Combine(androidHome, "build-tools"));
+        }
 
         foreach (var buildToolsRoot in candidates)
         {
@@ -1137,9 +1174,21 @@ if (exitCode == 0)
             if (!runtimeIdentifier.StartsWith("ios-", StringComparison.OrdinalIgnoreCase)
                 && !runtimeIdentifier.StartsWith("iossimulator-", StringComparison.OrdinalIgnoreCase))
             {
-throw new InvalidOperationException("iOS publishing requires an `ios-*` or `iossimulator-*` runtime identifier.");
+                throw new InvalidOperationException("iOS publishing requires an `ios-*` or `iossimulator-*` runtime identifier.");
+            }
+
+            return;
         }
-    }
+
+        if (IsLinuxPlatform(configuration.PublishPlatform))
+        {
+            if (!runtimeIdentifier.StartsWith("linux-", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Linux publishing requires a `linux-*` runtime identifier.");
+            }
+
+            return;
+        }
     }
 
     private static string ResolveScreenshotDirectory(string outputDirectory)
@@ -1417,6 +1466,15 @@ throw new InvalidOperationException("iOS publishing requires an `ios-*` or `ioss
             return framework.Contains("ios", StringComparison.OrdinalIgnoreCase);
         }
 
+        if (IsLinuxPlatform(publishPlatform))
+        {
+            return framework.Equals("net10.0", StringComparison.OrdinalIgnoreCase)
+                || !framework.Contains("android", StringComparison.OrdinalIgnoreCase)
+                    && !framework.Contains("ios", StringComparison.OrdinalIgnoreCase)
+                    && !framework.Contains("windows", StringComparison.OrdinalIgnoreCase)
+                    && !framework.Contains("maccatalyst", StringComparison.OrdinalIgnoreCase);
+        }
+
         return true;
     }
 
@@ -1636,6 +1694,54 @@ throw new InvalidOperationException("iOS publishing requires an `ios-*` or `ioss
         return command;
     }
 
+    private List<string> BuildLinuxCommand(PublishConfiguration configuration, string projectFilePath, string? customTrimProperty)
+    {
+        var command = new List<string>
+        {
+            DotnetPath!,
+            "publish",
+            projectFilePath,
+            "-f",
+            configuration.TargetFramework.Trim(),
+            "-c",
+            configuration.Configuration.Trim(),
+            "-r",
+            configuration.RuntimeIdentifier.Trim(),
+            $"-p:SelfContained={ToLowerInvariant(configuration.SelfContained)}",
+            $"-p:UseAppHost={ToLowerInvariant(configuration.UseAppHost)}"
+        };
+
+        if (string.IsNullOrWhiteSpace(customTrimProperty))
+        {
+            command.Add($"-p:PublishTrimmed={ToLowerInvariant(configuration.PublishTrimmed)}");
+        }
+        else
+        {
+            command.Add($"-p:{customTrimProperty}={ToLowerInvariant(configuration.PublishTrimmed)}");
+        }
+
+        if (configuration.PublishReadyToRun && !configuration.PublishAot)
+        {
+            command.Add("-p:PublishReadyToRun=true");
+        }
+
+        if (configuration.PublishSingleFile)
+        {
+            command.Add("-p:PublishSingleFile=true");
+            if (configuration.PublishAot)
+            {
+                command.Add("-p:IncludeNativeLibrariesForSelfExtract=true");
+            }
+        }
+
+        if (configuration.PublishAot)
+        {
+            command.Add("-p:PublishAot=true");
+        }
+
+        return command;
+    }
+
     private List<string> BuildIosCommand(PublishConfiguration configuration, string projectFilePath, string? customTrimProperty)
     {
         var runtimeIdentifier = configuration.RuntimeIdentifier.Trim();
@@ -1806,6 +1912,11 @@ throw new InvalidOperationException("iOS publishing requires an `ios-*` or `ioss
     private static bool IsIosPlatform(string publishPlatform)
     {
         return string.Equals(publishPlatform, IosPlatform, StringComparison.Ordinal);
+    }
+
+    private static bool IsLinuxPlatform(string publishPlatform)
+    {
+        return string.Equals(publishPlatform, LinuxPlatform, StringComparison.Ordinal);
     }
 
     private static string ExtractSimulatorId(string simulator)
@@ -2062,6 +2173,10 @@ throw new InvalidOperationException("iOS publishing requires an `ios-*` or `ioss
         {
             prefixes.Add("ios-");
             prefixes.Add("iossimulator-");
+        }
+        else if (IsLinuxPlatform(publishPlatform))
+        {
+            prefixes.Add("linux-");
         }
 
         return prefixes;
@@ -2378,7 +2493,7 @@ throw new InvalidOperationException("iOS publishing requires an `ios-*` or `ioss
             return identifier.Trim();
         }
 
-        if (IsWindowsPlatform(publishPlatform))
+        if (IsWindowsPlatform(publishPlatform) || IsLinuxPlatform(publishPlatform))
         {
             return null;
         }
