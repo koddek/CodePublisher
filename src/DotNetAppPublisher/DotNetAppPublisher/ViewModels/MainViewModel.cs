@@ -80,6 +80,7 @@ public partial class MainViewModel : ViewModelBase
         AdbStatus = publisherService.AdbStatusText;
         EmulatorStatus = publisherService.EmulatorStatusText;
         StatusMessage = "Select a .NET project folder to start building your publish command.";
+        SelectedNavItem = NavItems.FirstOrDefault();
         RefreshCommandPreview();
         _ = RefreshEmulatorsAsync();
     }
@@ -120,7 +121,8 @@ public partial class MainViewModel : ViewModelBase
         PublisherService.AndroidPlatform,
         PublisherService.MacOsPlatform,
         PublisherService.WindowsPlatform,
-        PublisherService.IosPlatform
+        PublisherService.IosPlatform,
+        PublisherService.LinuxPlatform
     ];
 
     public IReadOnlyList<string> ConfigurationOptions { get; } = ["Release", "Debug"];
@@ -145,16 +147,30 @@ public partial class MainViewModel : ViewModelBase
     [NotifyCanExecuteChangedFor(nameof(LaunchEmulatorCommand))]
     [NotifyPropertyChangedFor(nameof(IsAndroidPlatform))]
     [NotifyPropertyChangedFor(nameof(IsMacOsPlatform))]
+    [NotifyPropertyChangedFor(nameof(IsLinuxPlatform))]
     [NotifyPropertyChangedFor(nameof(IsAndroidActionsVisible))]
     [NotifyPropertyChangedFor(nameof(IsDesktopActionsVisible))]
     [NotifyPropertyChangedFor(nameof(IsAndroidPublishOptionsVisible))]
     [NotifyPropertyChangedFor(nameof(IsMacOsPublishOptionsVisible))]
     [NotifyPropertyChangedFor(nameof(IsWindowsPublishOptionsVisible))]
     [NotifyPropertyChangedFor(nameof(IsIosPublishOptionsVisible))]
+    [NotifyPropertyChangedFor(nameof(IsLinuxPublishOptionsVisible))]
     [NotifyPropertyChangedFor(nameof(IsSigningCardVisible))]
     [NotifyPropertyChangedFor(nameof(IsKnownGoodApkVisible))]
     [NotifyPropertyChangedFor(nameof(ProjectInternalVersionLabel))]
     [NotifyPropertyChangedFor(nameof(IsAppVersionVisible))]
+    [NotifyPropertyChangedFor(nameof(IsPublishAotEnabled))]
+    [NotifyPropertyChangedFor(nameof(PublishAotDisabledReason))]
+    [NotifyPropertyChangedFor(nameof(IsPublishTrimmedEnabled))]
+    [NotifyPropertyChangedFor(nameof(PublishTrimmedDisabledReason))]
+    [NotifyPropertyChangedFor(nameof(IsReadyToRunCheckBoxEnabled))]
+    [NotifyPropertyChangedFor(nameof(ReadyToRunDisabledReason))]
+    [NotifyPropertyChangedFor(nameof(IsProfiledAotEnabled))]
+    [NotifyPropertyChangedFor(nameof(ProfiledAotDisabledReason))]
+    [NotifyPropertyChangedFor(nameof(IsPublishSingleFileEnabled))]
+    [NotifyPropertyChangedFor(nameof(PublishSingleFileDisabledReason))]
+    [NotifyPropertyChangedFor(nameof(IsUseAppHostEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsIosDeviceRuntime))]
     private string _publishPlatform = PublisherService.AndroidPlatform;
 
 [ObservableProperty]
@@ -184,11 +200,21 @@ private string _projectDirectory = string.Empty;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(PublishCommand))]
+    [NotifyPropertyChangedFor(nameof(IsIosDeviceRuntime))]
+    [NotifyPropertyChangedFor(nameof(IsPublishAotEnabled))]
+    [NotifyPropertyChangedFor(nameof(PublishAotDisabledReason))]
+    [NotifyPropertyChangedFor(nameof(IsPublishTrimmedEnabled))]
+    [NotifyPropertyChangedFor(nameof(PublishTrimmedDisabledReason))]
     private string _targetFramework = "net10.0-android";
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(PublishCommand))]
     [NotifyPropertyChangedFor(nameof(IsIosDeviceRuntime))]
+    [NotifyPropertyChangedFor(nameof(IsPublishAotEnabled))]
+    [NotifyPropertyChangedFor(nameof(PublishAotDisabledReason))]
+    [NotifyPropertyChangedFor(nameof(IsPublishTrimmedEnabled))]
+    [NotifyPropertyChangedFor(nameof(PublishTrimmedDisabledReason))]
+    [NotifyPropertyChangedFor(nameof(IsUseAppHostEnabled))]
     private string _runtimeIdentifier = "android-arm64";
 
     [ObservableProperty]
@@ -219,14 +245,26 @@ private string _projectDirectory = string.Empty;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(PublishCommand))]
+    [NotifyPropertyChangedFor(nameof(IsPublishTrimmedEnabled))]
+    [NotifyPropertyChangedFor(nameof(PublishTrimmedDisabledReason))]
+    [NotifyPropertyChangedFor(nameof(IsPublishAotEnabled))]
+    [NotifyPropertyChangedFor(nameof(PublishAotDisabledReason))]
     private bool _publishTrimmed;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(PublishCommand))]
+    [NotifyPropertyChangedFor(nameof(IsPublishTrimmedEnabled))]
+    [NotifyPropertyChangedFor(nameof(PublishTrimmedDisabledReason))]
+    [NotifyPropertyChangedFor(nameof(IsReadyToRunCheckBoxEnabled))]
+    [NotifyPropertyChangedFor(nameof(ReadyToRunDisabledReason))]
+    [NotifyPropertyChangedFor(nameof(IsPublishAotEnabled))]
+    [NotifyPropertyChangedFor(nameof(PublishAotDisabledReason))]
     private bool _publishAot;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(PublishCommand))]
+    [NotifyPropertyChangedFor(nameof(IsReadyToRunCheckBoxEnabled))]
+    [NotifyPropertyChangedFor(nameof(ReadyToRunDisabledReason))]
     private bool _publishReadyToRun;
 
     [ObservableProperty]
@@ -255,6 +293,8 @@ private string _projectDirectory = string.Empty;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(PublishCommand))]
+    [NotifyPropertyChangedFor(nameof(IsProfiledAotEnabled))]
+    [NotifyPropertyChangedFor(nameof(ProfiledAotDisabledReason))]
     private bool _runAotCompilation;
 
     [ObservableProperty]
@@ -429,6 +469,8 @@ private string _projectDirectory = string.Empty;
 
     public bool IsIosPlatform => string.Equals(PublishPlatform, PublisherService.IosPlatform, StringComparison.Ordinal);
 
+    public bool IsLinuxPlatform => string.Equals(PublishPlatform, PublisherService.LinuxPlatform, StringComparison.Ordinal);
+
     public bool IsAndroidActionsVisible => IsAndroidPlatform;
 
     public bool IsDesktopActionsVisible => IsMacOsPlatform;
@@ -441,11 +483,14 @@ private string _projectDirectory = string.Empty;
 
     public bool IsIosPublishOptionsVisible => string.Equals(PublishPlatform, PublisherService.IosPlatform, StringComparison.Ordinal);
 
+    public bool IsLinuxPublishOptionsVisible => IsLinuxPlatform;
+
     public bool IsIosActionsVisible => IsIosPublishOptionsVisible;
 
-    public bool IsPackageIdVisible => !string.IsNullOrWhiteSpace(PackageId);
+    public bool IsPackageIdVisible => true;
 
-    public bool IsIosDeviceRuntime => string.Equals(PublishPlatform, PublisherService.IosPlatform, StringComparison.Ordinal);
+    public bool IsIosDeviceRuntime => string.Equals(PublishPlatform, PublisherService.IosPlatform, StringComparison.Ordinal)
+        && !RuntimeIdentifier.StartsWith("iossimulator-", StringComparison.OrdinalIgnoreCase);
 
     public bool IsSigningEnabled => string.Equals(SignMode, "Sign", StringComparison.Ordinal);
 
@@ -453,7 +498,23 @@ private string _projectDirectory = string.Empty;
 
     public bool IsKnownGoodApkVisible => IsAndroidPlatform;
 
-    public bool IsShrinkerSettingsEnabled => !string.Equals(AndroidLinkMode, "None", StringComparison.Ordinal);
+    public bool IsShrinkerSettingsEnabled => PublishOptionRules.IsShrinkerSettingsEnabled(AndroidLinkMode);
+
+    public bool IsPublishAotEnabled => PublishOptionRules.IsPublishAotEnabled(PublishPlatform, TargetFramework, RuntimeIdentifier);
+    public string PublishAotDisabledReason => PublishOptionRules.PublishAotDisabledReason(PublishPlatform, TargetFramework, RuntimeIdentifier);
+
+    public bool IsPublishTrimmedEnabled => PublishOptionRules.IsPublishTrimmedEnabled(PublishAot, PublishPlatform, TargetFramework, RuntimeIdentifier);
+    public string PublishTrimmedDisabledReason => PublishOptionRules.PublishTrimmedDisabledReason(PublishAot, PublishPlatform, TargetFramework, RuntimeIdentifier);
+
+    public bool IsProfiledAotEnabled => PublishOptionRules.IsProfiledAotEnabled(RunAotCompilation);
+    public string ProfiledAotDisabledReason => PublishOptionRules.ProfiledAotDisabledReason(RunAotCompilation);
+
+    public bool IsPublishSingleFileEnabled => PublishOptionRules.IsPublishSingleFileEnabled(PublishAot, PublishPlatform);
+    public string PublishSingleFileDisabledReason => IsPublishSingleFileEnabled ? string.Empty : "SingleFile not applicable for this platform.";
+
+    public bool IsUseAppHostEnabled => PublishOptionRules.IsUseAppHostEnabled(PublishPlatform);
+
+    public string ReadyToRunDisabledReason => PublishOptionRules.ReadyToRunDisabledReason(PublishAot);
 
     public string PackageIdLabel => "Package ID";
 
@@ -502,53 +563,39 @@ private string _projectDirectory = string.Empty;
     {
         IsProjectInternalVersionSupported = GetDefaultInternalVersionSupport(value);
 
-        if (string.Equals(value, PublisherService.AndroidPlatform, StringComparison.Ordinal))
-        {
-            if (!TargetFramework.Contains("android", StringComparison.OrdinalIgnoreCase))
-            {
-                TargetFramework = "net10.0-android";
-            }
-
-            if (!RuntimeIdentifier.Contains("android", StringComparison.OrdinalIgnoreCase))
-            {
-                RuntimeIdentifier = "android-arm64";
-            }
-        }
-        else
-        {
-        if (string.Equals(value, PublisherService.MacOsPlatform, StringComparison.Ordinal))
-        {
-            if (TargetFramework.Contains("android", StringComparison.OrdinalIgnoreCase))
-            {
-                TargetFramework = "net10.0";
-            }
-
-            if (RuntimeIdentifier.Contains("android", StringComparison.OrdinalIgnoreCase))
-            {
-                RuntimeIdentifier = "osx-arm64";
-            }
-
-            PublishReadyToRun = false;
-
-            OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsReadyToRunEnabled)));
-            OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsReadyToRunCheckBoxEnabled)));
-        }
-            else if (string.Equals(value, PublisherService.WindowsPlatform, StringComparison.Ordinal))
-            {
-                TargetFramework = "net10.0-windows";
-                RuntimeIdentifier = "win-x64";
-            }
-            else if (string.Equals(value, PublisherService.IosPlatform, StringComparison.Ordinal))
-            {
-                TargetFramework = "net10.0-ios";
-                RuntimeIdentifier = "ios-arm64";
-            }
-        }
+        var defaults = PlatformDefaults.GetDefaults(value);
+        TargetFramework = defaults.TargetFramework;
+        RuntimeIdentifier = defaults.RuntimeIdentifier;
+        SelfContained = defaults.SelfContained;
+        PublishTrimmed = defaults.PublishTrimmed;
+        PublishAot = defaults.PublishAot;
+        PublishReadyToRun = defaults.PublishReadyToRun;
+        PublishSingleFile = defaults.PublishSingleFile;
+        UseAppHost = defaults.UseAppHost;
+        CreateMacAppBundle = defaults.CreateMacAppBundle;
+        CreateWindowsExecutable = defaults.CreateWindowsExecutable;
+        BuildIpa = defaults.BuildIpa;
+        ArchiveOnBuild = defaults.ArchiveOnBuild;
+        RunAotCompilation = defaults.RunAotCompilation;
+        EnableProfiledAot = defaults.EnableProfiledAot;
+        AndroidLinkMode = defaults.AndroidLinkMode;
+        AndroidLinkTool = defaults.AndroidLinkTool;
+        AndroidDexTool = defaults.AndroidDexTool;
+        CreateMappingFile = defaults.CreateMappingFile;
+        EnableMultiDex = defaults.EnableMultiDex;
+        UseAapt2 = defaults.UseAapt2;
+        EnableDesugar = defaults.EnableDesugar;
+        IncludeApk = defaults.IncludeApk;
+        IncludeAab = defaults.IncludeAab;
+        SignMode = defaults.SignMode;
 
         if (!_isOutputDirectoryManualOverride)
         {
             SetAutomaticOutputDirectory(string.Empty);
         }
+
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsReadyToRunEnabled)));
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsReadyToRunCheckBoxEnabled)));
 
         if (!string.IsNullOrWhiteSpace(ProjectDirectory))
         {
@@ -930,6 +977,13 @@ private string _projectDirectory = string.Empty;
                 if (!RuntimeIdentifier.StartsWith("ios-", StringComparison.OrdinalIgnoreCase))
                 {
                     RuntimeIdentifier = "ios-arm64";
+                }
+            }
+            else if (string.Equals(PublishPlatform, PublisherService.LinuxPlatform, StringComparison.Ordinal))
+            {
+                if (!RuntimeIdentifier.StartsWith("linux-", StringComparison.OrdinalIgnoreCase))
+                {
+                    RuntimeIdentifier = "linux-x64";
                 }
             }
 
@@ -1534,17 +1588,63 @@ private string _projectDirectory = string.Empty;
 
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsReadyToRunEnabled)));
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsReadyToRunCheckBoxEnabled)));
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsPublishAotEnabled)));
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(PublishAotDisabledReason)));
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsPublishTrimmedEnabled)));
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(PublishTrimmedDisabledReason)));
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(ReadyToRunDisabledReason)));
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsPublishSingleFileEnabled)));
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(PublishSingleFileDisabledReason)));
     }
 
     partial void OnPublishReadyToRunChanged(bool value)
     {
-        // Prevent enabling R2R when AOT is enabled
         if (value && PublishAot)
         {
             PublishReadyToRun = false;
         }
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(ReadyToRunDisabledReason)));
     }
 
-    public bool IsReadyToRunEnabled => !PublishAot;
+    partial void OnRunAotCompilationChanged(bool value)
+    {
+        if (!value && EnableProfiledAot)
+        {
+            EnableProfiledAot = false;
+        }
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsProfiledAotEnabled)));
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(ProfiledAotDisabledReason)));
+    }
+
+    partial void OnAndroidLinkModeChanged(string value)
+    {
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsShrinkerSettingsEnabled)));
+    }
+
+    partial void OnIncludeApkChanged(bool value)
+    {
+        if (!value && !IncludeAab)
+        {
+            IncludeAab = true;
+        }
+    }
+
+    partial void OnIncludeAabChanged(bool value)
+    {
+        if (!value && !IncludeApk)
+        {
+            IncludeApk = true;
+        }
+    }
+
+    partial void OnEnableProfiledAotChanged(bool value)
+    {
+        if (value && !RunAotCompilation)
+        {
+            EnableProfiledAot = false;
+        }
+    }
+
+    public bool IsReadyToRunEnabled => PublishOptionRules.IsReadyToRunEnabled(PublishAot);
     public bool IsReadyToRunCheckBoxEnabled => IsEditorEnabled && IsReadyToRunEnabled;
 }
