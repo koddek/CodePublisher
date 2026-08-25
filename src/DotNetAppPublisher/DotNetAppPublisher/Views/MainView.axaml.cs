@@ -78,26 +78,9 @@ public partial class MainView : UserControl
 
     private async void OnCaptureDetailClick(object? sender, RoutedEventArgs e)
     {
-        if (sender is not Button btn)
-            return;
-
         var detailHost = this.FindControl<ScrollViewer>("DetailScrollViewer");
         if (detailHost is null)
             return;
-
-        Control target = detailHost;
-        // Try to find the visible section's top-level StackPanel
-        if (detailHost.Content is StackPanel root)
-        {
-            foreach (var child in root.Children)
-            {
-                if (child is Control c && c.IsVisible)
-                {
-                    target = c;
-                    break;
-                }
-            }
-        }
 
         var window = TopLevel.GetTopLevel(this) as Window;
         if (window is null || _viewModel is null)
@@ -107,12 +90,7 @@ public partial class MainView : UserControl
         await dialog.ShowCountdownAndCaptureAsync(5, async () =>
         {
             var svc = new AvaloniaScreenshotService();
-            // capture the specific detail element, fallback to window
-            if (target != detailHost)
-            {
-                return await svc.CaptureElementToDiskAsync(window, target, _viewModel.OutputDirectory, CancellationToken.None);
-            }
-            return await svc.CaptureWindowToDiskAsync(window, _viewModel.OutputDirectory, CancellationToken.None);
+            return await svc.CaptureDetailToDiskAsync(window, detailHost, _viewModel.OutputDirectory, CancellationToken.None);
         });
     }
 }

@@ -60,6 +60,32 @@ public class AvaloniaScreenshotService : IScreenshotService
         }
     }
 
+    public async Task<string> CaptureDetailToClipboardAsync(Window window, ScrollViewer detailScrollViewer, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var bitmap = await CaptureDetailAsync(window, detailScrollViewer);
+            return await CopyBitmapToClipboardAsync(window, bitmap);
+        }
+        catch (Exception ex)
+        {
+            return $"Screenshot capture failed: {ex.Message}";
+        }
+    }
+
+    public async Task<string> CaptureDetailToDiskAsync(Window window, ScrollViewer detailScrollViewer, string outputDirectory, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var bitmap = await CaptureDetailAsync(window, detailScrollViewer);
+            return await SaveBitmapToDiskAsync(bitmap, outputDirectory, "detail");
+        }
+        catch (Exception ex)
+        {
+            return $"Screenshot capture failed: {ex.Message}";
+        }
+    }
+
     private static async Task<string> CopyBitmapToClipboardAsync(Window window, Bitmap bitmap)
     {
         var clipboard = window.Clipboard;
@@ -103,93 +129,116 @@ public class AvaloniaScreenshotService : IScreenshotService
         return $"Screenshot saved to {filePath}.";
     }
 
-    private async Task<RenderTargetBitmap> CaptureFullPageAsync(Window window)
+    private Task<RenderTargetBitmap> CaptureFullPageAsync(Window window)
     {
+        // Complete app window — render the Window's client area as it appears on screen
+        // (header + nav + detail viewport + footer). No scroll expansion; that is for detail capture.
         var content = window.Content as Control
             ?? throw new InvalidOperationException("Window content is not a Control.");
 
-        var scrollViewer = FindScrollViewer(content);
-        if (scrollViewer is null)
+        // Render the window itself at its current size to include all chrome (header/nav/footer + visible detail)
+        // Fall back to content bounds if window bounds are not yet measured.
+        var dpi = window.DesktopScaling;
+        var bounds = window.Bounds;
+        if (bounds.Width <= 1 || bounds.Height <= 1)
         {
-            return CaptureControl(window, content);
+            bounds = content.Bounds;
         }
 
-        var contentControl = scrollViewer.Content as Control;
-        if (contentControl is null)
+        var width = (int)(Math.Max(1, bounds.Width) * dpi);
+        var height = (int)(Math.Max(1, bounds.Height) * dpi);
+
+        var bitmap = new RenderTargetBitmap(
+            new PixelSize(width, height),
+            new Vector(96 * dpi, 96 * dpi));
+
+        // Render the content (MainView) which fills the window — ensures header/nav/footer are included
+        content.Measure(bounds.Size);
+        content.Arrange(bounds);
+        bitmap.Render(content);
+
+        return Task.FromResult(bitmap);
+    }
+
+    private async Task<RenderTargetBitmap> CaptureDetailAsync(Window window, ScrollViewer detailScrollViewer)
+    {
+        var content = detailScrollViewer.Content as Control;
+        if (content is null)
         {
-            return CaptureControl(window, scrollViewer);
+            return CaptureControl(window, detailScrollViewer);
         }
 
-        var extentHeight = scrollViewer.Extent.Height;
-        var extentWidth = scrollViewer.Extent.Width;
-
-        if (extentHeight <= 0 || extentWidth <= 0)
+        // If detail content is a root StackPanel with multiple section children, find the visible section
+        // and capture that instead of the whole root (avoids capturing collapsed sections).
+        Control target = content;
+        if (content is StackPanel root)
         {
-            return CaptureControl(window, content);
+            foreach (var child in root.Children)
+            {
+                if (child is Control c && c.IsVisible)
+                {
+                    target = c;
+                    break;
+                }
+            }
+
+            // If target is a section StackPanel, capture it directly with its full desired size.
+            if (target != content)
+            {
+                return await CaptureElementAsync(window, target);
+            }
         }
 
-        var originalMaxHeight = contentControl.MaxHeight;
-        var originalMaxWidth = contentControl.MaxWidth;
-        var originalHeight = contentControl.Height;
-        var originalWidth = contentControl.Width;
-        var originalMinHeight = contentControl.MinHeight;
-        var originalMinWidth = contentControl.MinWidth;
+        // Fallback: capture the entire detail content expanded to full height
+        var originalMaxHeight = content.MaxHeight;
+        var originalHeight = content.Height;
+        var originalMinHeight = content.MinHeight;
 
         try
         {
-            contentControl.MaxHeight = double.PositiveInfinity;
-            contentControl.MaxWidth = double.PositiveInfinity;
-            contentControl.MinHeight = 0;
-            contentControl.MinWidth = 0;
-            contentControl.Height = double.NaN;
-            contentControl.Width = double.NaN;
+            content.MaxHeight = double.PositiveInfinity;
+            content.MinHeight = 0;
+            content.Height = double.NaN;
 
-            scrollViewer.MaxHeight = double.PositiveInfinity;
-            scrollViewer.MaxWidth = double.PositiveInfinity;
-            scrollViewer.MinHeight = 0;
-            scrollViewer.MinWidth = 0;
-            scrollViewer.Height = double.NaN;
-            scrollViewer.Width = double.NaN;
+            detailScrollViewer.MaxHeight = double.PositiveInfinity;
+            detailScrollViewer.MinHeight = 0;
+            detailScrollViewer.Height = double.NaN;
 
-            contentControl.InvalidateMeasure();
-            contentControl.InvalidateArrange();
-            contentControl.InvalidateVisual();
-
-            await Task.Delay(300);
+            content.InvalidateMeasure();
+            content.InvalidateArrange();
+            detailScrollViewer.InvalidateMeasure();
+            await Task.Delay(250);
 
             var dpi = window.DesktopScaling;
-            var bounds = contentControl.Bounds;
-            var width = (int)(bounds.Width * dpi);
-            var height = (int)(bounds.Height * dpi);
+            var bounds = content.Bounds;
+            if (bounds.Width <= 1 || bounds.Height <= 1)
+            {
+                content.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                bounds = new Rect(0, 0, content.DesiredSize.Width, content.DesiredSize.Height);
+            }
+
+            var width = (int)(Math.Max(1, bounds.Width) * dpi);
+            var height = (int)(Math.Max(1, bounds.Height) * dpi);
 
             var bitmap = new RenderTargetBitmap(
                 new PixelSize(Math.Max(1, width), Math.Max(1, height)),
                 new Vector(96 * dpi, 96 * dpi));
 
-            bitmap.Render(contentControl);
-
+            bitmap.Render(content);
             return bitmap;
         }
         finally
         {
-            contentControl.MaxHeight = originalMaxHeight;
-            contentControl.MaxWidth = originalMaxWidth;
-            contentControl.MinHeight = originalMinHeight;
-            contentControl.MinWidth = originalMinWidth;
-            contentControl.Height = originalHeight;
-            contentControl.Width = originalWidth;
+            content.MaxHeight = originalMaxHeight;
+            content.Height = originalHeight;
+            content.MinHeight = originalMinHeight;
 
-            // Restore scroll viewer to natural constraints so scroll works after capture
-            scrollViewer.ClearValue(ScrollViewer.MaxHeightProperty);
-            scrollViewer.ClearValue(ScrollViewer.MaxWidthProperty);
-            scrollViewer.ClearValue(ScrollViewer.MinHeightProperty);
-            scrollViewer.ClearValue(ScrollViewer.MinWidthProperty);
-            scrollViewer.ClearValue(ScrollViewer.HeightProperty);
-            scrollViewer.ClearValue(ScrollViewer.WidthProperty);
+            detailScrollViewer.ClearValue(ScrollViewer.MaxHeightProperty);
+            detailScrollViewer.ClearValue(ScrollViewer.MinHeightProperty);
+            detailScrollViewer.ClearValue(ScrollViewer.HeightProperty);
 
-            contentControl.InvalidateMeasure();
-            contentControl.InvalidateArrange();
-            contentControl.InvalidateVisual();
+            content.InvalidateMeasure();
+            content.InvalidateArrange();
         }
     }
 
