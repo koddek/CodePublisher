@@ -187,6 +187,15 @@ public sealed class PublisherService
 
     public async Task<bool> PublishAsync(PublishConfiguration configuration, Action<string> writeOutput, CancellationToken cancellationToken)
     {
+        return await PublishAsync(configuration, writeOutput, cancellationToken, confirmAsync: null);
+    }
+
+    public async Task<bool> PublishAsync(
+        PublishConfiguration configuration,
+        Action<string> writeOutput,
+        CancellationToken cancellationToken,
+        Func<string, Task<bool>>? confirmAsync)
+    {
         var bundle = BuildPublishCommandBundle(configuration);
         var projectDirectory = CreateProjectDirectory(configuration.ProjectDirectory);
         var outputDirectory = new DirectoryInfo(bundle.OutputDirectory);
@@ -199,71 +208,57 @@ public sealed class PublisherService
             writeOutput(bundle.BaselinePreviewText + Environment.NewLine + Environment.NewLine);
         }
 
-        if (RequiresMobileWorkload(configuration.TargetFramework))
+        await PrepareOutputFoldersAsync(configuration, projectDirectory, outputDirectory, writeOutput);
+
+        var (exitCode, publishOutput) = await RunPublishAsync(bundle, writeOutput, cancellationToken);
+
+        // Credentials only when absolutely needed: a missing mobile workload fails with
+        // NETSDK1147 / "workloads must be installed". Ask, elevate once, retry once.
+        if (exitCode != 0
+            && RequiresMobileWorkload(configuration.TargetFramework)
+            && IsMissingWorkloadError(publishOutput.ToString()))
         {
-            var dotnetRoot = Path.GetDirectoryName(DotnetPath!) ?? string.Empty;
-            var canWrite = ElevatedProcessRunner.CanWriteToWorkloadLocation(DotnetPath!);
-            var workloadOutput = new StringBuilder();
-            void WriteWorkloadOutput(string text)
+            var restored = await TryRestoreWorkloadsAfterFailureAsync(bundle, writeOutput, confirmAsync, cancellationToken);
+            if (restored)
             {
-                workloadOutput.Append(text);
-                writeOutput(text);
-            }
-
-            int workloadExitCode;
-            if (!canWrite)
-            {
-                writeOutput($"--- Restoring workloads (administrator approval required) ---{Environment.NewLine}");
-                writeOutput($"Workload changes require administrator permission to write to {dotnetRoot}.{Environment.NewLine}");
-                var env = new Dictionary<string, string>
-                {
-                    ["DOTNET_ROOT"] = dotnetRoot,
-                    ["DOTNET_MULTILEVEL_LOOKUP"] = "0"
-                };
-                workloadExitCode = await ElevatedProcessRunner.RunElevatedAsync(
-                    DotnetPath!,
-                    ["workload", "restore", bundle.ProjectFilePath],
-                    Path.GetDirectoryName(bundle.ProjectFilePath),
-                    env,
-                    WriteWorkloadOutput,
-                    cancellationToken);
-            }
-            else
-            {
-                writeOutput($"--- Restoring workloads (dotnet workload restore) ---{Environment.NewLine}");
-                workloadExitCode = await RunProcessAsync(
-                    [DotnetPath!, "workload", "restore", bundle.ProjectFilePath],
-                    WriteWorkloadOutput,
-                    cancellationToken,
-                    Path.GetDirectoryName(bundle.ProjectFilePath));
-            }
-
-            if (workloadExitCode == -128)
-            {
-                writeOutput($"Workload restore cancelled by user. Publish will likely fail with NETSDK1147 unless you use the Known-Good Baseline (no AOT).{Environment.NewLine}");
-            }
-            else if (workloadExitCode != 0)
-            {
-                var combined = workloadOutput.ToString();
-                if (combined.Contains("Inadequate permissions", StringComparison.OrdinalIgnoreCase)
-                    || combined.Contains("elevated privileges", StringComparison.OrdinalIgnoreCase))
-                {
-                    writeOutput(
-                        $"Workload restore needs admin rights (dotnet is in {dotnetRoot}).{Environment.NewLine}" +
-                        $"Run in Terminal: sudo dotnet workload restore \"{bundle.ProjectFilePath}\"{Environment.NewLine}" +
-                        $"Then publish again, or use the Known-Good Baseline command shown above (no AOT — no workload needed).{Environment.NewLine}");
-                }
-                else
-                {
-                    writeOutput($"Workload restore failed (exit code {workloadExitCode}); continuing with publish. If the build fails with NETSDK1147, fix the workload error above first.{Environment.NewLine}");
-                }
-            }
-            else
-            {
-                writeOutput($"Workloads ready.{Environment.NewLine}");
+                writeOutput(Environment.NewLine + "--- Retrying publish after workload restore ---" + Environment.NewLine);
+                (exitCode, publishOutput) = await RunPublishAsync(bundle, writeOutput, cancellationToken);
             }
         }
 
+        if (exitCode == 0)
+        {
+            if (IsMacOsPlatform(configuration.PublishPlatform) && configuration.CreateMacAppBundle)
+            {
+                var createdBundlePath = await EnsureMacAppBundleAsync(
+                    bundle.OutputDirectory,
+                    bundle.ProjectFilePath,
+                    configuration.PackageId,
+                    writeOutput,
+                    cancellationToken);
+
+                if (!string.IsNullOrWhiteSpace(createdBundlePath))
+                {
+                    writeOutput($"macOS app bundle ready: {createdBundlePath}{Environment.NewLine}");
+                }
+            }
+
+            writeOutput(Environment.NewLine + "=== Publish completed successfully ===" + Environment.NewLine);
+            PlayCompletionSound(success: true);
+            return true;
+        }
+
+        writeOutput(Environment.NewLine + $"=== Publish failed (exit code {exitCode}) ===" + Environment.NewLine);
+        PlayCompletionSound(success: false);
+        return false;
+    }
+
+    private async Task PrepareOutputFoldersAsync(
+        PublishConfiguration configuration,
+        DirectoryInfo projectDirectory,
+        DirectoryInfo outputDirectory,
+        Action<string> writeOutput)
+    {
         if (outputDirectory.Exists)
         {
             writeOutput($"Clearing output folder {outputDirectory.FullName}{Environment.NewLine}");
@@ -301,39 +296,109 @@ public sealed class PublisherService
                 await DeleteDirectoryIfPresentSafelyAsync(intermediateOutputDirectory, writeOutput);
             }
         }
+    }
 
+    private async Task<(int ExitCode, StringBuilder Output)> RunPublishAsync(
+        PublishCommandBundle bundle,
+        Action<string> writeOutput,
+        CancellationToken cancellationToken)
+    {
         writeOutput($"--- Running: {bundle.PreviewText} ---{Environment.NewLine}");
+        var output = new StringBuilder();
         var exitCode = await RunProcessAsync(
             bundle.CommandArguments,
-            writeOutput,
+            text =>
+            {
+                output.Append(text);
+                writeOutput(text);
+            },
             cancellationToken,
             Path.GetDirectoryName(bundle.ProjectFilePath));
+        return (exitCode, output);
+    }
 
-if (exitCode == 0)
+    private static bool IsMissingWorkloadError(string publishOutput)
+    {
+        return publishOutput.Contains("NETSDK1147", StringComparison.OrdinalIgnoreCase)
+            || publishOutput.Contains("workloads must be installed", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task<bool> TryRestoreWorkloadsAfterFailureAsync(
+        PublishCommandBundle bundle,
+        Action<string> writeOutput,
+        Func<string, Task<bool>>? confirmAsync,
+        CancellationToken cancellationToken)
+    {
+        var dotnetRoot = Path.GetDirectoryName(DotnetPath!) ?? string.Empty;
+
+        var canWrite = ElevatedProcessRunner.CanWriteToWorkloadLocation(DotnetPath!);
+        var requiresAdmin = !canWrite;
+        var question = requiresAdmin
+            ? "This project needs mobile .NET workloads that are not installed yet." + Environment.NewLine +
+              $"Installing them requires administrator permission to write to {dotnetRoot}.{Environment.NewLine}{Environment.NewLine}" +
+              "Continue and enter your admin credentials now?"
+            : "This project needs mobile .NET workloads that are not installed yet." + Environment.NewLine +
+              "Install them now?";
+
+        if (confirmAsync is not null)
         {
-            if (IsMacOsPlatform(configuration.PublishPlatform) && configuration.CreateMacAppBundle)
+            var confirmed = await confirmAsync(question);
+            if (!confirmed)
             {
-                var createdBundlePath = await EnsureMacAppBundleAsync(
-                    bundle.OutputDirectory,
-                    bundle.ProjectFilePath,
-                    configuration.PackageId,
-                    writeOutput,
-                    cancellationToken);
-
-                if (!string.IsNullOrWhiteSpace(createdBundlePath))
-                {
-                    writeOutput($"macOS app bundle ready: {createdBundlePath}{Environment.NewLine}");
-                }
+                writeOutput(
+                    $"Workload restore declined by user.{Environment.NewLine}" +
+                    $"Run in Terminal: sudo dotnet workload restore \"{bundle.ProjectFilePath}\"{Environment.NewLine}" +
+                    $"Then publish again, or use the Known-Good Baseline command shown above (no AOT — no workload needed).{Environment.NewLine}");
+                return false;
             }
-
-            writeOutput(Environment.NewLine + "=== Publish completed successfully ===" + Environment.NewLine);
-            PlayCompletionSound(success: true);
-            return true;
         }
 
-        writeOutput(Environment.NewLine + $"=== Publish failed (exit code {exitCode}) ===" + Environment.NewLine);
-        PlayCompletionSound(success: false);
-        return false;
+        void WriteWorkloadOutput(string text) => writeOutput(text);
+
+        int workloadExitCode;
+        if (requiresAdmin)
+        {
+            writeOutput($"--- Restoring workloads (administrator approval required) ---{Environment.NewLine}");
+            var env = new Dictionary<string, string>
+            {
+                ["DOTNET_ROOT"] = dotnetRoot,
+                ["DOTNET_MULTILEVEL_LOOKUP"] = "0"
+            };
+            workloadExitCode = await ElevatedProcessRunner.RunElevatedAsync(
+                DotnetPath!,
+                ["workload", "restore", bundle.ProjectFilePath],
+                Path.GetDirectoryName(bundle.ProjectFilePath),
+                env,
+                WriteWorkloadOutput,
+                cancellationToken);
+        }
+        else
+        {
+            writeOutput($"--- Restoring workloads (dotnet workload restore) ---{Environment.NewLine}");
+            workloadExitCode = await RunProcessAsync(
+                [DotnetPath!, "workload", "restore", bundle.ProjectFilePath],
+                WriteWorkloadOutput,
+                cancellationToken,
+                Path.GetDirectoryName(bundle.ProjectFilePath));
+        }
+
+        if (workloadExitCode == -128)
+        {
+            writeOutput($"Workload restore cancelled by user.{Environment.NewLine}");
+            return false;
+        }
+
+        if (workloadExitCode != 0)
+        {
+            writeOutput(
+                $"Workload restore failed (exit code {workloadExitCode}).{Environment.NewLine}" +
+                $"Run in Terminal: sudo dotnet workload restore \"{bundle.ProjectFilePath}\"{Environment.NewLine}" +
+                $"Then publish again, or use the Known-Good Baseline command shown above (no AOT — no workload needed).{Environment.NewLine}");
+            return false;
+        }
+
+        writeOutput($"Workloads ready.{Environment.NewLine}");
+        return true;
     }
 
     public void OpenPublishFolder(string outputDirectory)
@@ -380,21 +445,29 @@ if (exitCode == 0)
             throw new InvalidOperationException("Install APK is only available for Android projects.");
         }
 
-        var projectDirectory = CreateProjectDirectory(configuration.ProjectDirectory);
-        var projectFile = FindProjectFile(projectDirectory)
-            ?? throw new InvalidOperationException($"No .csproj found in {projectDirectory}.");
-
         var adbPath = AdbPath ?? throw new InvalidOperationException("`adb` was not found. Install Android platform-tools or add adb to PATH.");
 
         var targetDevice = !string.IsNullOrWhiteSpace(deviceSerial)
             ? deviceSerial!.Trim()
             : throw new InvalidOperationException("No device selected. Select a device first.");
 
+        // Project is optional: publish folder + package id are enough to locate the APK.
+        string? projectNameHint = null;
+        if (!string.IsNullOrWhiteSpace(configuration.ProjectDirectory))
+        {
+            var projectDirectory = CreateProjectDirectory(configuration.ProjectDirectory);
+            projectNameHint = FindProjectFile(projectDirectory)?.Name is { } fileName
+                ? Path.GetFileNameWithoutExtension(fileName)
+                : null;
+        }
+
         var outputDirectory = string.IsNullOrWhiteSpace(configuration.OutputDirectory)
-            ? GetDefaultOutputDirectory(projectDirectory, configuration.Configuration, configuration.TargetFramework, configuration.RuntimeIdentifier)
+            ? string.IsNullOrWhiteSpace(configuration.ProjectDirectory)
+                ? throw new InvalidOperationException("No publish folder set. Set the Output Directory first, or select a project.")
+                : GetDefaultOutputDirectory(CreateProjectDirectory(configuration.ProjectDirectory), configuration.Configuration, configuration.TargetFramework, configuration.RuntimeIdentifier)
             : configuration.OutputDirectory.Trim();
 
-        var apk = FindBestApk(outputDirectory, Path.GetFileNameWithoutExtension(projectFile.Name), configuration.PackageId)
+        var apk = FindBestApk(outputDirectory, projectNameHint, configuration.PackageId)
             ?? throw new InvalidOperationException($"No APK found in {outputDirectory}.");
 
         await EnsureApkHasValidSignatureAsync(apk.FullName, cancellationToken);

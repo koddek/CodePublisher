@@ -57,6 +57,71 @@ public sealed class DesktopInteractionService
         return ShowDialogAsync(title, message);
     }
 
+    public async Task<bool> ConfirmAsync(string title, string message)
+    {
+        var confirmButton = new Button
+        {
+            Content = "Continue",
+            MinWidth = 96,
+            HorizontalAlignment = HorizontalAlignment.Right
+        };
+        var cancelButton = new Button
+        {
+            Content = "Cancel",
+            MinWidth = 96,
+            HorizontalAlignment = HorizontalAlignment.Right
+        };
+
+        var dialog = new Window
+        {
+            Title = title,
+            Width = 520,
+            MinWidth = 420,
+            SizeToContent = SizeToContent.Height,
+            CanResize = false,
+            ShowInTaskbar = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Content = new Border
+            {
+                Padding = new Thickness(20),
+                Child = new StackPanel
+                {
+                    Spacing = 16,
+                    Children =
+                    {
+                        new SelectableTextBlock
+                        {
+                            Text = message,
+                            TextWrapping = TextWrapping.Wrap
+                        },
+                        new StackPanel
+                        {
+                            Orientation = Avalonia.Layout.Orientation.Horizontal,
+                            Spacing = 8,
+                            HorizontalAlignment = HorizontalAlignment.Right,
+                            Children =
+                            {
+                                cancelButton,
+                                confirmButton
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        var confirmed = false;
+        confirmButton.Click += (_, _) =>
+        {
+            confirmed = true;
+            dialog.Close();
+        };
+        cancelButton.Click += (_, _) => dialog.Close();
+
+        await dialog.ShowDialog(Window);
+        return confirmed;
+    }
+
     public async Task CopyTextToClipboardAsync(string text)
     {
         await ClipboardExtensions.SetTextAsync(Window.Clipboard!, text);

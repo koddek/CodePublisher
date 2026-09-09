@@ -27,7 +27,7 @@
                             ToolTip.Tip="{Binding Theme, StringFormat='Switch from {0} theme'}">
                         <PathIcon x:Name="ThemeIcon" Width="18" Height="18"/>
                     </Button>
-                    <Button Classes="primary" Content="Publish" Command="{Binding PublishCommand}" IsEnabled="{Binding IsEditorEnabled}" MinWidth="110"/>
+                    <Button Classes="primary" Content="Publish" Command="{Binding PublishCommand}" MinWidth="110"/>
                     <Button Content="Cancel" Command="{Binding CancelPublishCommand}" IsVisible="{Binding IsPublishing}" Padding="12,8"/>
                 </StackPanel>
             </Grid>
@@ -205,6 +205,10 @@
                                             <TextBlock Text="Signing Mode" FontWeight="SemiBold" FontSize="13"/>
                                             <ComboBox ItemsSource="{Binding SignModeOptions}" SelectedItem="{Binding SignMode}" IsEnabled="{Binding IsEditorEnabled}"/>
                                         </StackPanel>
+                                        <StackPanel MinWidth="180" Spacing="8" IsVisible="{Binding IsAndroidPlatform}">
+                                            <TextBlock Text="Link Mode" FontWeight="SemiBold" FontSize="13"/>
+                                            <ComboBox ItemsSource="{Binding LinkModeOptions}" SelectedItem="{Binding AndroidLinkMode}" IsEnabled="{Binding IsEditorEnabled}"/>
+                                        </StackPanel>
                                     </WrapPanel>
 
                                     <TextBlock Text="Optimization" FontWeight="SemiBold" FontSize="13" Margin="0,8,0,0"/>
@@ -232,11 +236,11 @@
                                         <CheckBox Content="Delete bin" IsChecked="{Binding DeleteBin}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
                                         <CheckBox Content="Delete obj" IsChecked="{Binding DeleteObj}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
                                     </WrapPanel>
-                                    <Border Background="#FFE8E4" BorderBrush="#FF9966" BorderThickness="1" CornerRadius="6" Padding="10" IsVisible="{Binding PublishAot}">
-                                        <TextBlock Text="⚠ AOT may cause issues with Avalonia's reflection features" FontSize="12" Foreground="#CC6600" TextWrapping="Wrap"/>
+                                    <Border Background="{DynamicResource WarningBannerBackgroundColor}" BorderBrush="{DynamicResource WarningBannerBorderColor}" BorderThickness="1" CornerRadius="6" Padding="10" IsVisible="{Binding PublishAot}">
+                                        <TextBlock Text="⚠ AOT may cause issues with Avalonia's reflection features" FontSize="12" Foreground="{DynamicResource WarningBannerTextColor}" TextWrapping="Wrap"/>
                                     </Border>
-                                    <Border Background="#E8F0FE" BorderBrush="#8AB4F8" BorderThickness="1" CornerRadius="6" Padding="10" IsVisible="{Binding !IsPublishTrimmedEnabled}">
-                                        <TextBlock Text="{Binding PublishTrimmedDisabledReason}" FontSize="12" Foreground="#1967D2" TextWrapping="Wrap"/>
+                                    <Border Background="{DynamicResource InfoBannerBackgroundColor}" BorderBrush="{DynamicResource InfoBannerBorderColor}" BorderThickness="1" CornerRadius="6" Padding="10" IsVisible="{Binding !IsPublishTrimmedEnabled}">
+                                        <TextBlock Text="{Binding PublishTrimmedDisabledReason}" FontSize="12" Foreground="{DynamicResource InfoBannerTextColor}" TextWrapping="Wrap"/>
                                     </Border>
                                 </StackPanel>
                             </Border>
@@ -263,10 +267,6 @@
                                         <CheckBox Content="Create mapping" IsChecked="{Binding CreateMappingFile}" IsEnabled="{Binding IsShrinkerSettingsEnabled}" Margin="0,4"/>
                                     </WrapPanel>
                                     <WrapPanel ItemSpacing="16" LineSpacing="16">
-                                        <StackPanel MinWidth="180" Spacing="8">
-                                            <TextBlock Text="Link Mode" FontWeight="SemiBold" FontSize="13"/>
-                                            <ComboBox ItemsSource="{Binding LinkModeOptions}" SelectedItem="{Binding AndroidLinkMode}" IsEnabled="{Binding IsEditorEnabled}"/>
-                                        </StackPanel>
                                         <StackPanel MinWidth="180" Spacing="8">
                                             <TextBlock Text="Code Shrinker" FontWeight="SemiBold" FontSize="13"/>
                                             <ComboBox ItemsSource="{Binding LinkToolOptions}" SelectedItem="{Binding AndroidLinkTool}" IsEnabled="{Binding IsShrinkerSettingsEnabled}"/>
@@ -428,24 +428,34 @@
                             <Border Classes="card" IsVisible="{Binding IsAndroidActionsVisible}">
                                 <StackPanel Spacing="12">
                                     <TextBlock Text="Android Deploy" Classes="section-title"/>
+                                    <StackPanel Spacing="8" MaxWidth="420" HorizontalAlignment="Left">
+                                        <TextBlock Text="Package ID" FontWeight="SemiBold" FontSize="13" ToolTip.Tip="Loaded from the project; edit here to deploy without a project"/>
+                                        <TextBox Text="{Binding PackageId}" IsEnabled="{Binding IsEditorEnabled}" PlaceholderText="com.example.app"/>
+                                    </StackPanel>
                                     <WrapPanel ItemSpacing="8" LineSpacing="8">
                                         <Button Content="Install APK" Command="{Binding InstallLatestApkCommand}" MinWidth="120"/>
                                         <Button Content="Uninstall" Command="{Binding UninstallAppCommand}" MinWidth="100"/>
                                         <Button Content="Launch" Command="{Binding LaunchAppCommand}" MinWidth="100"/>
                                         <Button Content="Push File..." Command="{Binding CopyFileToAndroidDeviceCommand}" MinWidth="110"/>
                                     </WrapPanel>
+                                    <TextBlock Text="Install uses the publish folder; Uninstall and Launch only need the Package ID above." Classes="section-copy"/>
                                 </StackPanel>
                             </Border>
 
                             <Border Classes="card" IsVisible="{Binding IsIosActionsVisible}">
                                 <StackPanel Spacing="12">
                                     <TextBlock Text="iOS Deploy" Classes="section-title"/>
+                                    <StackPanel Spacing="8" MaxWidth="420" HorizontalAlignment="Left">
+                                        <TextBlock Text="Bundle ID" FontWeight="SemiBold" FontSize="13" ToolTip.Tip="Loaded from the project; edit here to deploy without a project"/>
+                                        <TextBox Text="{Binding PackageId}" IsEnabled="{Binding IsEditorEnabled}" PlaceholderText="com.example.app"/>
+                                    </StackPanel>
                                     <WrapPanel ItemSpacing="8" LineSpacing="8">
                                         <Button Content="Install" Command="{Binding InstallIosAppCommand}" MinWidth="100"/>
                                         <Button Content="Uninstall" Command="{Binding UninstallIosAppCommand}" MinWidth="100"/>
                                         <Button Content="Launch" Command="{Binding LaunchIosAppCommand}" MinWidth="100"/>
                                         <Button Content="Push File..." Command="{Binding CopyFileToIosDeviceCommand}" MinWidth="110"/>
                                     </WrapPanel>
+                                    <TextBlock Text="Install uses the publish folder; Uninstall and Launch only need the Bundle ID above." Classes="section-copy"/>
                                 </StackPanel>
                             </Border>
 
@@ -461,17 +471,6 @@
                                     <TextBlock Text="Linux" Classes="section-title"/>
                                     <TextBlock Text="Deploy the output folder to your target or container. No device actions." Classes="section-copy"/>
                                     <Button Content="Open Publish Folder" Command="{Binding OpenPublishFolderCommand}" MinWidth="170"/>
-                                </StackPanel>
-                            </Border>
-
-                            <Border Classes="card">
-                                <StackPanel Spacing="12">
-                                    <TextBlock Text="Utilities" Classes="section-title"/>
-                                    <WrapPanel ItemSpacing="8" LineSpacing="8">
-                                        <Button Content="Open Publish Folder" Command="{Binding OpenPublishFolderCommand}" MinWidth="160"/>
-                                        <Button Content="Screenshot → Clipboard" Command="{Binding CopyWindowScreenshotCommand}" MinWidth="180"/>
-                                        <Button Content="Screenshot → File" Command="{Binding SaveWindowScreenshotToDiskCommand}" MinWidth="170"/>
-                                    </WrapPanel>
                                 </StackPanel>
                             </Border>
                         </StackPanel>

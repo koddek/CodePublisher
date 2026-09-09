@@ -177,6 +177,7 @@ public partial class MainViewModel : ViewModelBase
 
 [ObservableProperty]
 [NotifyCanExecuteChangedFor(nameof(ReloadProjectMetadataCommand))]
+[NotifyCanExecuteChangedFor(nameof(PublishCommand))]
 [NotifyCanExecuteChangedFor(nameof(InstallLatestApkCommand))]
 [NotifyPropertyChangedFor(nameof(HasProjectSelection))]
 [NotifyPropertyChangedFor(nameof(IsPackageIdVisible))]
@@ -549,6 +550,24 @@ private string _projectDirectory = string.Empty;
         }
     }
 
+    private void OnSectionEntered(PublishSection section)
+    {
+        // Keep device/simulator lists fresh when entering the sections that use them.
+        // Only auto-discover when idle and the backing tool exists so section entry never throws.
+        if (section is PublishSection.Platform or PublishSection.Deploy && !IsBusy)
+        {
+            if (IsAndroidPlatform && _publisherService.AdbPath is not null && AvailableAndroidDevices.Count == 0)
+            {
+                _ = RefreshDevicesAsync();
+            }
+
+            if (IsIosPlatform && _publisherService.XcrunPath is not null && AvailableIosSimulators.Count == 0)
+            {
+                _ = RefreshIosSimulatorsAsync();
+            }
+        }
+    }
+
     partial void OnProjectDirectoryChanged(string value)
     {
         _projectOutputLayout = null;
@@ -740,7 +759,11 @@ private string _projectDirectory = string.Empty;
             }
             else if (SelectedDevice is null)
             {
-                StatusMessage = $"Discovered {AvailableAndroidDevices.Count} Android target(s). Select a device to use platform actions.";
+                SelectedDevice = AvailableAndroidDevices.FirstOrDefault(device => device.IsRunning)
+                    ?? AvailableAndroidDevices[0];
+                StatusMessage = SelectedDevice.IsRunning
+                    ? $"Discovered {AvailableAndroidDevices.Count} Android target(s). Selected {SelectedDevice.DisplayName}."
+                    : $"Discovered {AvailableAndroidDevices.Count} Android target(s). Select a device to use platform actions.";
             }
             else
             {
@@ -787,7 +810,8 @@ private string _projectDirectory = string.Empty;
             }
             else if (string.IsNullOrWhiteSpace(SelectedIosSimulator))
             {
-                StatusMessage = $"Discovered {AvailableIosSimulators.Count} iOS simulator(s). Select one to use platform actions.";
+                SelectedIosSimulator = AvailableIosSimulators[0];
+                StatusMessage = $"Discovered {AvailableIosSimulators.Count} iOS simulator(s). Selected {SelectedIosSimulator}.";
             }
             else
             {
@@ -1044,7 +1068,8 @@ private string _projectDirectory = string.Empty;
                 return await _publisherService.PublishAsync(
                     CreateConfiguration(),
                     AppendLog,
-                    token);
+                    token,
+                    ConfirmWorkloadRestoreAsync);
             }, token);
 
             StatusMessage = success
@@ -1074,7 +1099,14 @@ private string _projectDirectory = string.Empty;
 
     private bool CanPublish()
     {
-        return !IsBusy;
+        return !IsBusy && HasProjectSelection;
+    }
+
+    private async Task<bool> ConfirmWorkloadRestoreAsync(string question)
+    {
+        // PublishAsync runs on a background thread; dialogs must be shown on the UI thread.
+        return await Dispatcher.UIThread.InvokeAsync(
+            () => _desktopInteractionService.ConfirmAsync("Install missing workloads", question));
     }
 
     private string BuildPublishFailureMessage()
@@ -1142,11 +1174,6 @@ private string _projectDirectory = string.Empty;
             return;
         }
 
-        if (!TryValidateProjectSelection("Install APK"))
-        {
-            return;
-        }
-
         if (!TryValidateOutputDirectory("Install APK"))
         {
             return;
@@ -1175,11 +1202,6 @@ private string _projectDirectory = string.Empty;
             return;
         }
 
-        if (!TryValidateProjectSelection("Uninstall app"))
-        {
-            return;
-        }
-
         if (!TryValidatePackageId("Uninstall app"))
         {
             return;
@@ -1198,11 +1220,6 @@ private string _projectDirectory = string.Empty;
             return;
         }
 
-        if (!TryValidateProjectSelection("Launch app"))
-        {
-            return;
-        }
-
         if (!TryValidatePackageId("Launch app"))
         {
             return;
@@ -1211,11 +1228,6 @@ private string _projectDirectory = string.Empty;
         await RunQuickActionAsync(
             async () => await _publisherService.LaunchAsync(PackageId, SelectedDevice?.Serial, CancellationToken.None),
             "Launch app");
-    }
-
-    private bool CanUsePackageIdActions()
-    {
-        return CanRunAndroidActions();
     }
 
     [RelayCommand(CanExecute = nameof(CanDeleteDesktopApp))]
@@ -1372,17 +1384,6 @@ private string _projectDirectory = string.Empty;
     private bool CanRunAndroidActions()
     {
         return IsAndroidPlatform && !IsBusy;
-    }
-
-    private bool TryValidateProjectSelection(string actionName)
-    {
-        if (HasProjectSelection)
-        {
-            return true;
-        }
-
-        ReportPreflightFailure(actionName, "Select a project first.");
-        return false;
     }
 
     private bool TryValidateAndroidDeviceSelection(string actionName)

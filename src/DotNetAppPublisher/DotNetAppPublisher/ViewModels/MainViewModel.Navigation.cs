@@ -55,6 +55,8 @@ public partial class MainViewModel
         {
             SelectedNavItem = nav;
         }
+
+        OnSectionEntered(value);
     }
 
     partial void OnSelectedNavItemChanged(NavItem? value)

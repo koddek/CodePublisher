@@ -30,6 +30,20 @@
                     <SolidColorBrush x:Key="WarningColor">#FFB900</SolidColorBrush>
                     <SolidColorBrush x:Key="ErrorColor">#F4373F</SolidColorBrush>
                     
+                    <!-- Status badges & warning banner (dark variants) -->
+                    <SolidColorBrush x:Key="AdbBadgeBackgroundColor">#1E3320</SolidColorBrush>
+                    <SolidColorBrush x:Key="AdbBadgeBorderColor">#4CAF50</SolidColorBrush>
+                    <SolidColorBrush x:Key="AdbBadgeTextColor">#7BC47F</SolidColorBrush>
+                    <SolidColorBrush x:Key="EmulatorBadgeBackgroundColor">#16283D</SolidColorBrush>
+                    <SolidColorBrush x:Key="EmulatorBadgeBorderColor">#2196F3</SolidColorBrush>
+                    <SolidColorBrush x:Key="EmulatorBadgeTextColor">#64B5F6</SolidColorBrush>
+                    <SolidColorBrush x:Key="WarningBannerBackgroundColor">#3A2E1A</SolidColorBrush>
+                    <SolidColorBrush x:Key="WarningBannerBorderColor">#8A6D3B</SolidColorBrush>
+                    <SolidColorBrush x:Key="WarningBannerTextColor">#E8B450</SolidColorBrush>
+                    <SolidColorBrush x:Key="InfoBannerBackgroundColor">#1B2A41</SolidColorBrush>
+                    <SolidColorBrush x:Key="InfoBannerBorderColor">#3B6FA0</SolidColorBrush>
+                    <SolidColorBrush x:Key="InfoBannerTextColor">#7FB3E8</SolidColorBrush>
+                    
                     <!-- Borders -->
                     <SolidColorBrush x:Key="BorderColor">#3D3D3D</SolidColorBrush>
                 </ResourceDictionary>
@@ -51,6 +65,20 @@
                     <SolidColorBrush x:Key="SuccessColor">#107C10</SolidColorBrush>
                     <SolidColorBrush x:Key="WarningColor">#D97706</SolidColorBrush>
                     <SolidColorBrush x:Key="ErrorColor">#D32F2F</SolidColorBrush>
+                    
+                    <!-- Status badges & warning banner (light variants) -->
+                    <SolidColorBrush x:Key="AdbBadgeBackgroundColor">#E8F5E9</SolidColorBrush>
+                    <SolidColorBrush x:Key="AdbBadgeBorderColor">#4CAF50</SolidColorBrush>
+                    <SolidColorBrush x:Key="AdbBadgeTextColor">#2E7D32</SolidColorBrush>
+                    <SolidColorBrush x:Key="EmulatorBadgeBackgroundColor">#E3F2FD</SolidColorBrush>
+                    <SolidColorBrush x:Key="EmulatorBadgeBorderColor">#2196F3</SolidColorBrush>
+                    <SolidColorBrush x:Key="EmulatorBadgeTextColor">#1565C0</SolidColorBrush>
+                    <SolidColorBrush x:Key="WarningBannerBackgroundColor">#FFF6E5</SolidColorBrush>
+                    <SolidColorBrush x:Key="WarningBannerBorderColor">#E0A832</SolidColorBrush>
+                    <SolidColorBrush x:Key="WarningBannerTextColor">#8A5A00</SolidColorBrush>
+                    <SolidColorBrush x:Key="InfoBannerBackgroundColor">#E8F0FE</SolidColorBrush>
+                    <SolidColorBrush x:Key="InfoBannerBorderColor">#8AB4F8</SolidColorBrush>
+                    <SolidColorBrush x:Key="InfoBannerTextColor">#1967D2</SolidColorBrush>
                     
                     <!-- Borders -->
                     <SolidColorBrush x:Key="BorderColor">#D0D0D0</SolidColorBrush>
