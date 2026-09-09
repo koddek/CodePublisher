@@ -466,6 +466,11 @@ private string _projectDirectory = string.Empty;
 
     public bool HasProjectSelection => !string.IsNullOrWhiteSpace(ProjectDirectory);
 
+    public string AppDisplayVersion { get; } =
+        typeof(MainViewModel).Assembly.GetName().Version?.ToString(3) is { Length: > 0 } version
+            ? $"v{version}"
+            : "v0.0.0";
+
     public bool IsAndroidPlatform => string.Equals(PublishPlatform, PublisherService.AndroidPlatform, StringComparison.Ordinal);
 
     public bool IsMacOsPlatform => string.Equals(PublishPlatform, PublisherService.MacOsPlatform, StringComparison.Ordinal);
