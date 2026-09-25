@@ -8,6 +8,10 @@ using Avalonia.Styling;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DotNetAppPublisher.Features.Deployment.Android;
+using DotNetAppPublisher.Features.GooglePlay;
+using DotNetAppPublisher.Features.GooglePlay.Models;
+using DotNetAppPublisher.Features.Publishing.Configure;
 using DotNetAppPublisher.Models;
 using DotNetAppPublisher.Services;
 using DotNetAppPublisher.Views;
@@ -59,10 +63,12 @@ public partial class MainViewModel : ViewModelBase
     private const int LogFlushIntervalMs = 150;
     private readonly DesktopInteractionService _desktopInteractionService;
     private readonly PublisherService _publisherService;
+    private readonly GooglePlayViewModel _googlePlayViewModel;
     private CancellationTokenSource? _publishCts;
     private ProjectOutputLayout? _projectOutputLayout;
     private bool _isAssigningAutomaticOutputDirectory;
     private bool _isOutputDirectoryManualOverride;
+    private bool _isNormalizingPublishSettings;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(InstallLatestApkCommand))]
@@ -71,10 +77,17 @@ public partial class MainViewModel : ViewModelBase
     [NotifyCanExecuteChangedFor(nameof(CopyFileToAndroidDeviceCommand))]
     private AndroidDeviceInfo? _selectedDevice;
 
-    public MainViewModel(PublisherService publisherService, DesktopInteractionService desktopInteractionService)
+    public MainViewModel(
+        PublisherService publisherService,
+        DesktopInteractionService desktopInteractionService,
+        GooglePlayViewModel? googlePlayViewModel = null)
     {
         _publisherService = publisherService;
         _desktopInteractionService = desktopInteractionService;
+        _googlePlayViewModel = googlePlayViewModel ?? GooglePlayFeatureFactory.Create(
+            publisherService,
+            desktopInteractionService,
+            () => SelectedSection = PublishSection.Signing);
         EnsureXamlBindingsPreserved();
         IsProjectInternalVersionSupported = GetDefaultInternalVersionSupport(PublishPlatform);
         DotnetStatus = publisherService.DotnetStatusText;
@@ -83,7 +96,14 @@ public partial class MainViewModel : ViewModelBase
         StatusMessage = "Select a .NET project folder to start building your publish command.";
         SelectedNavItem = NavItems.FirstOrDefault();
         RefreshCommandPreview();
-        _ = RefreshEmulatorsAsync();
+        if (!OperatingSystem.IsBrowser())
+        {
+            _ = RefreshEmulatorsAsync();
+        }
+        else
+        {
+            EmulatorStatus = "Device actions are available in the desktop app.";
+        }
     }
 
     // Keep command properties referenced from code so trimmed builds retain members used only from XAML.
@@ -116,7 +136,11 @@ public partial class MainViewModel : ViewModelBase
         _ = BrowseKeystoreCommand;
         _ = ResetToSafeDefaultsCommand;
         _ = ToggleThemeCommand;
+        _ = IsPublishing;
+        _ = GooglePlay;
     }
+
+    public GooglePlayViewModel GooglePlay => _googlePlayViewModel;
 
     public IReadOnlyList<string> PublishPlatformOptions { get; } =
     [
@@ -131,9 +155,9 @@ public partial class MainViewModel : ViewModelBase
 
     public IReadOnlyList<string> LinkModeOptions { get; } = ["None", "SdkOnly", "Full"];
 
-    public IReadOnlyList<string> LinkToolOptions { get; } = ["r8", "proguard"];
+    public IReadOnlyList<string> LinkToolOptions { get; } = ["r8"];
 
-    public IReadOnlyList<string> DexToolOptions { get; } = ["d8", "dx"];
+    public IReadOnlyList<string> DexToolOptions { get; } = ["d8"];
 
     public IReadOnlyList<string> SignModeOptions { get; } = ["Auto", "Sign", "Do Not Sign"];
 
@@ -244,6 +268,12 @@ private string _projectDirectory = string.Empty;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(PublishCommand))]
+    [NotifyPropertyChangedFor(nameof(IsPublishTrimmedEnabled))]
+    [NotifyPropertyChangedFor(nameof(PublishTrimmedDisabledReason))]
+    [NotifyPropertyChangedFor(nameof(IsPublishAotEnabled))]
+    [NotifyPropertyChangedFor(nameof(PublishAotDisabledReason))]
+    [NotifyPropertyChangedFor(nameof(IsPublishSingleFileEnabled))]
+    [NotifyPropertyChangedFor(nameof(PublishSingleFileDisabledReason))]
     private bool _selfContained = true;
 
     [ObservableProperty]
@@ -272,6 +302,8 @@ private string _projectDirectory = string.Empty;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(PublishCommand))]
+    [NotifyPropertyChangedFor(nameof(IsPublishSingleFileEnabled))]
+    [NotifyPropertyChangedFor(nameof(PublishSingleFileDisabledReason))]
     private bool _publishSingleFile = true;
 
     [ObservableProperty]
@@ -454,6 +486,9 @@ private string _projectDirectory = string.Empty;
     [NotifyPropertyChangedFor(nameof(SharedProgressValue))]
     private bool _isBusy;
 
+    [ObservableProperty]
+    private bool _isPublishing;
+
     public bool IsEditorEnabled => !IsBusy;
 
     public bool IsSharedProgressVisible => IsBusy;
@@ -506,26 +541,28 @@ private string _projectDirectory = string.Empty;
 
     public bool IsKnownGoodBaselineVisible => true;
 
-    public bool IsShrinkerSettingsEnabled => PublishOptionRules.IsShrinkerSettingsEnabled(AndroidLinkMode);
+    public bool IsShrinkerSettingsEnabled => PublishOptionPolicy.IsShrinkerSettingsEnabled(AndroidLinkMode);
 
-    public bool IsPublishAotEnabled => PublishOptionRules.IsPublishAotEnabled(PublishPlatform, TargetFramework, RuntimeIdentifier);
-    public string PublishAotDisabledReason => PublishOptionRules.PublishAotDisabledReason(PublishPlatform, TargetFramework, RuntimeIdentifier);
+    public bool IsPublishAotEnabled => PublishOptionPolicy.IsPublishAotEnabled(PublishPlatform, TargetFramework, RuntimeIdentifier);
+    public string PublishAotDisabledReason => PublishOptionPolicy.PublishAotDisabledReason(PublishPlatform, TargetFramework, RuntimeIdentifier);
 
-    public bool IsPublishTrimmedEnabled => PublishOptionRules.IsPublishTrimmedEnabled(PublishAot, PublishPlatform, TargetFramework, RuntimeIdentifier, AndroidLinkMode);
-    public string PublishTrimmedDisabledReason => PublishOptionRules.PublishTrimmedDisabledReason(PublishAot, PublishPlatform, TargetFramework, RuntimeIdentifier, AndroidLinkMode);
+    public bool IsPublishTrimmedEnabled => PublishOptionPolicy.IsPublishTrimmedEnabled(PublishAot, SelfContained, PublishPlatform, TargetFramework, RuntimeIdentifier, AndroidLinkMode);
+    public string PublishTrimmedDisabledReason => PublishOptionPolicy.PublishTrimmedDisabledReason(PublishAot, SelfContained, PublishPlatform, TargetFramework, RuntimeIdentifier, AndroidLinkMode);
 
-    public bool IsProfiledAotEnabled => PublishOptionRules.IsProfiledAotEnabled(RunAotCompilation);
-    public string ProfiledAotDisabledReason => PublishOptionRules.ProfiledAotDisabledReason(RunAotCompilation);
+    public bool IsProfiledAotEnabled => PublishOptionPolicy.IsProfiledAotEnabled(RunAotCompilation);
+    public string ProfiledAotDisabledReason => PublishOptionPolicy.ProfiledAotDisabledReason(RunAotCompilation);
 
-    public bool IsRunAotEnabled => !IsAndroidPlatform || PublishOptionRules.IsAndroidAotEnabled(AndroidLinkMode);
-    public string RunAotDisabledReason => PublishOptionRules.AndroidAotDisabledReason(AndroidLinkMode);
+    public bool IsRunAotEnabled => !IsAndroidPlatform || PublishOptionPolicy.IsAndroidAotEnabled(AndroidLinkMode);
+    public string RunAotDisabledReason => PublishOptionPolicy.AndroidAotDisabledReason(AndroidLinkMode);
 
-    public bool IsPublishSingleFileEnabled => PublishOptionRules.IsPublishSingleFileEnabled(PublishAot, PublishPlatform);
-    public string PublishSingleFileDisabledReason => IsPublishSingleFileEnabled ? string.Empty : "SingleFile not applicable for this platform.";
+    public bool IsPublishSingleFileEnabled => PublishOptionPolicy.IsPublishSingleFileEnabled(PublishAot, PublishPlatform);
+    public string PublishSingleFileDisabledReason => PublishAot
+        ? "Native AOT already produces a native executable; single-file bundling is not needed."
+        : IsPublishSingleFileEnabled ? string.Empty : "SingleFile not applicable for this platform.";
 
-    public bool IsUseAppHostEnabled => PublishOptionRules.IsUseAppHostEnabled(PublishPlatform);
+    public bool IsUseAppHostEnabled => PublishOptionPolicy.IsUseAppHostEnabled(PublishPlatform);
 
-    public string ReadyToRunDisabledReason => PublishOptionRules.ReadyToRunDisabledReason(PublishAot, PublishPlatform);
+    public string ReadyToRunDisabledReason => PublishOptionPolicy.ReadyToRunDisabledReason(PublishAot, PublishPlatform, TargetFramework, RuntimeIdentifier);
 
     public string PackageIdLabel => "Package ID";
 
@@ -552,6 +589,7 @@ private string _projectDirectory = string.Empty;
         if (e.PropertyName is not null && PreviewSensitiveProperties.Contains(e.PropertyName))
         {
             RefreshCommandPreview();
+            UpdateGooglePlayContext();
         }
     }
 
@@ -578,6 +616,7 @@ private string _projectDirectory = string.Empty;
         _projectOutputLayout = null;
         ProjectOutputLayoutSummary = string.Empty;
         SetAutomaticOutputDirectory(string.Empty);
+        UpdateGooglePlayContext();
     }
 
     partial void OnOutputDirectoryChanged(string value)
@@ -586,13 +625,15 @@ private string _projectDirectory = string.Empty;
         {
             _isOutputDirectoryManualOverride = !string.IsNullOrWhiteSpace(value);
         }
+
+        UpdateGooglePlayContext();
     }
 
     partial void OnPublishPlatformChanged(string value)
     {
         IsProjectInternalVersionSupported = GetDefaultInternalVersionSupport(value);
 
-        ApplyPlatformDefaults(value);
+        ApplyPlatformProfiles(value);
 
         if (!_isOutputDirectoryManualOverride)
         {
@@ -601,6 +642,7 @@ private string _projectDirectory = string.Empty;
 
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsReadyToRunEnabled)));
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsReadyToRunCheckBoxEnabled)));
+        UpdateGooglePlayContext();
 
         if (!string.IsNullOrWhiteSpace(ProjectDirectory))
         {
@@ -608,9 +650,9 @@ private string _projectDirectory = string.Empty;
         }
     }
 
-    private void ApplyPlatformDefaults(string platform)
+    private void ApplyPlatformProfiles(string platform)
     {
-        var defaults = PlatformDefaults.GetDefaults(platform);
+        var defaults = PlatformProfiles.GetDefaults(platform);
         TargetFramework = defaults.TargetFramework;
         RuntimeIdentifier = defaults.RuntimeIdentifier;
         SelfContained = defaults.SelfContained;
@@ -635,12 +677,58 @@ private string _projectDirectory = string.Empty;
         IncludeApk = defaults.IncludeApk;
         IncludeAab = defaults.IncludeAab;
         SignMode = defaults.SignMode;
+        NormalizePublishSettings();
+    }
+
+    private void NormalizePublishSettings()
+    {
+        if (_isNormalizingPublishSettings)
+        {
+            return;
+        }
+
+        var normalized = PublishSettingsPolicy.Normalize(new PublishSettingsState(
+            PublishPlatform,
+            TargetFramework,
+            RuntimeIdentifier,
+            SelfContained,
+            PublishAot,
+            PublishReadyToRun,
+            PublishSingleFile,
+            PublishTrimmed,
+            AndroidLinkMode,
+            AndroidLinkTool,
+            AndroidDexTool,
+            RunAotCompilation,
+            EnableProfiledAot,
+            IncludeApk,
+            IncludeAab));
+
+        _isNormalizingPublishSettings = true;
+        try
+        {
+            SelfContained = normalized.SelfContained;
+            PublishAot = normalized.PublishAot;
+            PublishReadyToRun = normalized.PublishReadyToRun;
+            PublishSingleFile = normalized.PublishSingleFile;
+            PublishTrimmed = normalized.PublishTrimmed;
+            AndroidLinkTool = normalized.AndroidLinkTool;
+            AndroidDexTool = normalized.AndroidDexTool;
+            RunAotCompilation = normalized.RunAotCompilation;
+            EnableProfiledAot = normalized.EnableProfiledAot;
+            IncludeApk = normalized.IncludeApk;
+            IncludeAab = normalized.IncludeAab;
+        }
+        finally
+        {
+            _isNormalizingPublishSettings = false;
+        }
     }
 
     [RelayCommand]
     private void ResetToSafeDefaults()
     {
-        ApplyPlatformDefaults(PublishPlatform);
+        ApplyPlatformProfiles(PublishPlatform);
         StatusMessage = $"Reset {PublishPlatform} to known-good baseline options.";
     }
 
@@ -673,6 +761,12 @@ private string _projectDirectory = string.Empty;
     [RelayCommand]
     private async Task BrowseProjectDirectoryAsync()
     {
+        if (OperatingSystem.IsBrowser())
+        {
+            StatusMessage = "Project browsing is available in the desktop app.";
+            return;
+        }
+
         var selected = await _desktopInteractionService.PickFolderAsync("Select .NET project directory", ProjectDirectory);
         if (string.IsNullOrWhiteSpace(selected))
         {
@@ -686,6 +780,12 @@ private string _projectDirectory = string.Empty;
     [RelayCommand]
     private async Task BrowseOutputDirectoryAsync()
     {
+        if (OperatingSystem.IsBrowser())
+        {
+            StatusMessage = "Output folder browsing is available in the desktop app.";
+            return;
+        }
+
         var selected = await _desktopInteractionService.PickFolderAsync("Select publish output directory", OutputDirectory);
         if (!string.IsNullOrWhiteSpace(selected))
         {
@@ -696,6 +796,12 @@ private string _projectDirectory = string.Empty;
     [RelayCommand]
     private async Task BrowseKeystoreAsync()
     {
+        if (OperatingSystem.IsBrowser())
+        {
+            StatusMessage = "Keystore browsing is available in the desktop app.";
+            return;
+        }
+
         var selected = await _desktopInteractionService.PickFileAsync("Select signing keystore", KeystorePath);
         if (!string.IsNullOrWhiteSpace(selected))
         {
@@ -706,6 +812,12 @@ private string _projectDirectory = string.Empty;
     [RelayCommand(CanExecute = nameof(CanRefreshEmulators))]
     private async Task RefreshEmulatorsAsync()
     {
+        if (OperatingSystem.IsBrowser())
+        {
+            StatusMessage = "Android emulator discovery is available in the desktop app.";
+            return;
+        }
+
         try
         {
             IsBusy = true;
@@ -741,6 +853,12 @@ private string _projectDirectory = string.Empty;
     [RelayCommand]
     private async Task RefreshDevicesAsync()
     {
+        if (OperatingSystem.IsBrowser())
+        {
+            StatusMessage = "Android device actions are available in the desktop app.";
+            return;
+        }
+
         try
         {
             IsBusy = true;
@@ -789,6 +907,12 @@ private string _projectDirectory = string.Empty;
     [RelayCommand]
     private async Task RefreshIosSimulatorsAsync()
     {
+        if (OperatingSystem.IsBrowser())
+        {
+            StatusMessage = "iOS simulator actions are available in the desktop app.";
+            return;
+        }
+
         try
         {
             IsBusy = true;
@@ -875,7 +999,7 @@ private string _projectDirectory = string.Empty;
 
     private bool CanInstallIosApp()
     {
-        return IsIosPlatform && !IsBusy && !string.IsNullOrWhiteSpace(OutputDirectory) && !string.IsNullOrWhiteSpace(SelectedIosSimulator);
+        return !OperatingSystem.IsBrowser() && IsIosPlatform && !IsBusy && !string.IsNullOrWhiteSpace(OutputDirectory) && !string.IsNullOrWhiteSpace(SelectedIosSimulator);
     }
 
     [RelayCommand(CanExecute = nameof(CanUseIosPackageActions))]
@@ -896,7 +1020,7 @@ private string _projectDirectory = string.Empty;
 
     private bool CanUseIosPackageActions()
     {
-        return IsIosPlatform && !IsBusy && !string.IsNullOrWhiteSpace(PackageId) && !string.IsNullOrWhiteSpace(SelectedIosSimulator);
+        return !OperatingSystem.IsBrowser() && IsIosPlatform && !IsBusy && !string.IsNullOrWhiteSpace(PackageId) && !string.IsNullOrWhiteSpace(SelectedIosSimulator);
     }
 
     [RelayCommand(CanExecute = nameof(CanCopyFileToAndroidDevice))]
@@ -921,7 +1045,7 @@ private string _projectDirectory = string.Empty;
 
     private bool CanCopyFileToAndroidDevice()
     {
-        return IsAndroidPlatform && !IsBusy;
+        return !OperatingSystem.IsBrowser() && IsAndroidPlatform && !IsBusy;
     }
 
     [RelayCommand(CanExecute = nameof(CanCopyFileToIosDevice))]
@@ -946,7 +1070,7 @@ private string _projectDirectory = string.Empty;
 
     private bool CanCopyFileToIosDevice()
     {
-        return IsIosPlatform && !IsBusy;
+        return !OperatingSystem.IsBrowser() && IsIosPlatform && !IsBusy;
     }
 
     [RelayCommand]
@@ -960,8 +1084,6 @@ private string _projectDirectory = string.Empty;
         StatusMessage = "Cancelling publish...";
         _publishCts.Cancel();
     }
-
-    public bool IsPublishing => IsBusy;
 
     public bool CanCancelPublish => _publishCts is not null;
 
@@ -1034,6 +1156,7 @@ private string _projectDirectory = string.Empty;
             }
 
             StatusMessage = "Project metadata loaded. Review the command preview before publishing.";
+        UpdateGooglePlayContext();
         }
         catch (Exception ex)
         {
@@ -1058,6 +1181,7 @@ private string _projectDirectory = string.Empty;
     [RelayCommand(CanExecute = nameof(CanPublish))]
     private async Task PublishAsync()
     {
+        IsPublishing = true;
         IsBusy = true;
         ClearLog();
         AppendLog("Preparing publish workflow..." + Environment.NewLine);
@@ -1098,6 +1222,7 @@ private string _projectDirectory = string.Empty;
             _publishCts?.Dispose();
             _publishCts = null;
             NotifyPublishStateChanged();
+            IsPublishing = false;
             IsBusy = false;
         }
     }
@@ -1349,16 +1474,22 @@ private string _projectDirectory = string.Empty;
 
     private bool CanRefreshEmulators()
     {
-        return IsAndroidPlatform && !IsBusy;
+        return !OperatingSystem.IsBrowser() && IsAndroidPlatform && !IsBusy;
     }
 
     private bool CanLaunchEmulator()
     {
-        return IsAndroidPlatform && !IsBusy && !string.IsNullOrWhiteSpace(SelectedEmulator);
+        return !OperatingSystem.IsBrowser() && IsAndroidPlatform && !IsBusy && !string.IsNullOrWhiteSpace(SelectedEmulator);
     }
 
     private async Task RunQuickActionAsync(Func<Task<string>> action, string actionName)
     {
+        if (OperatingSystem.IsBrowser())
+        {
+            StatusMessage = $"{actionName} is available in the desktop app.";
+            return;
+        }
+
         try
         {
             IsBusy = true;
@@ -1388,7 +1519,7 @@ private string _projectDirectory = string.Empty;
 
     private bool CanRunAndroidActions()
     {
-        return IsAndroidPlatform && !IsBusy;
+        return !OperatingSystem.IsBrowser() && IsAndroidPlatform && !IsBusy;
     }
 
     private bool TryValidateAndroidDeviceSelection(string actionName)
@@ -1478,6 +1609,18 @@ private string _projectDirectory = string.Empty;
             || message.Contains("exception", StringComparison.OrdinalIgnoreCase);
     }
 
+    private void UpdateGooglePlayContext()
+    {
+        _googlePlayViewModel.UpdateContext(new GooglePlayProjectContext(
+            CreateConfiguration(),
+            PackageId,
+            ProjectDisplayVersion,
+            ProjectInternalVersion,
+            IsAndroidPlatform));
+    }
+
+    internal PublishConfiguration CreatePublishConfiguration() => CreateConfiguration();
+
     private PublishConfiguration CreateConfiguration()
     {
         return new PublishConfiguration
@@ -1517,7 +1660,10 @@ private string _projectDirectory = string.Empty;
             KeystorePath = KeystorePath,
             KeyAlias = KeyAlias,
             KeystorePassword = KeystorePassword,
-            KeyPassword = KeyPassword
+            KeyPassword = KeyPassword,
+            ProjectName = string.IsNullOrWhiteSpace(SelectedProjectFile)
+                ? string.Empty
+                : Path.GetFileNameWithoutExtension(SelectedProjectFile)
         };
     }
 
@@ -1632,22 +1778,30 @@ private string _projectDirectory = string.Empty;
         LiveOutput = string.Empty;
     }
 
-    private static bool GetReadyToRunDefault(string publishPlatform)
+    partial void OnSelfContainedChanged(bool value)
     {
-        return !string.Equals(publishPlatform, PublisherService.MacOsPlatform, StringComparison.Ordinal);
+        NormalizePublishSettings();
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsPublishTrimmedEnabled)));
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(PublishTrimmedDisabledReason)));
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsPublishAotEnabled)));
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(PublishAotDisabledReason)));
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsPublishSingleFileEnabled)));
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(PublishSingleFileDisabledReason)));
+    }
+
+    partial void OnPublishTrimmedChanged(bool value)
+    {
+        NormalizePublishSettings();
+    }
+
+    partial void OnPublishSingleFileChanged(bool value)
+    {
+        NormalizePublishSettings();
     }
 
     partial void OnPublishAotChanged(bool value)
     {
-        if (value)
-        {
-            PublishReadyToRun = false;
-        }
-        else if (!GetReadyToRunDefault(PublishPlatform))
-        {
-            PublishReadyToRun = false;
-        }
-
+        NormalizePublishSettings();
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsReadyToRunEnabled)));
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsReadyToRunCheckBoxEnabled)));
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsPublishAotEnabled)));
@@ -1661,62 +1815,44 @@ private string _projectDirectory = string.Empty;
 
     partial void OnPublishReadyToRunChanged(bool value)
     {
-        if (value && PublishAot)
-        {
-            PublishReadyToRun = false;
-        }
+        NormalizePublishSettings();
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(ReadyToRunDisabledReason)));
     }
 
     partial void OnRunAotCompilationChanged(bool value)
     {
-        if (!value && EnableProfiledAot)
-        {
-            EnableProfiledAot = false;
-        }
+        NormalizePublishSettings();
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsProfiledAotEnabled)));
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(ProfiledAotDisabledReason)));
     }
 
     partial void OnAndroidLinkModeChanged(string value)
     {
+        NormalizePublishSettings();
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsShrinkerSettingsEnabled)));
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsRunAotEnabled)));
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(RunAotDisabledReason)));
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsPublishTrimmedEnabled)));
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(PublishTrimmedDisabledReason)));
-
-        // Link Mode 'None' disables the linker — AOT requires linking, so cascade off.
-        if (string.Equals(value, "None", StringComparison.Ordinal) && RunAotCompilation)
-        {
-            RunAotCompilation = false;
-        }
     }
 
     partial void OnIncludeApkChanged(bool value)
     {
-        if (!value && !IncludeAab)
-        {
-            IncludeAab = true;
-        }
+        NormalizePublishSettings();
     }
 
     partial void OnIncludeAabChanged(bool value)
     {
-        if (!value && !IncludeApk)
-        {
-            IncludeApk = true;
-        }
+        NormalizePublishSettings();
     }
 
     partial void OnEnableProfiledAotChanged(bool value)
     {
-        if (value && !RunAotCompilation)
-        {
-            EnableProfiledAot = false;
-        }
+        NormalizePublishSettings();
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsProfiledAotEnabled)));
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(ProfiledAotDisabledReason)));
     }
 
-    public bool IsReadyToRunEnabled => PublishOptionRules.IsReadyToRunEnabled(PublishAot, PublishPlatform);
+    public bool IsReadyToRunEnabled => PublishOptionPolicy.IsReadyToRunEnabled(PublishAot, PublishPlatform, TargetFramework, RuntimeIdentifier);
     public bool IsReadyToRunCheckBoxEnabled => IsEditorEnabled && IsReadyToRunEnabled;
 }

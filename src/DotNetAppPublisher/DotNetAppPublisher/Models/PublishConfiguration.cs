@@ -73,4 +73,6 @@ public sealed record PublishConfiguration
     public required string KeystorePassword { get; init; }
 
     public required string KeyPassword { get; init; }
+
+    public string ProjectName { get; init; } = string.Empty;
 }

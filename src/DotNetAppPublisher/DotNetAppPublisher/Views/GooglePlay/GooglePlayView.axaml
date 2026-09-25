@@ -1,0 +1,253 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:DotNetAppPublisher.Features.GooglePlay"
+             xmlns:models="using:DotNetAppPublisher.Features.GooglePlay.Models"
+             x:Class="DotNetAppPublisher.Views.GooglePlay.GooglePlayView"
+             x:DataType="vm:GooglePlayViewModel">
+        <StackPanel Spacing="18" MaxWidth="880" HorizontalAlignment="Stretch">
+            <StackPanel Spacing="8">
+                <TextBlock Text="Google Play" FontSize="24" FontWeight="SemiBold"/>
+                <TextBlock Text="Build, submit, and track Android releases from one focused workspace." Classes="section-copy" Margin="0"/>
+                <WrapPanel ItemSpacing="8" LineSpacing="8">
+                    <Border Classes="badge" IsVisible="{Binding IsStatusSuccess}">
+                        <TextBlock Text="{Binding StatusHeadline}" Foreground="{DynamicResource StatusSuccessTextColor}" FontWeight="SemiBold"/>
+                    </Border>
+                    <Border Classes="badge" IsVisible="{Binding IsStatusWarning}"
+                            Background="{DynamicResource StatusWarningBackgroundColor}"
+                            BorderBrush="{DynamicResource StatusWarningBorderColor}">
+                        <TextBlock Text="{Binding StatusHeadline}" Foreground="{DynamicResource StatusWarningTextColor}" FontWeight="SemiBold"/>
+                    </Border>
+                    <Border Classes="badge" IsVisible="{Binding IsStatusError}"
+                            Background="{DynamicResource StatusErrorBackgroundColor}"
+                            BorderBrush="{DynamicResource StatusErrorBorderColor}">
+                        <TextBlock Text="{Binding StatusHeadline}" Foreground="{DynamicResource StatusErrorTextColor}" FontWeight="SemiBold"/>
+                    </Border>
+                    <Border Classes="badge" IsVisible="{Binding IsStatusInfo}"
+                            Background="{DynamicResource InfoBannerBackgroundColor}"
+                            BorderBrush="{DynamicResource InfoBannerBorderColor}">
+                        <TextBlock Text="{Binding StatusHeadline}" Foreground="{DynamicResource InfoBannerTextColor}" FontWeight="SemiBold"/>
+                    </Border>
+                </WrapPanel>
+            </StackPanel>
+
+            <Border Classes="card">
+                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
+                    <TextBlock Grid.Row="0" Text="Account" Classes="section-title"/>
+                    <WrapPanel Grid.Row="1" Grid.ColumnSpan="2" ItemSpacing="8" LineSpacing="8" Margin="0,4,0,12">
+                        <ComboBox MinWidth="160" MaxWidth="420" ItemsSource="{Binding Accounts}" SelectedItem="{Binding SelectedAccount}"
+                                  PlaceholderText="Connect a Google account">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="models:GooglePlayAccountInfo">
+                                    <TextBlock Text="{Binding DisplayName}"/>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <Button Content="Connect Google account" Classes="primary" Command="{Binding ConnectCommand}"
+                                IsEnabled="{Binding IsDesktopSession}"/>
+                        <Button Classes="compact-icon" Command="{Binding DisconnectCommand}"
+                                ToolTip.Tip="Disconnect selected account" AutomationProperties.Name="Disconnect selected account">
+                            <PathIcon Data="M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59L7.76 14.83l1.41 1.41L19 6.41V10h2V3h-7z"/>
+                        </Button>
+                        <Button Classes="compact-icon" Command="{Binding ClearSessionCommand}"
+                                ToolTip.Tip="Clear Google Play session" AutomationProperties.Name="Clear Google Play session">
+                            <PathIcon Data="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.3 9.17 12 2.89 5.71 4.3 4.3l6.29 6.29 6.29-6.29z"/>
+                        </Button>
+                    </WrapPanel>
+                    <StackPanel Grid.Row="2" Grid.ColumnSpan="2" Spacing="3">
+                        <TextBlock Text="{Binding ReadinessHeadline}" FontWeight="SemiBold" Foreground="{DynamicResource TextSecondaryColor}"/>
+                        <TextBlock Text="{Binding StatusDetail}" Classes="section-copy" Margin="0"/>
+                        <TextBlock Text="{Binding PlatformLabel}" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}"/>
+                        <TextBlock Text="{Binding DesktopOnlyMessage}" FontSize="11" Foreground="{DynamicResource StatusWarningTextColor}"
+                                   IsVisible="{Binding IsBrowser}"/>
+                        <TextBlock Text="{Binding SecuritySummary}" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <Border Classes="card">
+                <StackPanel Spacing="14">
+                    <WrapPanel ItemSpacing="8" LineSpacing="8">
+                        <StackPanel Spacing="4" MinWidth="180">
+                            <TextBlock Text="Google Play setup" Classes="section-title"/>
+                            <TextBlock Text="Set the values this feature reads. Each option explains where to get the value. Nothing here is a Google client secret." Classes="section-copy" Margin="0"/>
+                        </StackPanel>
+                        <Border Classes="badge"
+                                Background="{DynamicResource StatusSuccessBackgroundColor}"
+                                BorderBrush="{DynamicResource StatusSuccessBorderColor}"
+                                IsVisible="{Binding IsGoogleClientIdConfigured}">
+                            <TextBlock Text="Ready" Foreground="{DynamicResource StatusSuccessTextColor}" FontWeight="SemiBold"/>
+                        </Border>
+                    </WrapPanel>
+                    <ItemsControl ItemsSource="{Binding EnvironmentVariables}" IsVisible="{Binding IsEnvironmentSetupAvailable}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:GooglePlayEnvironmentVariableViewModel">
+                                <Border Classes="card" Padding="12" Margin="0,0,0,8">
+                                    <StackPanel Spacing="8">
+                                        <StackPanel Spacing="3">
+                                            <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"/>
+                                            <TextBlock Text="{Binding Name}" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}"/>
+                                            <TextBlock Text="{Binding Description}" Classes="section-copy" Margin="0" TextWrapping="Wrap"/>
+                                            <TextBlock Text="{Binding Example, StringFormat='Example: {0}'}" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}" TextWrapping="Wrap"/>
+                                         </StackPanel>
+                                         <Border Background="{DynamicResource SurfaceVariantColor}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" CornerRadius="6" Padding="10">
+                                             <StackPanel Spacing="6">
+                                                 <TextBlock Text="Where to get it" FontSize="12" FontWeight="SemiBold"/>
+                                                 <TextBlock Text="{Binding SetupInstructions}" FontSize="12" Foreground="{DynamicResource TextSecondaryColor}" TextWrapping="Wrap"/>
+                                                 <Button Content="Open source" Command="{Binding OpenSetupSourceCommand}" IsVisible="{Binding HasHelpUrl}" IsEnabled="{Binding CanOpenHelp}"
+                                                         ToolTip.Tip="{Binding HelpUrl}" AutomationProperties.Name="Open setup source"/>
+                                             </StackPanel>
+                                         </Border>
+                                        <WrapPanel ItemSpacing="8" LineSpacing="8">
+                                            <TextBox MinWidth="180" MaxWidth="480" Text="{Binding Value}" PlaceholderText="{Binding Example}" PasswordChar="●"/>
+                                            <Button Classes="compact-icon" Command="{Binding SetForSessionCommand}"
+                                                    ToolTip.Tip="Use for this app session" AutomationProperties.Name="Use for this app session">
+                                                <PathIcon Data="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                                            </Button>
+                                            <Button Classes="compact-icon" Command="{Binding SaveForUserCommand}"
+                                                    IsEnabled="{Binding CanPersist}" ToolTip.Tip="Save for future launches" AutomationProperties.Name="Save for future launches">
+                                                <PathIcon Data="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/>
+                                            </Button>
+                                        </WrapPanel>
+                                        <TextBlock Text="{Binding DetectedValueLabel}" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}" TextWrapping="Wrap"/>
+                                        <WrapPanel ItemSpacing="8" LineSpacing="8">
+                                            <Button Classes="compact-icon" Command="{Binding RemoveCommand}"
+                                                    ToolTip.Tip="Remove configured value" AutomationProperties.Name="Remove configured value">
+                                                <PathIcon Data="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.3 9.17 12 2.89 5.71 4.3 4.3l6.29 6.29 6.29-6.29z"/>
+                                            </Button>
+                                            <TextBlock Text="{Binding ScopeLabel}" VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}" TextWrapping="Wrap"/>
+                                            <TextBlock Text="{Binding Status}" VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}" TextWrapping="Wrap"/>
+                                            <TextBlock Text="Required" FontSize="11" Foreground="{DynamicResource StatusWarningTextColor}" IsVisible="{Binding IsRequired}"/>
+                                            <TextBlock Text="Needs a value" FontSize="11" Foreground="{DynamicResource StatusErrorTextColor}" IsVisible="{Binding IsRequiredAndMissing}"/>
+                                        </WrapPanel>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Text="Environment setup is available in the desktop app. Browser preview does not modify process or user environment variables."
+                               Classes="section-copy" Margin="0" IsVisible="{Binding IsBrowser}"/>
+                    <WrapPanel ItemSpacing="8" LineSpacing="8">
+                        <Button Content="Open Google Cloud credentials" Command="{Binding OpenGoogleCloudCredentialsCommand}" IsEnabled="{Binding IsDesktopSession}"/>
+                        <Button Content="Setup help" Command="{Binding OpenEnvironmentHelpCommand}" IsEnabled="{Binding IsDesktopSession}"/>
+                    </WrapPanel>
+                    <TextBlock Text="Use now changes only this running app. Save updates the supported user environment location. Remove clears both supported scopes."
+                               Classes="section-copy" Margin="0" IsVisible="{Binding CanPersistEnvironmentVariables}"/>
+                    <TextBlock Text="This platform supports app-session values only. Use the operating system settings or your shell profile for persistent values."
+                               Classes="section-copy" Margin="0" IsVisible="{Binding !CanPersistEnvironmentVariables}"/>
+                </StackPanel>
+            </Border>
+
+            <Border Classes="card">
+                <StackPanel Spacing="14">
+                    <WrapPanel ItemSpacing="8" LineSpacing="8">
+                        <TextBlock Text="App and release track" Classes="section-title" VerticalAlignment="Center"/>
+                        <Button Classes="compact-icon" Command="{Binding RefreshTracksCommand}"
+                                ToolTip.Tip="Refresh release tracks" AutomationProperties.Name="Refresh release tracks">
+                            <PathIcon Data="M17.65 6.35A7.95 7.95 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                        </Button>
+                    </WrapPanel>
+                    <Border Classes="badge" HorizontalAlignment="Left"
+                            Background="{DynamicResource StatusSuccessBackgroundColor}"
+                            BorderBrush="{DynamicResource StatusSuccessBorderColor}"
+                            IsVisible="{Binding IsReadyToSubmit}">
+                        <TextBlock Text="Ready to submit" Foreground="{DynamicResource StatusSuccessTextColor}" FontWeight="SemiBold"/>
+                    </Border>
+                    <TextBlock Text="{Binding OutputDirectoryLabel}" Classes="section-copy" TextTrimming="CharacterEllipsis"
+                               ToolTip.Tip="{Binding OutputDirectory}"/>
+                    <TextBlock Text="No .aab found yet. Build and publish will create one from the current Android output."
+                               Classes="section-copy" IsVisible="{Binding !IsAabReady}" Margin="0"/>
+                    <TextBlock Text="{Binding BuildSummary}" Classes="section-copy" Margin="0"/>
+                    <TextBlock Text="{Binding ArtifactValidationSummary}" Classes="section-copy" Margin="0"/>
+                    <TextBlock Text="{Binding ReadinessDetail}" Classes="section-copy" Margin="0"
+                               Foreground="{DynamicResource StatusWarningTextColor}" IsVisible="{Binding IsUploadKeyRequired}"/>
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <StackPanel Spacing="3">
+                            <TextBlock Text="Android upload key" FontSize="12" FontWeight="SemiBold"/>
+                            <TextBlock Text="Create and inspect the Play upload key from the Signing workspace." Classes="section-copy" Margin="0"/>
+                        </StackPanel>
+                        <Button Grid.Column="1" Classes="compact-icon" Command="{Binding OpenSigningCommand}"
+                                ToolTip.Tip="Open Signing" AutomationProperties.Name="Open Signing">
+                            <PathIcon Data="M19.43 12.98c.04-.32.07-.65.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.37-.31-.59-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65A.49.49 0 0 0 14 2h-4c-.25 0-.45.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1a.49.49 0 0 0-.59.22l-2 3.46c-.12.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65a.49.49 0 0 0-.12.64l2 3.46c.12.22.37.31.59.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.04.24.24.42.49.42h4c.25 0 .45-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.22.08.47 0 .59-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5z"/>
+                        </Button>
+                    </Grid>
+                    <WrapPanel ItemSpacing="16" LineSpacing="8">
+                        <StackPanel Spacing="5" MinWidth="160" MaxWidth="360">
+                            <TextBlock Text="Package" FontSize="12" FontWeight="SemiBold"/>
+                            <TextBox Text="{Binding PackageId}" IsReadOnly="True"/>
+                        </StackPanel>
+                        <StackPanel Spacing="5" MinWidth="180" MaxWidth="280">
+                            <TextBlock Text="Version" FontSize="12" FontWeight="SemiBold"/>
+                            <TextBox Text="{Binding VersionLabel}" IsReadOnly="True"/>
+                        </StackPanel>
+                    </WrapPanel>
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="Release track" FontSize="12" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding ReleaseReadiness}" Classes="section-copy" Margin="0"/>
+                        <TextBlock Text="{Binding TrackLabel}" Classes="section-copy" Margin="0"/>
+                        <TextBlock Text="{Binding TrackStatusLabel}" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}" Margin="0"/>
+                        <ComboBox ItemsSource="{Binding Tracks}" SelectedItem="{Binding SelectedTrack}" HorizontalAlignment="Stretch">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="models:GooglePlayTrackInfo">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{Binding Status}" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <Border Classes="card">
+                <StackPanel Spacing="14">
+                    <TextBlock Text="Release" Classes="section-title"/>
+                    <TextBlock Text="Release name and notes are required before submission."
+                               Classes="section-copy" Foreground="{DynamicResource StatusWarningTextColor}"
+                               IsVisible="{Binding !IsReleaseReady}" Margin="0"/>
+                    <WrapPanel ItemSpacing="16" LineSpacing="8">
+                        <StackPanel Spacing="6" MinWidth="160" MaxWidth="420">
+                            <TextBlock Text="Release name" FontSize="12" FontWeight="SemiBold"/>
+                            <TextBox Text="{Binding ReleaseName}"/>
+                        </StackPanel>
+                        <StackPanel Spacing="6" MinWidth="150" MaxWidth="220">
+                            <TextBlock Text="Notes language" FontSize="12" FontWeight="SemiBold"/>
+                            <TextBox Text="{Binding ReleaseNotesLanguage}" PlaceholderText="en-US"/>
+                        </StackPanel>
+                    </WrapPanel>
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="Release notes" FontSize="12" FontWeight="SemiBold"/>
+                        <TextBox Text="{Binding ReleaseNotes}" AcceptsReturn="True" TextWrapping="Wrap"
+                                 MinHeight="110" PlaceholderText="What changed in this release?"/>
+                    </StackPanel>
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Rollout" FontSize="12" FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding RolloutLabel}" Classes="section-copy" Margin="0"/>
+                        </StackPanel>
+                        <NumericUpDown Grid.Column="1" Value="{Binding RolloutPercentage}" Minimum="1" Maximum="100"
+                                       FormatString="0" Width="130" IsEnabled="{Binding IsProductionRolloutEnabled}"
+                                       ToolTip.Tip="Percentage of eligible production users"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Classes="card">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Publish" Classes="section-title"/>
+                    <TextBlock Text="{Binding Activity}" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondaryColor}"/>
+                    <ProgressBar Value="{Binding ProgressValue}" IsVisible="{Binding IsProgressVisible}" Minimum="0" Maximum="100"/>
+                    <WrapPanel ItemSpacing="10" LineSpacing="10">
+                        <Button Content="Build and publish" Classes="primary" Command="{Binding PublishCommand}" MinWidth="180"/>
+                        <Button Classes="compact-icon" Command="{Binding CancelCommand}" IsVisible="{Binding IsProgressVisible}"
+                                ToolTip.Tip="Cancel publishing" AutomationProperties.Name="Cancel publishing">
+                            <PathIcon Data="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.3 9.17 12 2.89 5.71 4.3 4.3l6.29 6.29 6.29-6.29z"/>
+                        </Button>
+                        <Button Content="Check status" Command="{Binding CheckStatusCommand}"/>
+                        <Button Content="Open Play Console" Command="{Binding OpenPlayConsoleCommand}"/>
+                    </WrapPanel>
+                    <TextBlock Text="Production always asks for final confirmation." FontSize="11" Foreground="{DynamicResource TextTertiaryColor}"/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+</UserControl>

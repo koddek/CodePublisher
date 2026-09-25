@@ -4,7 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Input.Platform;
 using Avalonia.Media.Imaging;
 using Avalonia.VisualTree;
-namespace DotNetAppPublisher.Services;
+namespace DotNetAppPublisher.Features.Publishing.Capture;
 
 public class AvaloniaScreenshotService : IScreenshotService
 {

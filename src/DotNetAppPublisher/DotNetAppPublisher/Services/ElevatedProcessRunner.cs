@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using DotNetAppPublisher.Features.Shared.Process;
 
 namespace DotNetAppPublisher.Services;
 
@@ -116,6 +117,8 @@ public static class ElevatedProcessRunner
         Action<string> writeOutput,
         CancellationToken cancellationToken)
     {
+        ElevatedProcessSecurity.EnsureSafeEnvironment(environment);
+
         if (OperatingSystem.IsMacOS())
         {
             return await RunElevatedMacAsync(fileName, arguments, workingDirectory, environment, writeOutput, cancellationToken);
@@ -176,44 +179,18 @@ public static class ElevatedProcessRunner
         script.AppendLine("EXIT_CODE=$?");
         script.AppendLine($"printf '\\n__EXIT_CODE__:%s\\n' \"$EXIT_CODE\" >> {EscapeForShell(logFile)}");
 
-        await File.WriteAllTextAsync(scriptFile, script.ToString(), cancellationToken);
-        await File.WriteAllTextAsync(logFile, string.Empty, cancellationToken);
-
-        // Make script executable
-        if (OperatingSystem.IsMacOS() || OperatingSystem.IsLinux())
-        {
-            try
-            {
-                File.SetUnixFileMode(
-                    scriptFile,
-                    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
-                    UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
-                    UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
-            }
-            catch
-            {
-                // Fallback to chmod via shell
-                try
-                {
-                    var chmodInfo = new ProcessStartInfo("chmod")
-                    {
-                        UseShellExecute = false,
-                        CreateNoWindow = true
-                    };
-                    chmodInfo.ArgumentList.Add("+x");
-                    chmodInfo.ArgumentList.Add(scriptFile);
-                    using var chmod = Process.Start(chmodInfo);
-                    if (chmod is not null)
-                    {
-                        await chmod.WaitForExitAsync(cancellationToken);
-                    }
-                }
-                catch
-                {
-                    // best effort
-                }
-            }
-        }
+        await ElevatedProcessSecurity.WriteOwnerOnlyAsync(
+            scriptFile,
+            script.ToString(),
+            executable: true,
+            cancellationToken);
+        await ElevatedProcessSecurity.WriteOwnerOnlyAsync(
+            logFile,
+            string.Empty,
+            executable: false,
+            cancellationToken);
+        ElevatedProcessSecurity.RestrictToOwner(logFile, executable: false);
+        ElevatedProcessSecurity.RestrictToOwner(scriptFile, executable: true);
 
         var escapedScript = EscapeForAppleScript(scriptFile);
         var osascriptCommand = $"do shell script \"\\\"{escapedScript}\\\"\" with administrator privileges";

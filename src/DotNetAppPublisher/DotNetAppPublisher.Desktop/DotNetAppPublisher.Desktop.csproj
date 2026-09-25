@@ -14,7 +14,16 @@
         <ApplicationIcon>..\DotNetAppPublisher\Assets\dotnet-app-publisher.ico</ApplicationIcon>
     </PropertyGroup>
 
+    <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('WINDOWS'))">
+        <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('LINUX'))">
+        <RuntimeIdentifiers>linux-x64;linux-arm64</RuntimeIdentifiers>
+    </PropertyGroup>
+
     <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+        <RuntimeIdentifiers>osx-arm64;osx-x64</RuntimeIdentifiers>
         <UseAppHost>true</UseAppHost>
         <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
         <OutputPath>bin/$(Configuration)/DotNetAppPublisher.app/Contents/MacOS/</OutputPath>
@@ -66,7 +75,13 @@
         <Copy SourceFiles="..\DotNetAppPublisher\Assets\dotnet-app-publisher.icns" DestinationFiles="$(AppResourcesDir)/dotnet-app-publisher.icns"/>
     </Target>
 
-    <Target Name="CreateMacAppBundleAfterPublish" AfterTargets="Publish" Condition="$([MSBuild]::IsOSPlatform('OSX')) AND '$(SelfContained)' == 'true'">
+    <!--
+      The bundle body is shared by two anchors because the NativeAOT publish path
+      replaces the apphost in $(PublishDir) from CopyNativeBinary, which runs
+      after Publish. Anchoring only on Publish copies the framework-dependent
+      apphost into the .app before the native binary exists.
+    -->
+    <Target Name="CreateMacAppBundle" Condition="$([MSBuild]::IsOSPlatform('OSX')) AND '$(SelfContained)' == 'true'">
         <PropertyGroup>
             <AppBundleDir>$(PublishDir)DotNetAppPublisher.app</AppBundleDir>
             <AppContentsDir>$(AppBundleDir)/Contents</AppContentsDir>
@@ -81,5 +96,23 @@
         <Copy SourceFiles="@(PublishFiles)" DestinationFolder="$(AppMacOsDir)/%(RecursiveDir)" SkipUnchangedFiles="true" />
         <Copy SourceFiles="macos/Info.plist" DestinationFiles="$(AppContentsDir)/Info.plist"/>
         <Copy SourceFiles="..\DotNetAppPublisher\Assets\dotnet-app-publisher.icns" DestinationFiles="$(AppResourcesDir)/dotnet-app-publisher.icns"/>
+    </Target>
+
+    <Target Name="CreateMacAppBundleAfterPublish"
+            AfterTargets="Publish"
+            DependsOnTargets="CreateMacAppBundle"
+            Condition="'$(PublishAot)' != 'true' AND '$(_MacAppBundleCreated)' != 'true' AND $([MSBuild]::IsOSPlatform('OSX')) AND '$(SelfContained)' == 'true'">
+        <PropertyGroup>
+            <_MacAppBundleCreated>true</_MacAppBundleCreated>
+        </PropertyGroup>
+    </Target>
+
+    <Target Name="CreateMacAppBundleAfterNativePublish"
+            AfterTargets="CopyNativeBinary"
+            DependsOnTargets="CreateMacAppBundle"
+            Condition="'$(PublishAot)' == 'true' AND $([MSBuild]::IsOSPlatform('OSX')) AND '$(SelfContained)' == 'true'">
+        <PropertyGroup>
+            <_MacAppBundleCreated>true</_MacAppBundleCreated>
+        </PropertyGroup>
     </Target>
 </Project>

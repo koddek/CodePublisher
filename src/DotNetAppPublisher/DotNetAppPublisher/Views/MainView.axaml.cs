@@ -2,7 +2,11 @@ using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
+using DotNetAppPublisher.Features.Publishing.Capture;
 using DotNetAppPublisher.Services;
 using DotNetAppPublisher.ViewModels;
 
@@ -16,6 +20,86 @@ public partial class MainView : UserControl
     {
         InitializeComponent();
         DataContextChanged += OnDataContextChanged;
+        Loaded += (_, _) =>
+        {
+            ApplyResponsiveLayout(Bounds.Width);
+            Dispatcher.UIThread.Post(() => ApplyResponsiveLayout(Bounds.Width), DispatcherPriority.Loaded);
+        };
+    }
+
+    private void OnSizeChanged(object? sender, SizeChangedEventArgs e)
+    {
+        ApplyResponsiveLayout(e.NewSize.Width);
+    }
+
+    private void ApplyResponsiveLayout(double width)
+    {
+        if (width <= 0 || this.FindControl<Grid>("MasterDetailGrid") is not { } masterDetail)
+        {
+            return;
+        }
+
+        var navigationWidth = width switch
+        {
+            < 620 => 64,
+            < 900 => 144,
+            < 1180 => 180,
+            _ => 220
+        };
+        masterDetail.ColumnDefinitions[0].Width = new GridLength(navigationWidth);
+        masterDetail.ColumnDefinitions[1].Width = new GridLength(1, GridUnitType.Star);
+
+        var stackedHeader = width < 980;
+        if (this.FindControl<StackPanel>("HeaderIdentity") is { } headerIdentity)
+        {
+            headerIdentity.Width = stackedHeader ? Math.Max(220, width - 32) : double.NaN;
+            headerIdentity.MaxWidth = stackedHeader ? double.PositiveInfinity : 640;
+        }
+
+        if (this.FindControl<StackPanel>("HeaderActions") is { } headerActions)
+        {
+            headerActions.Orientation = Avalonia.Layout.Orientation.Horizontal;
+            headerActions.HorizontalAlignment = stackedHeader
+                ? Avalonia.Layout.HorizontalAlignment.Left
+                : Avalonia.Layout.HorizontalAlignment.Right;
+            headerActions.Margin = stackedHeader ? new Thickness(0, 4, 0, 0) : new Thickness(12, 0, 0, 0);
+        }
+
+        if (this.FindControl<Border>("HeaderSurface") is { } headerSurface)
+        {
+            headerSurface.Padding = width < 620 ? new Thickness(12, 8) : new Thickness(16, 10);
+        }
+
+        if (this.FindControl<StackPanel>("DetailContent") is { } detailContent)
+        {
+            detailContent.Margin = new Thickness(width < 760 ? 12 : 20);
+        }
+
+        if (this.FindControl<TextBlock>("StatusMessage") is { } statusMessage)
+        {
+            statusMessage.MaxWidth = width < 620 ? Math.Max(100, width - 170) : 700;
+        }
+
+        if (this.FindControl<TextBlock>("ConfigureHeader") is { } configureHeader)
+        {
+            configureHeader.IsVisible = width >= 620;
+        }
+
+        if (this.FindControl<ListBox>("NavListBox") is { } navList)
+        {
+            var showLabels = width >= 900;
+            foreach (var label in navList.GetVisualDescendants()
+                         .OfType<TextBlock>()
+                         .Where(label => label.Classes.Contains("nav-label")))
+            {
+                label.IsVisible = showLabels;
+            }
+
+            navList.Margin = new Thickness(width < 620 ? 4 : 8, 0, width < 620 ? 4 : 8, 8);
+            navList.HorizontalAlignment = width < 620
+                ? Avalonia.Layout.HorizontalAlignment.Center
+                : Avalonia.Layout.HorizontalAlignment.Stretch;
+        }
     }
 
     private void OnDataContextChanged(object? sender, EventArgs e)

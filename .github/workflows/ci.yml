@@ -29,7 +29,52 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Restore
-        run: dotnet restore DotNetAppPublisher.slnx
+        run: dotnet restore DotNetAppPublisher.slnx -p:Configuration=Release
 
       - name: Build
         run: dotnet build DotNetAppPublisher.slnx --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet run --project tests/DotNetAppPublisher.Tests/DotNetAppPublisher.Tests.csproj --configuration Release --no-build -- --disable-logo --progress off
+
+      # Publish is verified because the macOS app-bundle target and the NativeAOT
+      # output path are not exercised by `dotnet build`.
+      - name: Publish (self-contained, Windows)
+        if: runner.os == 'Windows'
+        run: >
+          dotnet publish src/DotNetAppPublisher/DotNetAppPublisher.Desktop/DotNetAppPublisher.Desktop.csproj
+          --configuration Release --no-restore --self-contained true
+          -p:PublishTrimmed=false -p:PublishAot=false -p:PublishReadyToRun=false
+          -o "${{ runner.temp }}/publish-scd"
+
+      # NativeAOT must not use --no-restore: the ILCompiler package is only added
+      # to the assets file by a restore that sees PublishAot, and a stale assets file
+      # makes the publish silently fall back to a trimmed self-contained build.
+      - name: Publish (NativeAOT, Linux/macOS)
+        if: runner.os != 'Windows'
+        run: >
+          dotnet publish src/DotNetAppPublisher/DotNetAppPublisher.Desktop/DotNetAppPublisher.Desktop.csproj
+          --configuration Release --self-contained true
+          -p:PublishTrimmed=false -p:PublishAot=true -p:PublishReadyToRun=false -p:PublishSingleFile=false
+          -o "${{ runner.temp }}/publish-aot"
+
+      - name: Verify NativeAOT output
+        if: runner.os != 'Windows'
+        run: |
+          out="${{ runner.temp }}/publish-aot"
+          test -f "$out/DotNetAppPublisher.Desktop"
+          # A NativeAOT publish has no managed entry assembly; a silent fallback to
+          # a trimmed self-contained publish would leave it behind.
+          test ! -f "$out/DotNetAppPublisher.Desktop.dll"
+
+      - name: Verify macOS bundle executable matches the publish output
+        if: runner.os == 'macOS'
+        run: |
+          out="${{ runner.temp }}/publish-aot"
+          published="$out/DotNetAppPublisher.Desktop"
+          bundled="$out/DotNetAppPublisher.app/Contents/MacOS/DotNetAppPublisher.Desktop"
+          test -f "$published"
+          test -f "$bundled"
+          # A stale bundle would hold the framework-dependent apphost instead of
+          # the NativeAOT binary that sits at the publish root.
+          cmp -s "$published" "$bundled"

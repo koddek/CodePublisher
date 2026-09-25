@@ -2,19 +2,19 @@
   <!-- ViewModels: preserve all members because XAML binds to generated properties/commands -->
   <assembly fullname="DotNetAppPublisher">
     <type fullname="DotNetAppPublisher.ViewModels.MainViewModel" preserve="all" />
+    <type fullname="DotNetAppPublisher.Features.GooglePlay.GooglePlayViewModel" preserve="all" />
     <type fullname="DotNetAppPublisher.ViewModels.ViewModelBase" preserve="all" />
 
     <!-- Views: Avalonia XAML loader needs type metadata at runtime -->
     <type fullname="DotNetAppPublisher.Views.MainView" preserve="all" />
+    <type fullname="DotNetAppPublisher.Views.GooglePlay.GooglePlayView" preserve="all" />
     <type fullname="DotNetAppPublisher.Views.MainWindow" preserve="all" />
     <type fullname="DotNetAppPublisher.Views.ScreenshotDialog" preserve="all" />
 
     <!-- Services: AndroidDeviceInfo.DisplayName is bound in DataTemplate -->
-    <type fullname="DotNetAppPublisher.Services.AndroidDeviceInfo" preserve="all" />
+    <type fullname="DotNetAppPublisher.Features.Deployment.Android.AndroidDeviceInfo" preserve="all" />
     <type fullname="DotNetAppPublisher.Services.PublisherService" preserve="all" />
     <type fullname="DotNetAppPublisher.Services.DesktopInteractionService" preserve="all" />
-    <type fullname="DotNetAppPublisher.Services.PlatformDefaults" preserve="all" />
-    <type fullname="DotNetAppPublisher.Services.PublishOptionRules" preserve="all" />
     <type fullname="DotNetAppPublisher.ViewModels.NavItem" preserve="all" />
     <type fullname="DotNetAppPublisher.ViewModels.PublishSection" preserve="all" />
 

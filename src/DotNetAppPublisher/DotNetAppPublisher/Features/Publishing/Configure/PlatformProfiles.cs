@@ -1,4 +1,4 @@
-namespace DotNetAppPublisher.Services;
+namespace DotNetAppPublisher.Features.Publishing.Configure;
 
 public sealed record PlatformProfile(
     string TargetFramework,
@@ -27,13 +27,13 @@ public sealed record PlatformProfile(
     string SignMode,
     string Configuration);
 
-public static class PlatformDefaults
+public static class PlatformProfiles
 {
     public static PlatformProfile GetDefaults(string publishPlatform)
     {
         return publishPlatform switch
         {
-            PublisherService.AndroidPlatform => new PlatformProfile(
+            PublishPlatforms.Android => new PlatformProfile(
                 TargetFramework: "net10.0-android",
                 RuntimeIdentifier: "android-arm64",
                 SelfContained: true,
@@ -60,7 +60,7 @@ public static class PlatformDefaults
                 SignMode: "Auto",
                 Configuration: "Release"),
 
-            PublisherService.MacOsPlatform => new PlatformProfile(
+            PublishPlatforms.MacOs => new PlatformProfile(
                 TargetFramework: "net10.0",
                 RuntimeIdentifier: "osx-arm64",
                 SelfContained: true,
@@ -87,7 +87,7 @@ public static class PlatformDefaults
                 SignMode: "Auto",
                 Configuration: "Release"),
 
-            PublisherService.WindowsPlatform => new PlatformProfile(
+            PublishPlatforms.Windows => new PlatformProfile(
                 TargetFramework: "net10.0-windows",
                 RuntimeIdentifier: "win-x64",
                 SelfContained: true,
@@ -114,7 +114,7 @@ public static class PlatformDefaults
                 SignMode: "Auto",
                 Configuration: "Release"),
 
-            PublisherService.IosPlatform => new PlatformProfile(
+            PublishPlatforms.Ios => new PlatformProfile(
                 TargetFramework: "net10.0-ios",
                 RuntimeIdentifier: "ios-arm64",
                 SelfContained: true,
@@ -141,7 +141,7 @@ public static class PlatformDefaults
                 SignMode: "Auto",
                 Configuration: "Release"),
 
-            PublisherService.LinuxPlatform => new PlatformProfile(
+            PublishPlatforms.Linux => new PlatformProfile(
                 TargetFramework: "net10.0",
                 RuntimeIdentifier: "linux-x64",
                 SelfContained: true,

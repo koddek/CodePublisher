@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input.Platform;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -9,6 +10,12 @@ namespace DotNetAppPublisher.Services;
 
 public sealed class DesktopInteractionService
 {
+    private enum AlertKind
+    {
+        Info,
+        Error
+    }
+
     private Window? _window;
 
     public Window Window =>
@@ -49,12 +56,12 @@ public sealed class DesktopInteractionService
 
     public Task ShowInfoAsync(string title, string message)
     {
-        return ShowDialogAsync(title, message);
+        return ShowDialogAsync(title, message, AlertKind.Info);
     }
 
     public Task ShowErrorAsync(string title, string message)
     {
-        return ShowDialogAsync(title, message);
+        return ShowDialogAsync(title, message, AlertKind.Error);
     }
 
     public async Task<bool> ConfirmAsync(string title, string message)
@@ -62,54 +69,26 @@ public sealed class DesktopInteractionService
         var confirmButton = new Button
         {
             Content = "Continue",
-            MinWidth = 96,
-            HorizontalAlignment = HorizontalAlignment.Right
+            MinWidth = 96
         };
+        confirmButton.Classes.Add("primary");
+
         var cancelButton = new Button
         {
             Content = "Cancel",
-            MinWidth = 96,
+            MinWidth = 96
+        };
+
+        var actions = new WrapPanel
+        {
+            ItemSpacing = 8,
+            LineSpacing = 8,
             HorizontalAlignment = HorizontalAlignment.Right
         };
+        actions.Children.Add(cancelButton);
+        actions.Children.Add(confirmButton);
 
-        var dialog = new Window
-        {
-            Title = title,
-            Width = 520,
-            MinWidth = 420,
-            SizeToContent = SizeToContent.Height,
-            CanResize = false,
-            ShowInTaskbar = false,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Content = new Border
-            {
-                Padding = new Thickness(20),
-                Child = new StackPanel
-                {
-                    Spacing = 16,
-                    Children =
-                    {
-                        new SelectableTextBlock
-                        {
-                            Text = message,
-                            TextWrapping = TextWrapping.Wrap
-                        },
-                        new StackPanel
-                        {
-                            Orientation = Avalonia.Layout.Orientation.Horizontal,
-                            Spacing = 8,
-                            HorizontalAlignment = HorizontalAlignment.Right,
-                            Children =
-                            {
-                                cancelButton,
-                                confirmButton
-                            }
-                        }
-                    }
-                }
-            }
-        };
-
+        var dialog = CreateDialogWindow(title, CreateDialogContent(title, message, actions, AlertKind.Info));
         var confirmed = false;
         confirmButton.Click += (_, _) =>
         {
@@ -148,43 +127,94 @@ public sealed class DesktopInteractionService
         return await Window.StorageProvider.TryGetFolderFromPathAsync(parent);
     }
 
-    private async Task ShowDialogAsync(string title, string message)
+    private async Task ShowDialogAsync(string title, string message, AlertKind kind)
     {
-        var button = new Button
+        var closeButton = new Button
         {
             Content = "Close",
-            HorizontalAlignment = HorizontalAlignment.Right,
-            MinWidth = 96
+            MinWidth = 96,
+            HorizontalAlignment = HorizontalAlignment.Right
         };
+        closeButton.Classes.Add("primary");
 
-        var dialog = new Window
+        var dialog = CreateDialogWindow(title, CreateDialogContent(title, message, closeButton, kind));
+        closeButton.Click += (_, _) => dialog.Close();
+        await dialog.ShowDialog(Window);
+    }
+
+    private Window CreateDialogWindow(string title, Control content)
+    {
+        var ownerWidth = Window.Bounds.Width;
+        var dialogWidth = double.IsFinite(ownerWidth)
+            ? Math.Clamp(ownerWidth - 32, 320, 520)
+            : 520;
+
+        return new Window
         {
             Title = title,
-            Width = 520,
-            MinWidth = 420,
+            Width = dialogWidth,
+            MinWidth = 320,
+            MaxWidth = 680,
             SizeToContent = SizeToContent.Height,
-            CanResize = false,
+            CanResize = true,
+            ShowInTaskbar = false,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Content = new Border
+            Content = content
+        };
+    }
+
+    private static Control CreateDialogContent(string title, string message, Control actions, AlertKind kind)
+    {
+        var header = new TextBlock
+        {
+            Text = title,
+            FontSize = 20,
+            FontWeight = FontWeight.SemiBold,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 4)
+        };
+        header.Classes.Add(kind == AlertKind.Error ? "alert-error" : "alert-info");
+
+        var details = new SelectableTextBlock
+        {
+            Text = message,
+            TextWrapping = TextWrapping.Wrap,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 4, 0, 12)
+        };
+        var detailsHost = new Border
+        {
+            MinHeight = 96,
+            MaxHeight = 260,
+            VerticalAlignment = VerticalAlignment.Stretch,
+            Child = new ScrollViewer
             {
-                Padding = new Thickness(20),
-                Child = new StackPanel
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                Content = new Border
                 {
-                    Spacing = 16,
-                    Children =
-                    {
-                        new SelectableTextBlock
-                        {
-                            Text = message,
-                            TextWrapping = TextWrapping.Wrap
-                        },
-                        button
-                    }
+                    MinHeight = 96,
+                    Child = details
                 }
             }
         };
 
-        button.Click += (_, _) => dialog.Close();
-        await dialog.ShowDialog(Window);
+        var content = new Grid
+        {
+            RowDefinitions = new RowDefinitions("Auto,*,Auto"),
+            ColumnDefinitions = new ColumnDefinitions("*")
+        };
+        Grid.SetRow(header, 0);
+        Grid.SetRow(detailsHost, 1);
+        Grid.SetRow(actions, 2);
+        content.Children.Add(header);
+        content.Children.Add(detailsHost);
+        content.Children.Add(actions);
+
+        return new Border
+        {
+            Padding = new Thickness(24),
+            Child = content
+        };
     }
 }

@@ -6,24 +6,25 @@ using System.Xml.Linq;
 using Avalonia.Controls;
 using Avalonia.Platform;
 using Avalonia.Threading;
+using DotNetAppPublisher.Features.Deployment.Android;
+using DotNetAppPublisher.Features.Deployment.Ios;
+using DotNetAppPublisher.Features.Publishing.Artifacts;
+using DotNetAppPublisher.Features.Publishing.Capture;
+using DotNetAppPublisher.Features.Publishing.Build;
+using DotNetAppPublisher.Features.Publishing.Configure;
+using DotNetAppPublisher.Features.Publishing.Inspect;
+using DotNetAppPublisher.Features.Publishing.Process;
 using DotNetAppPublisher.Models;
 
 namespace DotNetAppPublisher.Services;
 
-public sealed record AndroidDeviceInfo(string Serial, string Name, string Type, bool IsRunning)
-{
-    public string DisplayName => IsRunning
-        ? $"{Name} ({Serial})"
-        : $"{Name} (Offline)";
-}
-
 public sealed class PublisherService
 {
-    public const string AndroidPlatform = "Android";
-    public const string MacOsPlatform = "macOS";
-    public const string WindowsPlatform = "Windows";
-    public const string IosPlatform = "iOS";
-    public const string LinuxPlatform = "Linux";
+    public const string AndroidPlatform = PublishPlatforms.Android;
+    public const string MacOsPlatform = PublishPlatforms.MacOs;
+    public const string WindowsPlatform = PublishPlatforms.Windows;
+    public const string IosPlatform = PublishPlatforms.Ios;
+    public const string LinuxPlatform = PublishPlatforms.Linux;
 
     private const string MacAppIconFileName = "dotnet-app-publisher";
     private const string MacAppIconAssetPath = "avares://DotNetAppPublisher/Assets/dotnet-app-publisher.icns";
@@ -35,22 +36,15 @@ public sealed class PublisherService
         "/usr/local/bin/dotnet"
     ];
 
-    private static readonly string[] EmulatorCandidates =
-    [
-        "/Users/omoi/Library/Android/sdk/emulator/emulator",
-        "/Users/omoi/Android/Sdk/emulator/emulator",
-        "/opt/homebrew/bin/emulator",
-        "/usr/local/bin/emulator"
-    ];
+    private readonly AndroidDeploymentService _androidDeploymentService;
+    private readonly IosSimulatorService _iosSimulatorService;
 
     public PublisherService()
     {
         DotnetPath = ResolveExecutable("dotnet", DotnetCandidates);
 
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var androidHome = Environment.GetEnvironmentVariable("ANDROID_HOME")
-            ?? Environment.GetEnvironmentVariable("ANDROID_SDK_ROOT")
-            ?? string.Empty;
+        var androidHome = GetAndroidHome();
         var androidCandidates = new List<string>();
         if (!string.IsNullOrWhiteSpace(androidHome))
         {
@@ -74,7 +68,16 @@ public sealed class PublisherService
             "/opt/homebrew/bin/emulator",
             "/usr/local/bin/emulator",
             .. androidCandidates.Where(p => p.EndsWith("emulator", StringComparison.OrdinalIgnoreCase))
-        ]) ?? ResolveExecutable("emulator", EmulatorCandidates);
+        ]);
+
+        _androidDeploymentService = new AndroidDeploymentService(
+            AdbPath,
+            EmulatorPath,
+            () => ApkSignerPath,
+            FindBestApk);
+        _iosSimulatorService = new IosSimulatorService(
+            ResolveExecutable("xcrun", ["/usr/bin/xcrun"]),
+            FindNewestAppBundle);
     }
 
     public string? DotnetPath { get; }
@@ -102,11 +105,11 @@ public sealed class PublisherService
 
     public async Task<ProjectMetadata> LoadProjectMetadataAsync(string projectDirectory, string configuration, string targetFramework, string runtimeIdentifier, string publishPlatform)
     {
-        var projectDirectoryPath = CreateProjectDirectory(projectDirectory);
-        var projectFile = FindProjectFile(projectDirectoryPath)
+        var projectDirectoryPath = ProjectInspector.CreateProjectDirectory(projectDirectory);
+        var projectFile = ProjectInspector.FindProjectFile(projectDirectoryPath)
             ?? throw new InvalidOperationException($"No .csproj found in {projectDirectoryPath}.");
         var projectName = Path.GetFileNameWithoutExtension(projectFile.Name);
-        var detectedTargetFramework = ReadTargetFramework(projectFile, publishPlatform);
+        var detectedTargetFramework = ProjectInspector.ReadTargetFramework(projectFile, publishPlatform);
         var effectiveTargetFramework = detectedTargetFramework ?? targetFramework;
         var outputLayout = await ResolveProjectOutputLayoutAsync(
             projectFile,
@@ -120,67 +123,47 @@ public sealed class PublisherService
             outputLayout.DefaultOutputDirectory,
             GetProjectIdentifier(projectFile, projectName, publishPlatform),
             detectedTargetFramework,
-            ReadVersion(projectFile, publishPlatform, isDisplay: true),
-            ReadVersion(projectFile, publishPlatform, isDisplay: false),
-            SupportsInternalVersion(publishPlatform),
+            ProjectInspector.ReadVersion(projectFile, publishPlatform, isDisplay: true),
+            ProjectInspector.ReadVersion(projectFile, publishPlatform, isDisplay: false),
+            ProjectInspector.SupportsInternalVersion(publishPlatform),
             outputLayout);
     }
 
     public PublishCommandBundle BuildPublishCommandBundle(PublishConfiguration configuration)
     {
-        var projectDirectory = CreateProjectDirectory(configuration.ProjectDirectory);
-        var projectFile = FindProjectFile(projectDirectory)
+        var projectDirectory = ProjectInspector.CreateProjectDirectory(configuration.ProjectDirectory);
+        var projectFile = ProjectInspector.FindProjectFile(projectDirectory)
             ?? throw new InvalidOperationException($"No .csproj found in {projectDirectory}.");
 
-        ValidateProjectTargetFramework(projectFile, configuration.TargetFramework);
+        ProjectInspector.ValidateProjectTargetFramework(projectFile, configuration.TargetFramework);
 
-        var isAndroid = IsAndroidPlatform(configuration.PublishPlatform);
-        var isMacOs = IsMacOsPlatform(configuration.PublishPlatform);
-        var isWindows = IsWindowsPlatform(configuration.PublishPlatform);
-        var isIos = IsIosPlatform(configuration.PublishPlatform);
-        var isLinux = IsLinuxPlatform(configuration.PublishPlatform);
-        var formats = isAndroid ? GetSelectedFormats(configuration) : [];
-        if (isAndroid && formats.Count == 0)
-        {
-            throw new InvalidOperationException("Select at least one package format: APK, AAB, or both.");
-        }
+        ProjectInspector.ValidateRuntimeForPlatform(configuration);
 
-        ValidateRuntimeForPlatform(configuration);
-
-        if (DotnetPath is null)
-        {
-            throw new InvalidOperationException("`dotnet` was not found. Install the .NET SDK or add dotnet to PATH.");
-        }
+        var dotnetPath = DotnetPath
+            ?? throw new InvalidOperationException("`dotnet` was not found. Install the .NET SDK or add dotnet to PATH.");
 
         var outputDirectory = string.IsNullOrWhiteSpace(configuration.OutputDirectory)
-            ? GetDefaultOutputDirectory(projectDirectory, configuration.Configuration, configuration.TargetFramework, configuration.RuntimeIdentifier)
+            ? ProjectInspector.GetDefaultOutputDirectory(projectDirectory, configuration.Configuration, configuration.TargetFramework, configuration.RuntimeIdentifier)
             : configuration.OutputDirectory.Trim();
 
-        var customTrimProperty = DetectCustomTrimProperty(projectFile);
-        var command = isAndroid
-            ? BuildAndroidCommand(configuration, projectFile.FullName, customTrimProperty)
-            : isMacOs
-                ? BuildMacOsCommand(configuration, projectFile.FullName, customTrimProperty)
-                : isWindows
-                    ? BuildWindowsCommand(configuration, projectFile.FullName, customTrimProperty)
-                    : isIos
-                        ? BuildIosCommand(configuration, projectFile.FullName, customTrimProperty)
-                        : isLinux
-                            ? BuildLinuxCommand(configuration, projectFile.FullName, customTrimProperty)
-                            : throw new InvalidOperationException($"Unknown publish platform `{configuration.PublishPlatform}`.");
-
-        if (isAndroid)
-        {
-            command.Add($"-p:AndroidPackageFormats={string.Join("%3B", formats)}");
-        }
-
-        command.Add("-o");
-        command.Add(outputDirectory);
+        var customTrimProperty = ProjectInspector.DetectCustomTrimProperty(projectFile);
+        var command = PublishCommandBuilder.Build(
+            dotnetPath,
+            configuration,
+            projectFile.FullName,
+            outputDirectory,
+            customTrimProperty);
+        var baseline = PublishCommandBuilder.BuildBaseline(
+            dotnetPath,
+            configuration,
+            projectFile.FullName,
+            outputDirectory,
+            customTrimProperty);
 
         return new PublishCommandBundle(
             command,
-            MaskCommand(command),
-            MaskCommand(BuildBaselineCommand(configuration, projectFile.FullName, outputDirectory, customTrimProperty)),
+            PublishCommandBuilder.Mask(command),
+            PublishCommandBuilder.Mask(baseline),
             projectFile.FullName,
             outputDirectory);
     }
@@ -197,7 +180,7 @@ public sealed class PublisherService
         Func<string, Task<bool>>? confirmAsync)
     {
         var bundle = BuildPublishCommandBundle(configuration);
-        var projectDirectory = CreateProjectDirectory(configuration.ProjectDirectory);
+        var projectDirectory = ProjectInspector.CreateProjectDirectory(configuration.ProjectDirectory);
         var outputDirectory = new DirectoryInfo(bundle.OutputDirectory);
 
         writeOutput(Environment.NewLine + "=== Publish started ===" + Environment.NewLine);
@@ -210,7 +193,7 @@ public sealed class PublisherService
 
         await PrepareOutputFoldersAsync(configuration, projectDirectory, outputDirectory, writeOutput);
 
-        var (exitCode, publishOutput) = await RunPublishAsync(bundle, writeOutput, cancellationToken);
+        var (exitCode, publishOutput) = await RunPublishAsync(bundle, configuration, writeOutput, cancellationToken);
 
         // Credentials only when absolutely needed: a missing mobile workload fails with
         // NETSDK1147 / "workloads must be installed". Ask, elevate once, retry once.
@@ -222,7 +205,7 @@ public sealed class PublisherService
             if (restored)
             {
                 writeOutput(Environment.NewLine + "--- Retrying publish after workload restore ---" + Environment.NewLine);
-                (exitCode, publishOutput) = await RunPublishAsync(bundle, writeOutput, cancellationToken);
+                (exitCode, publishOutput) = await RunPublishAsync(bundle, configuration, writeOutput, cancellationToken);
             }
         }
 
@@ -300,12 +283,13 @@ public sealed class PublisherService
 
     private async Task<(int ExitCode, StringBuilder Output)> RunPublishAsync(
         PublishCommandBundle bundle,
+        PublishConfiguration configuration,
         Action<string> writeOutput,
         CancellationToken cancellationToken)
     {
         writeOutput($"--- Running: {bundle.PreviewText} ---{Environment.NewLine}");
         var output = new StringBuilder();
-        var exitCode = await RunProcessAsync(
+        var exitCode = await ProcessRunner.RunAsync(
             bundle.CommandArguments,
             text =>
             {
@@ -313,8 +297,23 @@ public sealed class PublisherService
                 writeOutput(text);
             },
             cancellationToken,
-            Path.GetDirectoryName(bundle.ProjectFilePath));
+            Path.GetDirectoryName(bundle.ProjectFilePath),
+            CreateSigningEnvironment(configuration));
         return (exitCode, output);
+    }
+
+    private static IReadOnlyDictionary<string, string>? CreateSigningEnvironment(PublishConfiguration configuration)
+    {
+        if (!string.Equals(configuration.SignMode.Trim(), "Sign", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return new Dictionary<string, string>
+        {
+            ["DOTNET_APP_PUBLISHER_KEYSTORE_PASSWORD"] = configuration.KeystorePassword,
+            ["DOTNET_APP_PUBLISHER_KEY_PASSWORD"] = configuration.KeyPassword
+        };
     }
 
     private static bool IsMissingWorkloadError(string publishOutput)
@@ -375,7 +374,7 @@ public sealed class PublisherService
         else
         {
             writeOutput($"--- Restoring workloads (dotnet workload restore) ---{Environment.NewLine}");
-            workloadExitCode = await RunProcessAsync(
+            workloadExitCode = await ProcessRunner.RunAsync(
                 [DotnetPath!, "workload", "restore", bundle.ProjectFilePath],
                 WriteWorkloadOutput,
                 cancellationToken,
@@ -438,205 +437,20 @@ public sealed class PublisherService
         Process.Start(xdgStartInfo);
     }
 
-    public async Task<string> InstallLatestApkAsync(PublishConfiguration configuration, string? deviceSerial, CancellationToken cancellationToken)
-    {
-        if (!IsAndroidPlatform(configuration.PublishPlatform))
-        {
-            throw new InvalidOperationException("Install APK is only available for Android projects.");
-        }
+    public Task<string> InstallLatestApkAsync(
+        PublishConfiguration configuration,
+        string? deviceSerial,
+        CancellationToken cancellationToken) =>
+        _androidDeploymentService.InstallLatestApkAsync(configuration, deviceSerial, cancellationToken);
 
-        var adbPath = AdbPath ?? throw new InvalidOperationException("`adb` was not found. Install Android platform-tools or add adb to PATH.");
+    public Task<string> UninstallAsync(string packageId, string? deviceSerial, CancellationToken cancellationToken) =>
+        _androidDeploymentService.UninstallAsync(packageId, deviceSerial, cancellationToken);
 
-        var targetDevice = !string.IsNullOrWhiteSpace(deviceSerial)
-            ? deviceSerial!.Trim()
-            : throw new InvalidOperationException("No device selected. Select a device first.");
+    public Task<string> LaunchAsync(string packageId, string? deviceSerial, CancellationToken cancellationToken) =>
+        _androidDeploymentService.LaunchAsync(packageId, deviceSerial, cancellationToken);
 
-        // Project is optional: publish folder + package id are enough to locate the APK.
-        string? projectNameHint = null;
-        if (!string.IsNullOrWhiteSpace(configuration.ProjectDirectory))
-        {
-            var projectDirectory = CreateProjectDirectory(configuration.ProjectDirectory);
-            projectNameHint = FindProjectFile(projectDirectory)?.Name is { } fileName
-                ? Path.GetFileNameWithoutExtension(fileName)
-                : null;
-        }
-
-        var outputDirectory = string.IsNullOrWhiteSpace(configuration.OutputDirectory)
-            ? string.IsNullOrWhiteSpace(configuration.ProjectDirectory)
-                ? throw new InvalidOperationException("No publish folder set. Set the Output Directory first, or select a project.")
-                : GetDefaultOutputDirectory(CreateProjectDirectory(configuration.ProjectDirectory), configuration.Configuration, configuration.TargetFramework, configuration.RuntimeIdentifier)
-            : configuration.OutputDirectory.Trim();
-
-        var apk = FindBestApk(outputDirectory, projectNameHint, configuration.PackageId)
-            ?? throw new InvalidOperationException($"No APK found in {outputDirectory}.");
-
-        await EnsureApkHasValidSignatureAsync(apk.FullName, cancellationToken);
-
-        var output = new StringBuilder();
-        var exitCode = await RunProcessAsync(
-            [adbPath, "-s", targetDevice, "install", "-r", apk.FullName],
-            text => output.Append(text),
-            cancellationToken);
-
-        var resultText = output.ToString();
-        if (exitCode != 0 && resultText.Contains("INSTALL_FAILED_UPDATE_INCOMPATIBLE", StringComparison.OrdinalIgnoreCase))
-        {
-            var packageName = ExtractPackageName(apk.Name);
-            if (!string.IsNullOrWhiteSpace(packageName))
-            {
-                output.Clear();
-                output.Append($"Existing package has incompatible signatures. Uninstalling {packageName} first...{Environment.NewLine}");
-                var uninstallExitCode = await RunProcessAsync(
-                    [adbPath, "-s", targetDevice, "uninstall", packageName],
-                    text => output.Append(text),
-                    cancellationToken);
-
-                if (uninstallExitCode == 0)
-                {
-                    output.Append($"Uninstalled {packageName}. Retrying install...{Environment.NewLine}");
-                    exitCode = await RunProcessAsync(
-                        [adbPath, "-s", targetDevice, "install", apk.FullName],
-                        text => output.Append(text),
-                        cancellationToken);
-
-                    if (exitCode == 0)
-                    {
-                        return $"Installed {apk.Name} on {targetDevice} after uninstalling incompatible version.{Environment.NewLine}{output}";
-                    }
-                }
-                else
-                {
-                    output.Append($"Uninstall failed, attempting install anyway...{Environment.NewLine}");
-                    exitCode = await RunProcessAsync(
-                        [adbPath, "-s", targetDevice, "install", apk.FullName],
-                        text => output.Append(text),
-                        cancellationToken);
-
-                    if (exitCode == 0)
-                    {
-                        return $"Installed {apk.Name} on {targetDevice}.{Environment.NewLine}{output}";
-                    }
-                }
-            }
-        }
-
-        if (exitCode == 0)
-        {
-            return $"Installed {apk.Name} on {targetDevice}.{Environment.NewLine}{output}";
-        }
-
-        throw new InvalidOperationException(
-            $"APK install failed for {apk.Name} on {targetDevice}.{Environment.NewLine}{output}");
-    }
-
-    public async Task<string> UninstallAsync(string packageId, string? deviceSerial, CancellationToken cancellationToken)
-    {
-        var adbPath = AdbPath ?? throw new InvalidOperationException("`adb` was not found. Install Android platform-tools or add adb to PATH.");
-        if (string.IsNullOrWhiteSpace(packageId))
-        {
-            throw new InvalidOperationException("Package id is required to uninstall the app.");
-        }
-
-        var targetDevice = !string.IsNullOrWhiteSpace(deviceSerial)
-            ? deviceSerial!.Trim()
-            : throw new InvalidOperationException("No device selected. Select a device first.");
-
-        var output = new StringBuilder();
-        var exitCode = await RunProcessAsync(
-            [adbPath, "-s", targetDevice, "uninstall", packageId.Trim()],
-            text => output.Append(text),
-            cancellationToken);
-
-        if (exitCode == 0)
-        {
-            return $"Uninstall requested for {packageId}.{Environment.NewLine}{output}";
-        }
-
-        throw new InvalidOperationException(
-            $"Uninstall failed for {packageId} on {targetDevice}.{Environment.NewLine}{output}");
-    }
-
-    public async Task<string> LaunchAsync(string packageId, string? deviceSerial, CancellationToken cancellationToken)
-    {
-        var adbPath = AdbPath ?? throw new InvalidOperationException("`adb` was not found. Install Android platform-tools or add adb to PATH.");
-        if (string.IsNullOrWhiteSpace(packageId))
-        {
-            throw new InvalidOperationException("Package id is required to launch the app.");
-        }
-
-        var targetDevice = !string.IsNullOrWhiteSpace(deviceSerial)
-            ? deviceSerial!.Trim()
-            : throw new InvalidOperationException("No device selected. Select a device first.");
-
-        var output = new StringBuilder();
-        var exitCode = await RunProcessAsync(
-            [adbPath, "-s", targetDevice, "shell", "monkey", "-p", packageId.Trim(), "-c", "android.intent.category.LAUNCHER", "1"],
-            text => output.Append(text),
-            cancellationToken);
-
-        if (exitCode == 0)
-        {
-            return $"Launch requested for {packageId}.{Environment.NewLine}{output}";
-        }
-
-        throw new InvalidOperationException(
-            $"Launch failed for {packageId} on {targetDevice}.{Environment.NewLine}{output}");
-    }
-
-    public async Task<string> PushFileToDownloadsAsync(string localFilePath, string? deviceSerial, CancellationToken cancellationToken)
-    {
-        var adbPath = AdbPath ?? throw new InvalidOperationException("`adb` was not found. Install Android platform-tools or add adb to PATH.");
-
-        if (string.IsNullOrWhiteSpace(localFilePath))
-        {
-            throw new InvalidOperationException("File path is required.");
-        }
-
-        if (!File.Exists(localFilePath))
-        {
-            throw new InvalidOperationException($"File not found: {localFilePath}");
-        }
-
-        var targetDevice = !string.IsNullOrWhiteSpace(deviceSerial)
-            ? deviceSerial!.Trim()
-            : throw new InvalidOperationException("No device selected. Select a device first.");
-
-        var output = new StringBuilder();
-        var exitCode = await RunProcessAsync(
-            [adbPath, "-s", targetDevice, "push", localFilePath, "/storage/emulated/0/Download/"],
-            text => output.Append(text),
-            cancellationToken);
-
-        var resultText = output.ToString();
-        if (exitCode == 0)
-        {
-            return $"Pushed {Path.GetFileName(localFilePath)} to Downloads on {targetDevice}.{Environment.NewLine}{resultText}";
-        }
-
-        throw new InvalidOperationException(
-            $"Failed to push file to {targetDevice}.{Environment.NewLine}{resultText}");
-    }
-
-    private static string? ExtractPackageName(string apkFileName)
-    {
-        var nameWithoutExtension = Path.GetFileNameWithoutExtension(apkFileName);
-        var suffixes = new[] { "-Signed", "-unsigned", "-debug", "-release" };
-        foreach (var suffix in suffixes)
-        {
-            if (nameWithoutExtension.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
-            {
-                return nameWithoutExtension[..^suffix.Length];
-            }
-        }
-
-        var dashIndex = nameWithoutExtension.LastIndexOf('-');
-        if (dashIndex > 0)
-        {
-            return nameWithoutExtension[..dashIndex];
-        }
-
-        return nameWithoutExtension;
-    }
+    public Task<string> PushFileToDownloadsAsync(string localFilePath, string? deviceSerial, CancellationToken cancellationToken) =>
+        _androidDeploymentService.PushFileToDownloadsAsync(localFilePath, deviceSerial, cancellationToken);
 
     public Task<string> DeletePublishedDesktopAppAsync(string outputDirectory, CancellationToken cancellationToken)
     {
@@ -694,487 +508,94 @@ public sealed class PublisherService
         return await _screenshotService.CaptureDetailToDiskAsync(window, detailScrollViewer, outputDirectory, cancellationToken);
     }
 
-    public async Task<IReadOnlyList<string>> DiscoverEmulatorsAsync(CancellationToken cancellationToken)
-    {
-        var emulatorPath = EmulatorPath ?? throw new InvalidOperationException(
-            "Android emulator tool was not found. Install Android SDK emulator tools or add `emulator` to PATH.");
+    public Task<IReadOnlyList<string>> DiscoverEmulatorsAsync(CancellationToken cancellationToken) =>
+        _androidDeploymentService.DiscoverEmulatorsAsync(cancellationToken);
 
-        var output = new StringBuilder();
-        var exitCode = await RunProcessAsync([emulatorPath, "-list-avds"], text => output.Append(text), cancellationToken);
-        if (exitCode != 0)
-        {
-            throw new InvalidOperationException("Failed to query emulators. Verify Android SDK emulator tools are installed.");
-        }
+    public Task<IReadOnlyList<AndroidDeviceInfo>> DiscoverAndroidDevicesAsync(CancellationToken cancellationToken) =>
+        _androidDeploymentService.DiscoverAndroidDevicesAsync(cancellationToken);
 
-        var emulators = output
-            .ToString()
-            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Distinct(StringComparer.Ordinal)
-            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+    public static string? GetFirstRunningDeviceSerial(IReadOnlyList<AndroidDeviceInfo> devices) =>
+        AndroidDeploymentService.GetFirstRunningDeviceSerial(devices);
 
-        return emulators;
-    }
+    public Task<IReadOnlyList<string>> DiscoverIosSimulatorsAsync(CancellationToken cancellationToken) =>
+        _iosSimulatorService.DiscoverAsync(cancellationToken);
 
-    public async Task<IReadOnlyList<AndroidDeviceInfo>> DiscoverAndroidDevicesAsync(CancellationToken cancellationToken)
-    {
-        var devices = new List<AndroidDeviceInfo>();
-        var runningSerials = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    public Task<string> LaunchEmulatorAsync(string emulatorName, CancellationToken cancellationToken) =>
+        _androidDeploymentService.LaunchEmulatorAsync(emulatorName, cancellationToken);
 
-        if (AdbPath is not null)
-        {
-            var adbOutput = new StringBuilder();
-            var adbExitCode = await RunProcessAsync([AdbPath, "devices", "-l"], text => adbOutput.Append(text), cancellationToken);
-            if (adbExitCode != 0)
-            {
-                throw new InvalidOperationException(
-                    $"Failed to query Android devices with adb (exit code {adbExitCode}).{Environment.NewLine}{adbOutput}");
-            }
+    public Task<string> LaunchIosSimulatorAsync(string simulator, CancellationToken cancellationToken) =>
+        _iosSimulatorService.LaunchAsync(simulator, cancellationToken);
 
-            var lines = adbOutput.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            foreach (var line in lines.Skip(1))
-            {
-                var parts = line.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length < 2)
-                {
-                    continue;
-                }
+    public Task<string> InstallIosAppAsync(string outputDirectory, string simulator, CancellationToken cancellationToken) =>
+        _iosSimulatorService.InstallAppAsync(outputDirectory, simulator, cancellationToken);
 
-                var serial = parts[0];
-                var state = parts[1];
+    public Task<string> UninstallIosAppAsync(string packageId, string simulator, CancellationToken cancellationToken) =>
+        _iosSimulatorService.UninstallAppAsync(packageId, simulator, cancellationToken);
 
-                if (!string.Equals(state, "device", StringComparison.Ordinal))
-                {
-                    continue;
-                }
+    public Task<string> LaunchIosAppAsync(string packageId, string simulator, CancellationToken cancellationToken) =>
+        _iosSimulatorService.LaunchAppAsync(packageId, simulator, cancellationToken);
 
-                runningSerials.Add(serial);
-
-                var isEmulator = serial.StartsWith("emulator-", StringComparison.OrdinalIgnoreCase);
-                var name = serial;
-
-                if (isEmulator)
-                {
-                    var avdName = await GetAvdNameAsync(serial, cancellationToken);
-                    if (!string.IsNullOrWhiteSpace(avdName))
-                    {
-                        name = avdName;
-                    }
-                }
-                else
-                {
-                    var model = ExtractModelFromAdbOutput(line);
-                    if (!string.IsNullOrWhiteSpace(model))
-                    {
-                        name = model;
-                    }
-                }
-
-                devices.Add(new AndroidDeviceInfo(serial, name, isEmulator ? "emulator" : "device", true));
-            }
-        }
-
-		var runningAvdNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-		foreach (var serial in runningSerials.Where(s => s.StartsWith("emulator-", StringComparison.OrdinalIgnoreCase)))
-		{
-			var avdName = await GetAvdNameAsync(serial, cancellationToken);
-			if (!string.IsNullOrWhiteSpace(avdName))
-			{
-				runningAvdNames.Add(avdName);
-			}
-		}
-
-		if (EmulatorPath is not null)
-		{
-			var avdOutput = new StringBuilder();
-			var avdExitCode = await RunProcessAsync([EmulatorPath, "-list-avds"], text => avdOutput.Append(text), cancellationToken);
-			if (avdExitCode == 0)
-			{
-				var avdNames = avdOutput
-					.ToString()
-					.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-					.Distinct(StringComparer.Ordinal);
-
-				foreach (var avdName in avdNames)
-				{
-					if (!runningAvdNames.Contains(avdName))
-					{
-						devices.Add(new AndroidDeviceInfo(string.Empty, avdName, "emulator", false));
-					}
-				}
-			}
-		}
-
-        return devices
-            .OrderByDescending(d => d.Type == "device" ? 0 : d.IsRunning ? 1 : 2)
-            .ThenBy(d => d.Name, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-    }
-
-    public static string? GetFirstRunningDeviceSerial(IReadOnlyList<AndroidDeviceInfo> devices)
-    {
-        return devices
-            .FirstOrDefault(d => d.IsRunning && d.Type == "device")
-            ?.Serial
-            ?? devices
-                .FirstOrDefault(d => d.IsRunning && d.Type == "emulator")
-                ?.Serial;
-    }
-
-    private async Task<string?> GetAvdNameAsync(string serial, CancellationToken cancellationToken)
-    {
-        if (AdbPath is null)
-        {
-            return null;
-        }
-
-        try
-        {
-            var output = new StringBuilder();
-            var exitCode = await RunProcessAsync([AdbPath, "-s", serial, "emu", "avd", "name"], text => output.Append(text), cancellationToken);
-            if (exitCode == 0)
-            {
-                var result = output.ToString().Trim();
-                var firstLine = result.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
-                return firstLine?.Replace("\r", string.Empty).Trim();
-            }
-        }
-        catch
-        {
-            // Best effort.
-        }
-
-        return null;
-    }
-
-    private static string? ExtractModelFromAdbOutput(string line)
-    {
-        var modelMatch = Regex.Match(line, @"model:(\S+)");
-        if (modelMatch.Success && modelMatch.Groups.Count > 1)
-        {
-            return modelMatch.Groups[1].Value.Replace('_', ' ');
-        }
-
-        return null;
-    }
-
-    public async Task<IReadOnlyList<string>> DiscoverIosSimulatorsAsync(CancellationToken cancellationToken)
-    {
-        var xcrunPath = XcrunPath ?? throw new InvalidOperationException(
-            "`xcrun` was not found. Install Xcode command line tools to use iOS simulator actions.");
-
-        var output = new StringBuilder();
-        var exitCode = await RunProcessAsync([xcrunPath, "simctl", "list", "devices", "available", "--json"], text => output.Append(text), cancellationToken);
-        if (exitCode != 0)
-        {
-            throw new InvalidOperationException("Failed to query iOS simulators. Verify Xcode command line tools are installed.");
-        }
-
-        using var document = JsonDocument.Parse(output.ToString());
-        if (!document.RootElement.TryGetProperty("devices", out var devicesElement))
-        {
-            return [];
-        }
-
-        var simulators = new List<string>();
-        foreach (var runtimeDevices in devicesElement.EnumerateObject())
-        {
-            _ = runtimeDevices;
-            foreach (var device in runtimeDevices.Value.EnumerateArray())
-            {
-                if (!device.TryGetProperty("isAvailable", out var isAvailableElement) || !isAvailableElement.GetBoolean())
-                {
-                    continue;
-                }
-
-                var name = device.GetProperty("name").GetString();
-                var udid = device.GetProperty("udid").GetString();
-                if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(udid))
-                {
-                    continue;
-                }
-
-                simulators.Add($"{name} | {udid}");
-            }
-        }
-
-        return simulators
-            .Distinct(StringComparer.Ordinal)
-            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-    }
-
-    public Task<string> LaunchEmulatorAsync(string emulatorName, CancellationToken cancellationToken)
-    {
-        _ = cancellationToken;
-
-        var emulatorPath = EmulatorPath ?? throw new InvalidOperationException(
-            "Android emulator tool was not found. Install Android SDK emulator tools or add `emulator` to PATH.");
-
-        if (string.IsNullOrWhiteSpace(emulatorName))
-        {
-            throw new InvalidOperationException("Select an emulator first.");
-        }
-
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = emulatorPath,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        startInfo.ArgumentList.Add("-avd");
-        startInfo.ArgumentList.Add(emulatorName.Trim());
-        Process.Start(startInfo);
-
-        return Task.FromResult($"Launching emulator `{emulatorName.Trim()}`.");
-    }
-
-    public async Task<string> LaunchIosSimulatorAsync(string simulator, CancellationToken cancellationToken)
-    {
-        var xcrunPath = XcrunPath ?? throw new InvalidOperationException(
-            "`xcrun` was not found. Install Xcode command line tools to use iOS simulator actions.");
-
-        if (string.IsNullOrWhiteSpace(simulator))
-        {
-            throw new InvalidOperationException("Select an iOS simulator first.");
-        }
-
-        var simulatorId = ExtractSimulatorId(simulator);
-        await EnsureIosSimulatorBootedAsync(xcrunPath, simulatorId, cancellationToken);
-        return $"Launched iOS simulator `{simulator}`.";
-    }
-
-    public async Task<string> InstallIosAppAsync(string outputDirectory, string simulator, CancellationToken cancellationToken)
-    {
-        var xcrunPath = XcrunPath ?? throw new InvalidOperationException(
-            "`xcrun` was not found. Install Xcode command line tools to use iOS simulator actions.");
-
-        if (string.IsNullOrWhiteSpace(simulator))
-        {
-            throw new InvalidOperationException("Select an iOS simulator first.");
-        }
-
-        var appBundle = FindNewestAppBundle(outputDirectory)
-            ?? throw new InvalidOperationException($"No .app bundle found in {outputDirectory}.");
-        var simulatorId = ExtractSimulatorId(simulator);
-        await EnsureIosSimulatorBootedAsync(xcrunPath, simulatorId, cancellationToken);
-
-        var output = new StringBuilder();
-        var exitCode = await RunProcessAsync([xcrunPath, "simctl", "install", simulatorId, appBundle.FullName], text => output.Append(text), cancellationToken);
-        return exitCode == 0
-            ? $"Installed {appBundle.Name} on {simulator}.{Environment.NewLine}{output}"
-            : $"iOS app install failed for {appBundle.Name}.{Environment.NewLine}{output}";
-    }
-
-    public async Task<string> UninstallIosAppAsync(string packageId, string simulator, CancellationToken cancellationToken)
-    {
-        var xcrunPath = XcrunPath ?? throw new InvalidOperationException(
-            "`xcrun` was not found. Install Xcode command line tools to use iOS simulator actions.");
-        if (string.IsNullOrWhiteSpace(packageId))
-        {
-            throw new InvalidOperationException("Bundle id is required to uninstall the app.");
-        }
-
-        if (string.IsNullOrWhiteSpace(simulator))
-        {
-            throw new InvalidOperationException("Select an iOS simulator first.");
-        }
-
-        var simulatorId = ExtractSimulatorId(simulator);
-        await EnsureIosSimulatorBootedAsync(xcrunPath, simulatorId, cancellationToken);
-        var output = new StringBuilder();
-        var exitCode = await RunProcessAsync([xcrunPath, "simctl", "uninstall", simulatorId, packageId.Trim()], text => output.Append(text), cancellationToken);
-        return exitCode == 0
-            ? $"Uninstall requested for {packageId} on {simulator}.{Environment.NewLine}{output}"
-            : $"iOS uninstall failed for {packageId}.{Environment.NewLine}{output}";
-    }
-
-    public async Task<string> LaunchIosAppAsync(string packageId, string simulator, CancellationToken cancellationToken)
-    {
-        var xcrunPath = XcrunPath ?? throw new InvalidOperationException(
-            "`xcrun` was not found. Install Xcode command line tools to use iOS simulator actions.");
-        if (string.IsNullOrWhiteSpace(packageId))
-        {
-            throw new InvalidOperationException("Bundle id is required to launch the app.");
-        }
-
-        if (string.IsNullOrWhiteSpace(simulator))
-        {
-            throw new InvalidOperationException("Select an iOS simulator first.");
-        }
-
-        var simulatorId = ExtractSimulatorId(simulator);
-        await EnsureIosSimulatorBootedAsync(xcrunPath, simulatorId, cancellationToken);
-        var output = new StringBuilder();
-        var exitCode = await RunProcessAsync([xcrunPath, "simctl", "launch", simulatorId, packageId.Trim()], text => output.Append(text), cancellationToken);
-        return exitCode == 0
-            ? $"Launch requested for {packageId} on {simulator}.{Environment.NewLine}{output}"
-            : $"iOS launch failed for {packageId}.{Environment.NewLine}{output}";
-    }
-
-    public async Task<string> PushFileToSimulatorAsync(string localFilePath, string simulator, CancellationToken cancellationToken)
-    {
-        var xcrunPath = XcrunPath ?? throw new InvalidOperationException(
-            "`xcrun` was not found. Install Xcode command line tools to use iOS simulator actions.");
-
-        if (string.IsNullOrWhiteSpace(localFilePath))
-        {
-            throw new InvalidOperationException("File path is required.");
-        }
-
-        if (!File.Exists(localFilePath))
-        {
-            throw new InvalidOperationException($"File not found: {localFilePath}");
-        }
-
-        if (string.IsNullOrWhiteSpace(simulator))
-        {
-            throw new InvalidOperationException("Select an iOS simulator first.");
-        }
-
-        var simulatorId = ExtractSimulatorId(simulator);
-        await EnsureIosSimulatorBootedAsync(xcrunPath, simulatorId, cancellationToken);
-
-        var output = new StringBuilder();
-        var exitCode = await RunProcessAsync(
-            [xcrunPath, "simctl", "listapps", simulatorId],
-            text => output.Append(text),
-            cancellationToken);
-
-        if (exitCode != 0)
-        {
-            throw new InvalidOperationException($"Failed to query simulator apps: {output}");
-        }
-
-        var json = output.ToString();
-        var fileProviderPath = ExtractFileProviderPath(json);
-        if (string.IsNullOrWhiteSpace(fileProviderPath))
-        {
-            throw new InvalidOperationException("Could not find File Provider storage path. Make sure the iOS Simulator is running.");
-        }
-
-        var storageDir = Path.Combine(fileProviderPath, "File Provider Storage");
-        if (!Directory.Exists(storageDir))
-        {
-            Directory.CreateDirectory(storageDir);
-        }
-
-        var targetPath = Path.Combine(storageDir, Path.GetFileName(localFilePath));
-        File.Copy(localFilePath, targetPath, true);
-
-        return $"Pushed {Path.GetFileName(localFilePath)} to Files app on {simulator}.{Environment.NewLine}Location: On My iPhone";
-    }
-
-    private static string? ExtractFileProviderPath(string json)
-    {
-        try
-        {
-            using var document = JsonDocument.Parse(json);
-            foreach (var app in document.RootElement.EnumerateObject())
-            {
-                if (app.Value.TryGetProperty("CFBundleIdentifier", out var bundleId) &&
-                    bundleId.GetString() == "com.apple.FileProvider")
-                {
-                    if (app.Value.TryGetProperty("GroupContainers", out var groupContainers))
-                    {
-                        if (groupContainers.TryGetProperty("group.com.apple.FileProvider.LocalStorage", out var localStorage))
-                        {
-                            var path = localStorage.GetString();
-                            if (!string.IsNullOrWhiteSpace(path))
-                            {
-                                return path.Replace("file://", "");
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        catch
-        {
-        }
-
-        return null;
-    }
-
-    private static string? ReadVersion(FileInfo projectFile, string publishPlatform, bool isDisplay)
-    {
-        if (isDisplay)
-        {
-            if (IsAndroidPlatform(publishPlatform) || IsIosPlatform(publishPlatform))
-            {
-                return ReadProperty(projectFile, "ApplicationDisplayVersion", "Version", "InformationalVersion");
-            }
-
-            if (IsMacOsPlatform(publishPlatform))
-            {
-                return ReadProperty(projectFile, "Version", "InformationalVersion");
-            }
-
-            return ReadProperty(projectFile, "Version", "InformationalVersion");
-        }
-
-        if (IsAndroidPlatform(publishPlatform) || IsIosPlatform(publishPlatform))
-        {
-            return ReadProperty(projectFile, "ApplicationVersion", "FileVersion");
-        }
-
-        if (IsMacOsPlatform(publishPlatform))
-        {
-            return ReadProperty(projectFile, "FileVersion", "Version");
-        }
-
-        if (IsWindowsPlatform(publishPlatform))
-        {
-            return null;
-        }
-
-        if (IsLinuxPlatform(publishPlatform))
-        {
-            return null;
-        }
-
-        return ReadProperty(projectFile, "FileVersion", "Version");
-    }
-
-    private static bool SupportsInternalVersion(string publishPlatform)
-    {
-        return IsAndroidPlatform(publishPlatform)
-            || IsIosPlatform(publishPlatform)
-            || IsMacOsPlatform(publishPlatform);
-    }
+    public Task<string> PushFileToSimulatorAsync(string localFilePath, string simulator, CancellationToken cancellationToken) =>
+        _iosSimulatorService.PushFileAsync(localFilePath, simulator, cancellationToken);
 
     private static string? ResolveExecutable(string name, IReadOnlyList<string> candidates)
     {
+        var executableNames = GetExecutableNames(name);
         var pathVariable = Environment.GetEnvironmentVariable("PATH");
         if (!string.IsNullOrWhiteSpace(pathVariable))
         {
             foreach (var path in pathVariable.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
             {
-                var candidate = Path.Combine(path, name);
-                if (File.Exists(candidate))
+                foreach (var executableName in executableNames)
                 {
-                    return candidate;
+                    var candidate = Path.Combine(path, executableName);
+                    if (File.Exists(candidate))
+                    {
+                        return candidate;
+                    }
                 }
             }
         }
 
         foreach (var candidate in candidates)
         {
-            if (File.Exists(candidate))
+            foreach (var executableName in GetExecutableNames(Path.GetFileName(candidate)))
             {
-                return candidate;
+                var resolvedCandidate = Path.Combine(
+                    Path.GetDirectoryName(candidate) ?? string.Empty,
+                    executableName);
+                if (File.Exists(resolvedCandidate))
+                {
+                    return resolvedCandidate;
+                }
             }
         }
 
         return null;
     }
 
+    private static IReadOnlyList<string> GetExecutableNames(string name)
+    {
+        if (!OperatingSystem.IsWindows() || !string.IsNullOrEmpty(Path.GetExtension(name)))
+        {
+            return [name];
+        }
+
+        return [name + ".exe", name + ".cmd", name];
+    }
+
+    private static string GetAndroidHome()
+    {
+        var androidHome = Environment.GetEnvironmentVariable("ANDROID_HOME");
+        return !string.IsNullOrWhiteSpace(androidHome)
+            ? androidHome
+            : Environment.GetEnvironmentVariable("ANDROID_SDK_ROOT") ?? string.Empty;
+    }
+
     private string? ResolveApkSignerPath()
     {
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var androidHome = Environment.GetEnvironmentVariable("ANDROID_HOME")
-            ?? Environment.GetEnvironmentVariable("ANDROID_SDK_ROOT");
+        var androidHome = GetAndroidHome();
         var candidates = new List<string>
         {
             Path.Combine(home, "Library/Android/sdk/build-tools"),
@@ -1214,131 +635,6 @@ public sealed class PublisherService
         ]);
     }
 
-    private async Task EnsureApkHasValidSignatureAsync(string apkPath, CancellationToken cancellationToken)
-    {
-        var apkSignerPath = ApkSignerPath;
-        if (string.IsNullOrWhiteSpace(apkSignerPath))
-        {
-            return;
-        }
-
-        var output = new StringBuilder();
-        var exitCode = await RunProcessAsync(
-            [apkSignerPath, "verify", "--print-certs", apkPath],
-            text => output.Append(text),
-            cancellationToken);
-
-        if (exitCode == 0)
-        {
-            return;
-        }
-
-        throw new InvalidOperationException(
-            $"APK signature verification failed for `{Path.GetFileName(apkPath)}`. " +
-            "The APK appears unsigned or signed incorrectly. " +
-            "Publish with proper signing (or use a debug-signed APK) and retry." +
-            $"{Environment.NewLine}{output}");
-    }
-
-    private static void ValidateProjectTargetFramework(FileInfo projectFile, string targetFramework)
-    {
-        var selectedFramework = targetFramework.Trim();
-        if (string.IsNullOrWhiteSpace(selectedFramework))
-        {
-            throw new InvalidOperationException("Target framework is required.");
-        }
-
-        var singleTarget = ReadProperty(projectFile, "TargetFramework");
-        if (!string.IsNullOrWhiteSpace(singleTarget))
-        {
-            if (!string.Equals(singleTarget.Trim(), selectedFramework, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException(
-                    $"Target framework `{selectedFramework}` is not declared by {projectFile.Name}. Use `{singleTarget.Trim()}` or switch to a compatible project.");
-            }
-
-            return;
-        }
-
-        var multiTarget = ReadProperty(projectFile, "TargetFrameworks");
-        if (string.IsNullOrWhiteSpace(multiTarget))
-        {
-            return;
-        }
-
-        var frameworks = multiTarget
-            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-        if (!frameworks.Any(framework => string.Equals(framework, selectedFramework, StringComparison.OrdinalIgnoreCase)))
-        {
-            throw new InvalidOperationException(
-                $"Target framework `{selectedFramework}` is not in `{projectFile.Name}` target frameworks: {string.Join(", ", frameworks)}.");
-        }
-    }
-
-    private static void ValidateRuntimeForPlatform(PublishConfiguration configuration)
-    {
-        var runtimeIdentifier = configuration.RuntimeIdentifier.Trim();
-        if (string.IsNullOrWhiteSpace(runtimeIdentifier))
-        {
-            throw new InvalidOperationException("Runtime identifier is required.");
-        }
-
-        if (IsAndroidPlatform(configuration.PublishPlatform))
-        {
-            if (!runtimeIdentifier.StartsWith("android-", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException("Android publishing requires an `android-*` runtime identifier.");
-            }
-
-            return;
-        }
-
-        if (IsMacOsPlatform(configuration.PublishPlatform))
-        {
-            var isMacRuntime = runtimeIdentifier.StartsWith("osx-", StringComparison.OrdinalIgnoreCase)
-                || runtimeIdentifier.StartsWith("maccatalyst-", StringComparison.OrdinalIgnoreCase);
-
-            if (!isMacRuntime)
-            {
-                throw new InvalidOperationException("macOS publishing requires an `osx-*` or `maccatalyst-*` runtime identifier.");
-            }
-
-            return;
-        }
-
-        if (IsWindowsPlatform(configuration.PublishPlatform))
-        {
-            if (!runtimeIdentifier.StartsWith("win-", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException("Windows publishing requires a `win-*` runtime identifier.");
-            }
-
-            return;
-        }
-
-        if (IsIosPlatform(configuration.PublishPlatform))
-        {
-            if (!runtimeIdentifier.StartsWith("ios-", StringComparison.OrdinalIgnoreCase)
-                && !runtimeIdentifier.StartsWith("iossimulator-", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException("iOS publishing requires an `ios-*` or `iossimulator-*` runtime identifier.");
-            }
-
-            return;
-        }
-
-        if (IsLinuxPlatform(configuration.PublishPlatform))
-        {
-            if (!runtimeIdentifier.StartsWith("linux-", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException("Linux publishing requires a `linux-*` runtime identifier.");
-            }
-
-            return;
-        }
-    }
-
     private static string ResolveScreenshotDirectory(string outputDirectory)
     {
         if (!string.IsNullOrWhiteSpace(outputDirectory) && Directory.Exists(outputDirectory))
@@ -1355,35 +651,6 @@ public sealed class PublisherService
         return Path.GetTempPath();
     }
 
-    private static DirectoryInfo CreateProjectDirectory(string projectDirectory)
-    {
-        if (string.IsNullOrWhiteSpace(projectDirectory))
-        {
-            throw new InvalidOperationException("Select a project directory first.");
-        }
-
-        var directory = new DirectoryInfo(projectDirectory.Trim());
-        if (!directory.Exists)
-        {
-            throw new InvalidOperationException($"Project directory not found: {directory.FullName}");
-        }
-
-        return directory;
-    }
-
-    private static FileInfo? FindProjectFile(DirectoryInfo projectDirectory)
-    {
-        return projectDirectory
-            .GetFiles("*.csproj", SearchOption.TopDirectoryOnly)
-            .OrderBy(file => file.Name, StringComparer.OrdinalIgnoreCase)
-            .FirstOrDefault();
-    }
-
-    private static string GetDefaultOutputDirectory(DirectoryInfo projectDirectory, string configuration, string targetFramework, string runtimeIdentifier)
-    {
-        return Path.Combine(projectDirectory.FullName, "bin", configuration.Trim(), targetFramework.Trim(), runtimeIdentifier.Trim());
-    }
-
     private async Task<ProjectOutputLayout> ResolveProjectOutputLayoutAsync(
         FileInfo projectFile,
         string configuration,
@@ -1391,747 +658,31 @@ public sealed class PublisherService
         string runtimeIdentifier,
         CancellationToken cancellationToken)
     {
-        var fallbackOutputDirectory = GetDefaultOutputDirectory(
-            projectFile.Directory!,
+        var dotnetPath = DotnetPath;
+        if (dotnetPath is null)
+        {
+            return ProjectInspector.CreateUnavailableOutputLayout(
+                ProjectInspector.GetDefaultOutputDirectory(projectFile.Directory!, configuration, targetFramework, runtimeIdentifier),
+                "dotnet was not found, so the project output layout could not be detected.");
+        }
+
+        return await ProjectOutputLayoutResolver.ResolveAsync(
+            dotnetPath,
+            projectFile,
             configuration,
             targetFramework,
-            runtimeIdentifier);
-
-        if (DotnetPath is null)
-        {
-            return CreateUnavailableOutputLayout(fallbackOutputDirectory, "dotnet was not found, so the project output layout could not be detected.");
-        }
-
-        var evaluationOutput = new StringBuilder();
-        var arguments = new List<string>
-        {
-            DotnetPath,
-            "msbuild",
-            projectFile.FullName,
-            "-nologo",
-            "-getProperty:UseArtifactsOutput,PublishDir,OutputPath,IntermediateOutputPath",
-            $"-p:Configuration={configuration.Trim()}",
-            $"-p:TargetFramework={targetFramework.Trim()}",
-            $"-p:RuntimeIdentifier={runtimeIdentifier.Trim()}"
-        };
-
-        try
-        {
-            var exitCode = await RunProcessAsync(
-                arguments,
-                text => evaluationOutput.Append(text),
-                cancellationToken,
-                projectFile.DirectoryName);
-
-            if (exitCode != 0)
-            {
-                return CreateUnavailableOutputLayout(
-                    fallbackOutputDirectory,
-                    "MSBuild could not evaluate the project output layout. The standard output folder will be used.");
-            }
-
-            using var document = JsonDocument.Parse(evaluationOutput.ToString());
-            if (!document.RootElement.TryGetProperty("Properties", out var properties))
-            {
-                return CreateUnavailableOutputLayout(
-                    fallbackOutputDirectory,
-                    "MSBuild did not return project output properties. The standard output folder will be used.");
-            }
-
-            var usesCentralizedArtifacts = string.Equals(
-                GetMsBuildProperty(properties, "UseArtifactsOutput"),
-                "true",
-                StringComparison.OrdinalIgnoreCase);
-
-            if (!usesCentralizedArtifacts)
-            {
-                return new ProjectOutputLayout(
-                    false,
-                    fallbackOutputDirectory,
-                    null,
-                    null,
-                    "Standard project output detected.");
-            }
-
-            var publishDirectory = NormalizeProjectPath(GetMsBuildProperty(properties, "PublishDir"), projectFile.Directory!);
-            if (string.IsNullOrWhiteSpace(publishDirectory))
-            {
-                return CreateUnavailableOutputLayout(
-                    fallbackOutputDirectory,
-                    "Centralized artifacts were detected, but MSBuild did not resolve a publish directory.");
-            }
-
-            return new ProjectOutputLayout(
-                true,
-                publishDirectory,
-                NormalizeProjectPath(GetMsBuildProperty(properties, "OutputPath"), projectFile.Directory!),
-                NormalizeProjectPath(GetMsBuildProperty(properties, "IntermediateOutputPath"), projectFile.Directory!),
-                "Centralized artifacts detected.");
-        }
-        catch (JsonException)
-        {
-            return CreateUnavailableOutputLayout(
-                fallbackOutputDirectory,
-                "MSBuild returned an unreadable output-layout response. The standard output folder will be used.");
-        }
-        catch (Exception) when (!cancellationToken.IsCancellationRequested)
-        {
-            return CreateUnavailableOutputLayout(
-                fallbackOutputDirectory,
-                "The project output layout could not be detected. The standard output folder will be used.");
-        }
-    }
-
-    private static ProjectOutputLayout CreateUnavailableOutputLayout(string fallbackOutputDirectory, string description)
-    {
-        return new ProjectOutputLayout(false, fallbackOutputDirectory, null, null, description);
-    }
-
-    private static string? GetMsBuildProperty(JsonElement properties, string name)
-    {
-        return properties.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.String
-            ? property.GetString()
-            : null;
-    }
-
-    private static string? NormalizeProjectPath(string? path, DirectoryInfo projectDirectory)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return null;
-        }
-
-        return Path.GetFullPath(Path.IsPathRooted(path)
-            ? path
-            : Path.Combine(projectDirectory.FullName, path));
-    }
-
-    private static string? ReadProperty(FileInfo projectFile, params string[] propertyNames)
-    {
-        try
-        {
-            foreach (var document in LoadProjectPropertyDocuments(projectFile))
-            {
-                foreach (var propertyName in propertyNames)
-                {
-                    var value = document
-                        .Descendants()
-                        .FirstOrDefault(element => element.Name.LocalName == propertyName && !string.IsNullOrWhiteSpace(element.Value))
-                        ?.Value
-                        .Trim();
-
-                    if (!string.IsNullOrWhiteSpace(value))
-                    {
-                        return value;
-                    }
-                }
-            }
-        }
-        catch
-        {
-            return null;
-        }
-
-        return null;
-    }
-
-    private static IEnumerable<XDocument> LoadProjectPropertyDocuments(FileInfo projectFile)
-    {
-        yield return XDocument.Load(projectFile.FullName);
-
-        foreach (var directory in EnumerateDirectories(projectFile.Directory))
-        {
-            var propsPath = Path.Combine(directory.FullName, "Directory.Build.props");
-            if (!File.Exists(propsPath))
-            {
-                continue;
-            }
-
-            XDocument? document = null;
-            try
-            {
-                document = XDocument.Load(propsPath);
-            }
-            catch
-            {
-            }
-
-            if (document is not null)
-            {
-                yield return document;
-            }
-        }
-    }
-
-    private static IEnumerable<DirectoryInfo> EnumerateDirectories(DirectoryInfo? startDirectory)
-    {
-        for (var directory = startDirectory; directory is not null; directory = directory.Parent)
-        {
-            yield return directory;
-        }
-    }
-
-    private static string? ReadTargetFramework(FileInfo projectFile, string publishPlatform)
-    {
-        var singleTarget = ReadProperty(projectFile, "TargetFramework");
-        if (!string.IsNullOrWhiteSpace(singleTarget))
-        {
-            return singleTarget;
-        }
-
-        var multiTarget = ReadProperty(projectFile, "TargetFrameworks");
-        if (string.IsNullOrWhiteSpace(multiTarget))
-        {
-            return null;
-        }
-
-        return multiTarget
-            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .FirstOrDefault(framework => IsTargetFrameworkForPlatform(framework, publishPlatform))
-            ?? multiTarget.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
-    }
-
-    private static bool IsTargetFrameworkForPlatform(string framework, string publishPlatform)
-    {
-        if (IsAndroidPlatform(publishPlatform))
-        {
-            return framework.Contains("android", StringComparison.OrdinalIgnoreCase);
-        }
-
-        if (IsMacOsPlatform(publishPlatform))
-        {
-            return framework.Contains("maccatalyst", StringComparison.OrdinalIgnoreCase);
-        }
-
-        if (IsWindowsPlatform(publishPlatform))
-        {
-            return framework.Contains("windows", StringComparison.OrdinalIgnoreCase)
-                || framework.Equals("net10.0", StringComparison.OrdinalIgnoreCase);
-        }
-
-        if (IsIosPlatform(publishPlatform))
-        {
-            return framework.Contains("ios", StringComparison.OrdinalIgnoreCase);
-        }
-
-        if (IsLinuxPlatform(publishPlatform))
-        {
-            return framework.Equals("net10.0", StringComparison.OrdinalIgnoreCase)
-                || !framework.Contains("android", StringComparison.OrdinalIgnoreCase)
-                    && !framework.Contains("ios", StringComparison.OrdinalIgnoreCase)
-                    && !framework.Contains("windows", StringComparison.OrdinalIgnoreCase)
-                    && !framework.Contains("maccatalyst", StringComparison.OrdinalIgnoreCase);
-        }
-
-        return true;
-    }
-
-    private static string? DetectCustomTrimProperty(FileInfo projectFile)
-    {
-        try
-        {
-            var projectText = File.ReadAllText(projectFile.FullName);
-            var matches = Regex.Matches(projectText, @"\$\((?<name>[A-Za-z0-9_.-]*PublishTrimmed)\)");
-            foreach (Match match in matches)
-            {
-                var propertyName = match.Groups["name"].Value;
-                if (!string.IsNullOrWhiteSpace(propertyName) &&
-                    !string.Equals(propertyName, "PublishTrimmed", StringComparison.Ordinal))
-                {
-                    return propertyName;
-                }
-            }
-        }
-        catch
-        {
-            return null;
-        }
-
-        return null;
-    }
-
-    private List<string> BuildAndroidCommand(PublishConfiguration configuration, string projectFilePath, string? customTrimProperty)
-    {
-        var linkMode = configuration.AndroidLinkMode.Trim();
-        var linkingEnabled = !string.Equals(linkMode, "None", StringComparison.Ordinal);
-
-        if (configuration.RunAotCompilation && !linkingEnabled)
-        {
-            throw new InvalidOperationException(
-                "RunAOTCompilation requires linking. Set Android Link Mode to SdkOnly or Full, or disable RunAOT.");
-        }
-
-        if (configuration.EnableProfiledAot && !configuration.RunAotCompilation)
-        {
-            throw new InvalidOperationException(
-                "Profiled AOT requires RunAOT. Enable RunAOT or disable Profiled AOT.");
-        }
-
-        var command = new List<string>
-        {
-            DotnetPath!,
-            "publish",
-            projectFilePath,
-            "-f",
-            configuration.TargetFramework.Trim(),
-            "-c",
-            configuration.Configuration.Trim(),
-            "-r",
-            configuration.RuntimeIdentifier.Trim(),
-            $"-p:SelfContained={ToLowerInvariant(configuration.SelfContained)}",
-            $"-p:AndroidLinkMode={linkMode}",
-            $"-p:RunAOTCompilation={ToLowerInvariant(configuration.RunAotCompilation)}",
-            $"-p:AndroidEnableProfiledAot={ToLowerInvariant(configuration.EnableProfiledAot)}"
-        };
-
-        if (string.IsNullOrWhiteSpace(customTrimProperty))
-        {
-            command.Add($"-p:PublishTrimmed={ToLowerInvariant(configuration.PublishTrimmed)}");
-        }
-        else
-        {
-            command.Add($"-p:{customTrimProperty}={ToLowerInvariant(configuration.PublishTrimmed)}");
-        }
-
-        if (!string.Equals(configuration.AndroidLinkMode.Trim(), "None", StringComparison.Ordinal))
-        {
-            command.Add($"-p:AndroidLinkTool={configuration.AndroidLinkTool.Trim()}");
-            command.Add($"-p:AndroidCreateProguardMappingFile={ToLowerInvariant(configuration.CreateMappingFile)}");
-        }
-
-        if (!string.Equals(configuration.AndroidDexTool.Trim(), "d8", StringComparison.Ordinal))
-        {
-            command.Add($"-p:AndroidDexTool={configuration.AndroidDexTool.Trim()}");
-        }
-
-        if (configuration.EnableMultiDex)
-        {
-            command.Add("-p:AndroidEnableMultiDex=true");
-        }
-
-        if (!configuration.UseAapt2)
-        {
-            command.Add("-p:AndroidUseAapt2=false");
-        }
-
-        if (!configuration.EnableDesugar)
-        {
-            command.Add("-p:AndroidEnableDesugar=false");
-        }
-
-        switch (configuration.SignMode.Trim())
-        {
-            case "Sign":
-                ValidateSigning(configuration);
-                command.Add("-p:AndroidKeyStore=true");
-                command.Add($"-p:AndroidSigningKeyStore={configuration.KeystorePath.Trim()}");
-                command.Add($"-p:AndroidSigningKeyAlias={configuration.KeyAlias.Trim()}");
-                command.Add($"-p:AndroidSigningStorePass={configuration.KeystorePassword}");
-                command.Add($"-p:AndroidSigningKeyPass={configuration.KeyPassword}");
-                break;
-            case "Do Not Sign":
-                command.Add("-p:AndroidKeyStore=false");
-                break;
-        }
-
-        return command;
-    }
-
-    private List<string> BuildMacOsCommand(PublishConfiguration configuration, string projectFilePath, string? customTrimProperty)
-    {
-        var targetFramework = configuration.TargetFramework.Trim();
-        var runtimeIdentifier = configuration.RuntimeIdentifier.Trim();
-        var isMacCatalyst = targetFramework.Contains("maccatalyst", StringComparison.OrdinalIgnoreCase)
-            || runtimeIdentifier.Contains("maccatalyst", StringComparison.OrdinalIgnoreCase);
-        var isNativeOsxRid = runtimeIdentifier.StartsWith("osx-", StringComparison.OrdinalIgnoreCase);
-
-        var command = new List<string>
-        {
-            DotnetPath!,
-            "publish",
-            projectFilePath,
-            "-f",
-            targetFramework,
-            "-c",
-            configuration.Configuration.Trim(),
-            "-r",
             runtimeIdentifier,
-            $"-p:SelfContained={ToLowerInvariant(configuration.SelfContained)}"
-        };
-
-        if (isMacCatalyst)
-        {
-            // Mac Catalyst SDK requires PublishTrimmed=true (enforced by Xamarin.Shared.Sdk.targets).
-            // If trimming should be disabled, use MtouchLink=None instead.
-            command.Add("-p:PublishTrimmed=true");
-
-            if (!configuration.PublishTrimmed)
+            async (arguments, token) =>
             {
-                command.Add("-p:MtouchLink=None");
-            }
-
-            // Also pass the custom trim property if the project defines one,
-            // so project-level overrides are respected alongside the required PublishTrimmed=true.
-            if (!string.IsNullOrWhiteSpace(customTrimProperty))
-            {
-                command.Add($"-p:{customTrimProperty}={ToLowerInvariant(configuration.PublishTrimmed)}");
-            }
-        }
-        else
-        {
-            if (string.IsNullOrWhiteSpace(customTrimProperty))
-            {
-                command.Add($"-p:PublishTrimmed={ToLowerInvariant(configuration.PublishTrimmed)}");
-            }
-            else
-            {
-                command.Add($"-p:{customTrimProperty}={ToLowerInvariant(configuration.PublishTrimmed)}");
-            }
-        }
-
-        if (!isMacCatalyst && configuration.PublishReadyToRun && !configuration.PublishAot)
-        {
-            command.Add("-p:PublishReadyToRun=true");
-        }
-
-        if (!isMacCatalyst && configuration.PublishSingleFile)
-        {
-            command.Add("-p:PublishSingleFile=true");
-            
-            // Ensure native libraries are included when using AOT + SingleFile
-            if (configuration.PublishAot)
-            {
-                command.Add("-p:IncludeNativeLibrariesForSelfExtract=true");
-            }
-        }
-
-        if (!isMacCatalyst && configuration.UseAppHost)
-        {
-            command.Add("-p:UseAppHost=true");
-        }
-
-        if (!isMacCatalyst && isNativeOsxRid && configuration.PublishAot)
-        {
-            command.Add("-p:PublishAot=true");
-        }
-
-        return command;
-    }
-
-    private List<string> BuildWindowsCommand(PublishConfiguration configuration, string projectFilePath, string? customTrimProperty)
-    {
-        var command = new List<string>
-        {
-            DotnetPath!,
-            "publish",
-            projectFilePath,
-            "-f",
-            configuration.TargetFramework.Trim(),
-            "-c",
-            configuration.Configuration.Trim(),
-            "-r",
-            configuration.RuntimeIdentifier.Trim(),
-            $"-p:SelfContained={ToLowerInvariant(configuration.SelfContained)}",
-            $"-p:UseAppHost={ToLowerInvariant(configuration.CreateWindowsExecutable)}"
-        };
-
-        if (string.IsNullOrWhiteSpace(customTrimProperty))
-        {
-            command.Add($"-p:PublishTrimmed={ToLowerInvariant(configuration.PublishTrimmed)}");
-        }
-        else
-        {
-            command.Add($"-p:{customTrimProperty}={ToLowerInvariant(configuration.PublishTrimmed)}");
-        }
-
-        if (configuration.PublishReadyToRun)
-        {
-            command.Add("-p:PublishReadyToRun=true");
-        }
-
-        if (configuration.PublishSingleFile)
-        {
-            command.Add("-p:PublishSingleFile=true");
-        }
-
-        return command;
-    }
-
-    private List<string> BuildLinuxCommand(PublishConfiguration configuration, string projectFilePath, string? customTrimProperty)
-    {
-        var command = new List<string>
-        {
-            DotnetPath!,
-            "publish",
-            projectFilePath,
-            "-f",
-            configuration.TargetFramework.Trim(),
-            "-c",
-            configuration.Configuration.Trim(),
-            "-r",
-            configuration.RuntimeIdentifier.Trim(),
-            $"-p:SelfContained={ToLowerInvariant(configuration.SelfContained)}",
-            $"-p:UseAppHost={ToLowerInvariant(configuration.UseAppHost)}"
-        };
-
-        if (string.IsNullOrWhiteSpace(customTrimProperty))
-        {
-            command.Add($"-p:PublishTrimmed={ToLowerInvariant(configuration.PublishTrimmed)}");
-        }
-        else
-        {
-            command.Add($"-p:{customTrimProperty}={ToLowerInvariant(configuration.PublishTrimmed)}");
-        }
-
-        if (configuration.PublishReadyToRun && !configuration.PublishAot)
-        {
-            command.Add("-p:PublishReadyToRun=true");
-        }
-
-        if (configuration.PublishSingleFile)
-        {
-            command.Add("-p:PublishSingleFile=true");
-            if (configuration.PublishAot)
-            {
-                command.Add("-p:IncludeNativeLibrariesForSelfExtract=true");
-            }
-        }
-
-        if (configuration.PublishAot)
-        {
-            command.Add("-p:PublishAot=true");
-        }
-
-        return command;
-    }
-
-    private List<string> BuildIosCommand(PublishConfiguration configuration, string projectFilePath, string? customTrimProperty)
-    {
-        var runtimeIdentifier = configuration.RuntimeIdentifier.Trim();
-        var isSimulatorRuntime = runtimeIdentifier.StartsWith("iossimulator-", StringComparison.OrdinalIgnoreCase);
-        var command = new List<string>
-        {
-            DotnetPath!,
-            isSimulatorRuntime ? "build" : "publish",
-            projectFilePath,
-            "-f",
-            configuration.TargetFramework.Trim(),
-            "-c",
-            configuration.Configuration.Trim(),
-            "-r",
-            runtimeIdentifier,
-            $"-p:SelfContained={ToLowerInvariant(configuration.SelfContained)}",
-            "-p:UseAppHost=false",
-            "-p:PublishTrimmed=true"
-        };
-
-        if (!string.IsNullOrWhiteSpace(customTrimProperty))
-        {
-            command.Add($"-p:{customTrimProperty}=true");
-        }
-
-        if (configuration.ArchiveOnBuild && !isSimulatorRuntime)
-        {
-            command.Add("-p:ArchiveOnBuild=true");
-        }
-
-        if (configuration.BuildIpa && !isSimulatorRuntime)
-        {
-            command.Add("-p:BuildIpa=true");
-        }
-
-        return command;
-    }
-
-    private IReadOnlyList<string> BuildBaselineCommand(PublishConfiguration configuration, string projectFilePath, string outputDirectory, string? customTrimProperty)
-    {
-        if (IsAndroidPlatform(configuration.PublishPlatform))
-        {
-            return BuildAndroidBaselineCommand(configuration, projectFilePath, outputDirectory, customTrimProperty);
-        }
-
-        var command = new List<string>
-        {
-            DotnetPath!,
-            "publish",
-            projectFilePath,
-            "-f",
-            configuration.TargetFramework.Trim(),
-            "-c",
-            configuration.Configuration.Trim(),
-            "-r",
-            configuration.RuntimeIdentifier.Trim(),
-            "-p:SelfContained=true"
-        };
-
-        if (IsMacOsPlatform(configuration.PublishPlatform))
-        {
-            var isMacCatalyst = PlatformDefaults.IsMacCatalyst(
-                configuration.TargetFramework,
-                configuration.RuntimeIdentifier);
-            var isNativeOsxRid = configuration.RuntimeIdentifier.StartsWith("osx-", StringComparison.OrdinalIgnoreCase);
-
-            if (isMacCatalyst)
-            {
-                // Catalyst SDK forces PublishTrimmed=true; disable linking instead.
-                command.Add("-p:PublishTrimmed=true");
-                command.Add("-p:MtouchLink=None");
-            }
-            else
-            {
-                AddTrimArgument(command, customTrimProperty, false);
-            }
-
-            if (isNativeOsxRid)
-            {
-                command.Add("-p:UseAppHost=true");
-                command.Add("-p:PublishSingleFile=true");
-            }
-        }
-        else if (IsIosPlatform(configuration.PublishPlatform))
-        {
-            var isSimulatorRuntime = configuration.RuntimeIdentifier.StartsWith("iossimulator-", StringComparison.OrdinalIgnoreCase);
-
-            // iOS SDK forces PublishTrimmed=true; simulator builds use the build verb.
-            command.Add("-p:UseAppHost=false");
-            command.Add("-p:PublishTrimmed=true");
-
-            if (isSimulatorRuntime)
-            {
-                command[1] = "build";
-            }
-        }
-        else
-        {
-            // Windows / Linux: plain self-contained single-file apphost publish.
-            command.Add("-p:UseAppHost=true");
-            AddTrimArgument(command, customTrimProperty, false);
-            command.Add("-p:PublishSingleFile=true");
-        }
-
-        command.Add("-o");
-        command.Add(outputDirectory);
-        return command;
-    }
-
-    private static void AddTrimArgument(List<string> command, string? customTrimProperty, bool value)
-    {
-        var text = ToLowerInvariant(value);
-        if (string.IsNullOrWhiteSpace(customTrimProperty))
-        {
-            command.Add($"-p:PublishTrimmed={text}");
-        }
-        else
-        {
-            command.Add($"-p:{customTrimProperty}={text}");
-        }
-    }
-
-    private IReadOnlyList<string> BuildAndroidBaselineCommand(PublishConfiguration configuration, string projectFilePath, string outputDirectory, string? customTrimProperty)
-    {
-        var command = new List<string>
-        {
-            DotnetPath!,
-            "publish",
-            projectFilePath,
-            "-f",
-            configuration.TargetFramework.Trim(),
-            "-c",
-            configuration.Configuration.Trim(),
-            "-r",
-            configuration.RuntimeIdentifier.Trim(),
-            "-p:SelfContained=true",
-            "-p:AndroidLinkMode=None",
-            "-p:RunAOTCompilation=false",
-            "-p:AndroidEnableProfiledAot=false",
-            "-p:AndroidPackageFormats=apk",
-            "-o",
-            outputDirectory
-        };
-
-        AddTrimArgument(command, customTrimProperty, false);
-
-        return command;
-    }
-
-    private static void ValidateSigning(PublishConfiguration configuration)
-    {
-        if (string.IsNullOrWhiteSpace(configuration.KeystorePath))
-        {
-            throw new InvalidOperationException("Signing mode is Sign, but no keystore file was selected.");
-        }
-
-        if (string.IsNullOrWhiteSpace(configuration.KeyAlias))
-        {
-            throw new InvalidOperationException("Signing mode is Sign, but the key alias is empty.");
-        }
-
-        if (string.IsNullOrWhiteSpace(configuration.KeystorePassword))
-        {
-            throw new InvalidOperationException("Signing mode is Sign, but the store password is empty.");
-        }
-
-        if (string.IsNullOrWhiteSpace(configuration.KeyPassword))
-        {
-            throw new InvalidOperationException("Signing mode is Sign, but the key password is empty.");
-        }
-    }
-
-    private static IReadOnlyList<string> GetSelectedFormats(PublishConfiguration configuration)
-    {
-        var formats = new List<string>();
-
-        if (configuration.IncludeAab)
-        {
-            formats.Add("aab");
-        }
-
-        if (configuration.IncludeApk)
-        {
-            formats.Add("apk");
-        }
-
-        return formats;
-    }
-
-    private static string MaskCommand(IEnumerable<string> arguments)
-    {
-        var masked = arguments.Select(argument =>
-        {
-            if (argument.StartsWith("-p:AndroidSigningStorePass=", StringComparison.Ordinal))
-            {
-                return "-p:AndroidSigningStorePass=********";
-            }
-
-            if (argument.StartsWith("-p:AndroidSigningKeyPass=", StringComparison.Ordinal))
-            {
-                return "-p:AndroidSigningKeyPass=********";
-            }
-
-            return argument;
-        });
-
-        return string.Join(" ", masked.Select(QuoteArgument));
-    }
-
-    private static string QuoteArgument(string argument)
-    {
-        if (string.IsNullOrEmpty(argument))
-        {
-            return "\"\"";
-        }
-
-        if (argument.All(character => !char.IsWhiteSpace(character) && character != '"' && character != '\''))
-        {
-            return argument;
-        }
-
-        return "\"" + argument.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"";
-    }
-
-    private static string ToLowerInvariant(bool value)
-    {
-        return value ? "true" : "false";
+                var output = new StringBuilder();
+                var exitCode = await ProcessRunner.RunAsync(
+                    arguments,
+                    text => output.Append(text),
+                    token,
+                    projectFile.DirectoryName);
+                return (exitCode, output.ToString());
+            },
+            cancellationToken);
     }
 
     private static bool IsAndroidPlatform(string publishPlatform)
@@ -2164,40 +715,6 @@ public sealed class PublisherService
         return targetFramework.Contains("android", StringComparison.OrdinalIgnoreCase)
             || targetFramework.Contains("ios", StringComparison.OrdinalIgnoreCase)
             || targetFramework.Contains("maccatalyst", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string ExtractSimulatorId(string simulator)
-    {
-        var separatorIndex = simulator.LastIndexOf('|');
-        if (separatorIndex < 0)
-        {
-            return simulator.Trim();
-        }
-
-        return simulator[(separatorIndex + 1)..].Trim();
-    }
-
-    private static async Task EnsureIosSimulatorBootedAsync(string xcrunPath, string simulatorId, CancellationToken cancellationToken)
-    {
-        _ = Process.Start(new ProcessStartInfo("open", "-a Simulator")
-        {
-            UseShellExecute = false,
-            CreateNoWindow = true
-        });
-
-        var bootOutput = new StringBuilder();
-        var bootExitCode = await RunProcessAsync([xcrunPath, "simctl", "boot", simulatorId], text => bootOutput.Append(text), cancellationToken);
-        if (bootExitCode != 0 && !bootOutput.ToString().Contains("Booted", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException($"iOS simulator boot command returned {bootExitCode}.{Environment.NewLine}{bootOutput}");
-        }
-
-        var statusOutput = new StringBuilder();
-        var statusExitCode = await RunProcessAsync([xcrunPath, "simctl", "bootstatus", simulatorId, "-b"], text => statusOutput.Append(text), cancellationToken);
-        if (statusExitCode != 0)
-        {
-            throw new InvalidOperationException($"iOS simulator boot status check failed ({statusExitCode}).{Environment.NewLine}{statusOutput}");
-        }
     }
 
     private static bool IsDirectoryInUse(string path)
@@ -2727,7 +1244,7 @@ public sealed class PublisherService
 
     private static string? GetProjectIdentifier(FileInfo projectFile, string projectName, string publishPlatform)
     {
-        var identifier = ReadProperty(
+        var identifier = ProjectInspector.ReadProperty(
             projectFile,
             "PackageId",
             "ApplicationId",
@@ -2786,137 +1303,11 @@ public sealed class PublisherService
 """;
     }
 
-    private static FileInfo? FindBestApk(string outputDirectory, string? projectName = null, string? packageId = null)
-    {
-        var directory = new DirectoryInfo(outputDirectory);
-        if (!directory.Exists)
-        {
-            return null;
-        }
+    public FileInfo? FindBestApk(string outputDirectory, string? projectName = null, string? packageId = null) =>
+        ArtifactLocator.FindBestApk(outputDirectory, projectName, packageId);
 
-        return directory
-            .EnumerateFiles("*.apk", SearchOption.AllDirectories)
-            .OrderByDescending(file => GetApkScore(file, projectName, packageId))
-            .ThenByDescending(file => file.LastWriteTimeUtc)
-            .ThenBy(file => file.FullName, StringComparer.OrdinalIgnoreCase)
-            .FirstOrDefault();
-    }
-
-    private static int GetApkScore(FileInfo apk, string? projectName, string? packageId)
-    {
-        var score = 0;
-        var fileName = apk.Name;
-
-        if (fileName.EndsWith("-Signed.apk", StringComparison.OrdinalIgnoreCase))
-        {
-            score += 100;
-        }
-
-        if (!string.IsNullOrWhiteSpace(projectName) &&
-            fileName.Contains(projectName.Trim(), StringComparison.OrdinalIgnoreCase))
-        {
-            score += 50;
-        }
-
-        if (!string.IsNullOrWhiteSpace(packageId) &&
-            fileName.Contains(packageId.Trim(), StringComparison.OrdinalIgnoreCase))
-        {
-            score += 40;
-        }
-
-        if (fileName.EndsWith("-debug.apk", StringComparison.OrdinalIgnoreCase))
-        {
-            score -= 10;
-        }
-
-        return score;
-    }
-
-    private static string GetSafeWorkingDirectory(string? preferredDirectory = null)
-    {
-        if (!string.IsNullOrWhiteSpace(preferredDirectory) && Directory.Exists(preferredDirectory))
-        {
-            return Path.GetFullPath(preferredDirectory);
-        }
-
-        try
-        {
-            var currentDirectory = Environment.CurrentDirectory;
-            if (!string.IsNullOrWhiteSpace(currentDirectory) && Directory.Exists(currentDirectory))
-            {
-                return Path.GetFullPath(currentDirectory);
-            }
-        }
-        catch (IOException)
-        {
-        }
-        catch (UnauthorizedAccessException)
-        {
-        }
-
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        if (!string.IsNullOrWhiteSpace(home) && Directory.Exists(home))
-        {
-            return home;
-        }
-
-        return Path.GetTempPath();
-    }
-
-    private static async Task<int> RunProcessAsync(IReadOnlyList<string> arguments, Action<string> writeOutput, CancellationToken cancellationToken, string? workingDirectory = null)
-    {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = arguments[0],
-            WorkingDirectory = GetSafeWorkingDirectory(workingDirectory),
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true
-        };
-
-        foreach (var argument in arguments.Skip(1))
-        {
-            startInfo.ArgumentList.Add(argument);
-        }
-
-        using var process = new Process { StartInfo = startInfo };
-        process.Start();
-
-        var standardOutputTask = PumpReaderAsync(process.StandardOutput, writeOutput, cancellationToken);
-        var standardErrorTask = PumpReaderAsync(process.StandardError, writeOutput, cancellationToken);
-
-        try
-        {
-            await process.WaitForExitAsync(cancellationToken);
-        }
-        catch (OperationCanceledException)
-        {
-            writeOutput(Environment.NewLine + "Cancelling running process..." + Environment.NewLine);
-            KillProcessTree(process);
-            await process.WaitForExitAsync(CancellationToken.None);
-            await Task.WhenAll(standardOutputTask, standardErrorTask);
-            throw;
-        }
-
-        await Task.WhenAll(standardOutputTask, standardErrorTask);
-        return process.ExitCode;
-    }
-
-    private static async Task PumpReaderAsync(StreamReader reader, Action<string> writeOutput, CancellationToken cancellationToken)
-    {
-        while (true)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var line = await reader.ReadLineAsync(cancellationToken);
-            if (line is null)
-            {
-                break;
-            }
-
-            writeOutput(line + Environment.NewLine);
-        }
-    }
+    public FileInfo? FindBestAab(string outputDirectory, string? projectName = null, string? packageId = null) =>
+        ArtifactLocator.FindBestAab(outputDirectory, projectName, packageId);
 
     private static void PlayCompletionSound(bool success)
     {

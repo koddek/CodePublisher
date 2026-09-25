@@ -1,6 +1,6 @@
 using Avalonia.Controls;
 
-namespace DotNetAppPublisher.Services;
+namespace DotNetAppPublisher.Features.Publishing.Capture;
 
 public interface IScreenshotService
 {

@@ -22,7 +22,7 @@
                     <!-- Text & Foreground -->
                     <SolidColorBrush x:Key="ThemeForegroundColor">#E0E0E0</SolidColorBrush>
                     <SolidColorBrush x:Key="TextSecondaryColor">#A0A0A0</SolidColorBrush>
-                    <SolidColorBrush x:Key="TextTertiaryColor">#757575</SolidColorBrush>
+                    <SolidColorBrush x:Key="TextTertiaryColor">#A0A0A0</SolidColorBrush>
                     
                     <!-- Accents -->
                     <SolidColorBrush x:Key="PrimaryAccentColor">#0078D4</SolidColorBrush>
@@ -43,6 +43,15 @@
                     <SolidColorBrush x:Key="InfoBannerBackgroundColor">#1B2A41</SolidColorBrush>
                     <SolidColorBrush x:Key="InfoBannerBorderColor">#3B6FA0</SolidColorBrush>
                     <SolidColorBrush x:Key="InfoBannerTextColor">#7FB3E8</SolidColorBrush>
+                    <SolidColorBrush x:Key="StatusSuccessBackgroundColor">#1E3320</SolidColorBrush>
+                    <SolidColorBrush x:Key="StatusSuccessBorderColor">#4CAF50</SolidColorBrush>
+                    <SolidColorBrush x:Key="StatusSuccessTextColor">#7BC47F</SolidColorBrush>
+                    <SolidColorBrush x:Key="StatusWarningBackgroundColor">#3A2E1A</SolidColorBrush>
+                    <SolidColorBrush x:Key="StatusWarningBorderColor">#8A6D3B</SolidColorBrush>
+                    <SolidColorBrush x:Key="StatusWarningTextColor">#E8B450</SolidColorBrush>
+                    <SolidColorBrush x:Key="StatusErrorBackgroundColor">#3B1D20</SolidColorBrush>
+                    <SolidColorBrush x:Key="StatusErrorBorderColor">#A33A40</SolidColorBrush>
+                    <SolidColorBrush x:Key="StatusErrorTextColor">#F08A8E</SolidColorBrush>
                     
                     <!-- Borders -->
                     <SolidColorBrush x:Key="BorderColor">#3D3D3D</SolidColorBrush>
@@ -58,7 +67,7 @@
                     <!-- Text & Foreground -->
                     <SolidColorBrush x:Key="ThemeForegroundColor">#1F1F1F</SolidColorBrush>
                     <SolidColorBrush x:Key="TextSecondaryColor">#5F5F5F</SolidColorBrush>
-                    <SolidColorBrush x:Key="TextTertiaryColor">#8F8F8F</SolidColorBrush>
+                    <SolidColorBrush x:Key="TextTertiaryColor">#6B6B6B</SolidColorBrush>
                     
                     <!-- Accents -->
                     <SolidColorBrush x:Key="PrimaryAccentColor">#0078D4</SolidColorBrush>
@@ -79,6 +88,15 @@
                     <SolidColorBrush x:Key="InfoBannerBackgroundColor">#E8F0FE</SolidColorBrush>
                     <SolidColorBrush x:Key="InfoBannerBorderColor">#8AB4F8</SolidColorBrush>
                     <SolidColorBrush x:Key="InfoBannerTextColor">#1967D2</SolidColorBrush>
+                    <SolidColorBrush x:Key="StatusSuccessBackgroundColor">#E8F5E9</SolidColorBrush>
+                    <SolidColorBrush x:Key="StatusSuccessBorderColor">#4CAF50</SolidColorBrush>
+                    <SolidColorBrush x:Key="StatusSuccessTextColor">#2E7D32</SolidColorBrush>
+                    <SolidColorBrush x:Key="StatusWarningBackgroundColor">#FFF6E5</SolidColorBrush>
+                    <SolidColorBrush x:Key="StatusWarningBorderColor">#E0A832</SolidColorBrush>
+                    <SolidColorBrush x:Key="StatusWarningTextColor">#8A5A00</SolidColorBrush>
+                    <SolidColorBrush x:Key="StatusErrorBackgroundColor">#FDECEC</SolidColorBrush>
+                    <SolidColorBrush x:Key="StatusErrorBorderColor">#D66565</SolidColorBrush>
+                    <SolidColorBrush x:Key="StatusErrorTextColor">#A31515</SolidColorBrush>
                     
                     <!-- Borders -->
                     <SolidColorBrush x:Key="BorderColor">#D0D0D0</SolidColorBrush>

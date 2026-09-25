@@ -4,44 +4,51 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:DotNetAppPublisher.ViewModels"
              xmlns:services="using:DotNetAppPublisher.Services"
+             xmlns:android="using:DotNetAppPublisher.Features.Deployment.Android"
+             xmlns:googlePlay="using:DotNetAppPublisher.Views.GooglePlay"
              mc:Ignorable="d"
              d:DesignWidth="1280"
              d:DesignHeight="800"
              x:Class="DotNetAppPublisher.Views.MainView"
              x:CompileBindings="True"
+             SizeChanged="OnSizeChanged"
              x:DataType="vm:MainViewModel">
 
-    <Grid RowDefinitions="Auto,*,Auto" Background="{DynamicResource ThemeBackgroundColor}" MinWidth="720">
+    <Grid RowDefinitions="Auto,*,Auto" Background="{DynamicResource ThemeBackgroundColor}">
 
         <!-- Header -->
-        <Border Grid.Row="0" Padding="16,10" Background="{DynamicResource SurfaceColor}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,0,1">
-            <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
-                <StackPanel Grid.Column="0" Spacing="3" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="0">
+        <Border x:Name="HeaderSurface" Grid.Row="0" Padding="16,10" Background="{DynamicResource SurfaceColor}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,0,1">
+            <WrapPanel x:Name="HeaderContent" Orientation="Horizontal" ItemSpacing="12" LineSpacing="4" VerticalAlignment="Center">
+                <StackPanel x:Name="HeaderIdentity" Spacing="3" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="0">
                     <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                         <TextBlock Text=".NET App Publisher" FontSize="20" FontWeight="Bold" VerticalAlignment="Center" Margin="0" Padding="0"/>
                         <TextBlock Text="{Binding AppDisplayVersion}" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}" VerticalAlignment="Center" Margin="0,3,0,0" Padding="0" ToolTip.Tip="App version (from Directory.Build.props)"/>
                     </StackPanel>
-                    <TextBlock Text="{Binding ProjectDirectory}" FontSize="11" Foreground="{DynamicResource TextSecondaryColor}" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0" Padding="0" MaxWidth="640" TextTrimming="CharacterEllipsis" TextAlignment="Left" ToolTip.Tip="{Binding ProjectDirectory}" IsVisible="{Binding ProjectDirectory, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-                    <TextBlock Text="No project selected — choose a .NET project folder in the Project section" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0" Padding="0" IsVisible="{Binding !HasProjectSelection}"/>
+                    <TextBlock Text="{Binding ProjectDirectory}" FontSize="11" Foreground="{DynamicResource TextSecondaryColor}" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0" Padding="0" TextTrimming="CharacterEllipsis" TextWrapping="Wrap" TextAlignment="Left" ToolTip.Tip="{Binding ProjectDirectory}" IsVisible="{Binding ProjectDirectory, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                    <TextBlock Text="No project selected — choose a .NET project folder in the Project section" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0" Padding="0" TextWrapping="Wrap" IsVisible="{Binding !HasProjectSelection}"/>
                 </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" HorizontalAlignment="Right">
+                <StackPanel x:Name="HeaderActions" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="12,0,0,0">
                     <Button Classes="theme-toggle-button"
                             Command="{Binding ToggleThemeCommand}"
-                            ToolTip.Tip="{Binding Theme, StringFormat='Switch from {0} theme'}">
+                            ToolTip.Tip="{Binding Theme, StringFormat='Switch from {0} theme'}"
+                            AutomationProperties.Name="Switch theme">
                         <PathIcon x:Name="ThemeIcon" Width="18" Height="18"/>
                     </Button>
                     <Button Classes="primary" Content="Publish" Command="{Binding PublishCommand}" MinWidth="110"/>
-                    <Button Content="Cancel" Command="{Binding CancelPublishCommand}" IsVisible="{Binding IsPublishing}" Padding="12,8"/>
+                    <Button Classes="compact-icon" Command="{Binding CancelPublishCommand}" IsVisible="{Binding IsPublishing}"
+                            ToolTip.Tip="Cancel publish" AutomationProperties.Name="Cancel publish">
+                        <PathIcon Data="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.3 9.17 12 2.89 5.71 4.3 4.3l6.29 6.29 6.29-6.29z"/>
+                    </Button>
                 </StackPanel>
-            </Grid>
+            </WrapPanel>
         </Border>
 
         <!-- Master-Detail -->
-        <Grid Grid.Row="1" ColumnDefinitions="220,*">
+        <Grid x:Name="MasterDetailGrid" Grid.Row="1" ColumnDefinitions="180,*">
             <!-- Left navigation -->
             <Border Grid.Column="0" Background="{DynamicResource SurfaceVariantColor}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0">
                 <Grid RowDefinitions="Auto,*">
-                    <TextBlock Text="Configure" Margin="16,16,16,8" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextTertiaryColor}" Opacity="0.8"/>
+                    <TextBlock x:Name="ConfigureHeader" Text="Configure" Margin="16,16,16,8" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextTertiaryColor}" Opacity="0.8" TextTrimming="CharacterEllipsis"/>
                     <ListBox Grid.Row="1" x:Name="NavListBox" ItemsSource="{Binding NavItems}" SelectedItem="{Binding SelectedNavItem}" Background="Transparent" Margin="8,0,8,8">
                         <ListBox.Styles>
                             <Style Selector="ListBoxItem">
@@ -56,9 +63,9 @@
                         </ListBox.Styles>
                         <ListBox.ItemTemplate>
                             <DataTemplate x:DataType="vm:NavItem">
-                                <Grid ColumnDefinitions="Auto,*" Margin="10,8">
+                                <Grid ColumnDefinitions="Auto,*" Margin="10,8" ToolTip.Tip="{Binding Label}" AutomationProperties.Name="{Binding Label}">
                                     <PathIcon Data="{Binding IconData}" Width="16" Height="16" VerticalAlignment="Center" Foreground="{DynamicResource TextSecondaryColor}"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding Label}" Margin="10,0,0,0" VerticalAlignment="Center" FontSize="13" FontWeight="Medium"/>
+                                    <TextBlock Grid.Column="1" Classes="nav-label" Text="{Binding Label}" Margin="10,0,0,0" VerticalAlignment="Center" FontSize="13" FontWeight="Medium" TextTrimming="CharacterEllipsis"/>
                                 </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
@@ -69,13 +76,13 @@
             <!-- Right detail -->
             <Border Grid.Column="1" Background="{DynamicResource ThemeBackgroundColor}">
                 <ScrollViewer x:Name="DetailScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                    <StackPanel Spacing="20" Margin="20" MaxWidth="880" HorizontalAlignment="Stretch">
+                    <StackPanel x:Name="DetailContent" Spacing="20" Margin="20" MaxWidth="880" HorizontalAlignment="Stretch">
 
                         <!-- Project Section -->
                         <StackPanel Spacing="20" IsVisible="{Binding IsProjectSection}">
                             <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
                                 <TextBlock Text="Project" FontSize="18" FontWeight="SemiBold"/>
-                                <Button Grid.Column="1" Classes="icon-action-button" ToolTip.Tip="Screenshot this section" Click="OnCaptureDetailClick" Tag="Project" Padding="8" MinWidth="36" MinHeight="32">
+                                <Button Grid.Column="1" Classes="icon-action-button" ToolTip.Tip="Screenshot this section" AutomationProperties.Name="Screenshot this section" Click="OnCaptureDetailClick" Tag="Project" Padding="8" MinWidth="36" MinHeight="32">
                                     <PathIcon Data="M20 6h-3.17L15 4H9L7.17 6H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-8 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6zm0-10c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2z" Width="16" Height="16"/>
                                 </Button>
                             </Grid>
@@ -89,7 +96,7 @@
                                     </Border>
                                     <StackPanel Spacing="8">
                                         <TextBlock Text="Project Directory" FontWeight="SemiBold" FontSize="13"/>
-                                        <TextBox Text="{Binding ProjectDirectory}" IsEnabled="{Binding IsEditorEnabled}" PlaceholderText="Select a .NET project folder"/>
+                                        <TextBox Text="{Binding ProjectDirectory}" IsEnabled="{Binding IsEditorEnabled}" PlaceholderText="Select project folder"/>
                                     </StackPanel>
                                     <WrapPanel ItemSpacing="8" LineSpacing="8">
                                         <Button Content="Browse..." Command="{Binding BrowseProjectDirectoryCommand}" MinWidth="120"/>
@@ -115,55 +122,66 @@
                         <StackPanel Spacing="20" IsVisible="{Binding IsPlatformSection}">
                             <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
                                 <TextBlock Text="Platform &amp; Device" FontSize="18" FontWeight="SemiBold"/>
-                                <Button Grid.Column="1" Classes="icon-action-button" ToolTip.Tip="Screenshot this section" Click="OnCaptureDetailClick" Tag="Platform" Padding="8" MinWidth="36" MinHeight="32">
+                                <Button Grid.Column="1" Classes="icon-action-button" ToolTip.Tip="Screenshot this section" AutomationProperties.Name="Screenshot this section" Click="OnCaptureDetailClick" Tag="Platform" Padding="8" MinWidth="36" MinHeight="32">
                                     <PathIcon Data="M20 6h-3.17L15 4H9L7.17 6H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-8 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6zm0-10c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2z" Width="16" Height="16"/>
                                 </Button>
                             </Grid>
 
                             <Border Classes="card">
-                                <StackPanel Spacing="16">
-                                    <TextBlock Text="Target Platform" Classes="section-title"/>
-                                    <TextBlock Text="Choose where to publish. Defaults update automatically; project file wins when loaded." Classes="section-copy"/>
-                                    <StackPanel Spacing="8">
-                                        <TextBlock Text="Target Platform" FontWeight="SemiBold" FontSize="13"/>
-                                        <ComboBox ItemsSource="{Binding PublishPlatformOptions}" SelectedItem="{Binding PublishPlatform, Mode=TwoWay}" IsEnabled="{Binding IsEditorEnabled}"/>
-                                    </StackPanel>
+                                <StackPanel Spacing="12">
+                                    <TextBlock Text="Target platform" Classes="section-title"/>
+                                    <TextBlock Text="Choose where to publish. Defaults update automatically; project metadata wins when loaded." Classes="section-copy"/>
+                                    <WrapPanel ItemSpacing="12" LineSpacing="8">
+                                        <StackPanel MinWidth="180" Spacing="6">
+                                            <TextBlock Text="Publish target" FontWeight="SemiBold" FontSize="13"/>
+                                            <ComboBox ItemsSource="{Binding PublishPlatformOptions}" SelectedItem="{Binding PublishPlatform, Mode=TwoWay}" IsEnabled="{Binding IsEditorEnabled}"/>
+                                        </StackPanel>
+                                    </WrapPanel>
+                                    <TextBlock Text="Linux publishes framework-dependent or self-contained with the selected RID. No device actions are required." Classes="section-copy" IsVisible="{Binding IsLinuxPublishOptionsVisible}"/>
+                                </StackPanel>
+                            </Border>
 
-                                    <StackPanel Spacing="8" IsVisible="{Binding IsAndroidPlatform}">
-                                        <TextBlock Text="Android Device" FontWeight="SemiBold" FontSize="13"/>
-                                        <WrapPanel ItemSpacing="8" LineSpacing="8" VerticalAlignment="Center">
-                                            <ComboBox MinWidth="280" MaxWidth="380" ItemsSource="{Binding AvailableAndroidDevices}" SelectedItem="{Binding SelectedDevice, Mode=TwoWay}">
-                                                <ComboBox.ItemTemplate>
-                                                    <DataTemplate x:DataType="services:AndroidDeviceInfo">
-                                                        <TextBlock Text="{Binding DisplayName}"/>
-                                                    </DataTemplate>
-                                                </ComboBox.ItemTemplate>
-                                            </ComboBox>
-                                            <Button Content="Refresh" Command="{Binding RefreshDevicesCommand}" Padding="12,8"/>
-                                        </WrapPanel>
-                                        <WrapPanel ItemSpacing="8" LineSpacing="8" VerticalAlignment="Center">
-                                            <Border Classes="badge badge-adb" ToolTip.Tip="adb tool used for install/uninstall/launch/push">
-                                                <TextBlock Text="{Binding AdbStatus}" Classes="badge-text-adb" FontSize="11"/>
-                                            </Border>
-                                            <Border Classes="badge badge-emulator" ToolTip.Tip="emulator tool used to discover and launch AVDs">
-                                                <TextBlock Text="{Binding EmulatorStatus}" Classes="badge-text-emulator" FontSize="11"/>
-                                            </Border>
-                                        </WrapPanel>
-                                        <Button Content="Launch Device / Emulator" Command="{Binding LaunchDeviceCommand}" MinWidth="180" IsVisible="{Binding IsAndroidPlatform}"/>
-                                    </StackPanel>
+                            <Border Classes="card" IsVisible="{Binding IsAndroidPlatform}">
+                                <StackPanel Spacing="12">
+                                    <TextBlock Text="Android device" Classes="section-title"/>
+                                    <TextBlock Text="Choose a connected device or start an emulator before deploying." Classes="section-copy"/>
+                                    <WrapPanel ItemSpacing="8" LineSpacing="8" VerticalAlignment="Center">
+                                        <ComboBox MinWidth="180" MaxWidth="380" ItemsSource="{Binding AvailableAndroidDevices}" SelectedItem="{Binding SelectedDevice, Mode=TwoWay}">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate x:DataType="android:AndroidDeviceInfo">
+                                                    <TextBlock Text="{Binding DisplayName}"/>
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
+                                        <Button Classes="compact-icon" Command="{Binding RefreshDevicesCommand}"
+                                                ToolTip.Tip="Refresh Android devices" AutomationProperties.Name="Refresh Android devices">
+                                            <PathIcon Data="M17.65 6.35A7.95 7.95 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                                        </Button>
+                                    </WrapPanel>
+                                    <WrapPanel ItemSpacing="8" LineSpacing="8">
+                                        <Border Classes="badge badge-adb" ToolTip.Tip="adb tool used for install, uninstall, launch, and push">
+                                            <TextBlock Text="{Binding AdbStatus}" Classes="badge-text-adb" FontSize="11"/>
+                                        </Border>
+                                        <Border Classes="badge badge-emulator" ToolTip.Tip="emulator tool used to discover and launch AVDs">
+                                            <TextBlock Text="{Binding EmulatorStatus}" Classes="badge-text-emulator" FontSize="11"/>
+                                        </Border>
+                                    </WrapPanel>
+                                    <Button Content="Launch device or emulator" Command="{Binding LaunchDeviceCommand}" MinWidth="180"/>
+                                </StackPanel>
+                            </Border>
 
-                                    <StackPanel Spacing="8" IsVisible="{Binding IsIosActionsVisible}">
-                                        <TextBlock Text="iOS Simulator" FontWeight="SemiBold" FontSize="13"/>
-                                        <WrapPanel ItemSpacing="8" LineSpacing="8">
-                                            <ComboBox MinWidth="280" MaxWidth="380" ItemsSource="{Binding AvailableIosSimulators}" SelectedItem="{Binding SelectedIosSimulator, Mode=TwoWay}"/>
-                                            <Button Content="Refresh" Command="{Binding RefreshIosSimulatorsCommand}" Padding="12,8"/>
-                                        </WrapPanel>
-                                        <Button Content="Launch Simulator" Command="{Binding LaunchIosSimulatorCommand}" MinWidth="160"/>
-                                    </StackPanel>
-
-                                    <StackPanel Spacing="6" IsVisible="{Binding IsLinuxPublishOptionsVisible}">
-                                        <TextBlock Text="Linux publishes framework-dependent or self-contained with the selected RID. No device actions required." Classes="section-copy"/>
-                                    </StackPanel>
+                            <Border Classes="card" IsVisible="{Binding IsIosActionsVisible}">
+                                <StackPanel Spacing="12">
+                                    <TextBlock Text="iOS simulator" Classes="section-title"/>
+                                    <TextBlock Text="Simulator actions are separate from device publishing and do not require signing." Classes="section-copy"/>
+                                    <WrapPanel ItemSpacing="8" LineSpacing="8">
+                                        <ComboBox MinWidth="180" MaxWidth="380" ItemsSource="{Binding AvailableIosSimulators}" SelectedItem="{Binding SelectedIosSimulator, Mode=TwoWay}"/>
+                                        <Button Classes="compact-icon" Command="{Binding RefreshIosSimulatorsCommand}"
+                                                ToolTip.Tip="Refresh iOS simulators" AutomationProperties.Name="Refresh iOS simulators">
+                                            <PathIcon Data="M17.65 6.35A7.95 7.95 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                                        </Button>
+                                    </WrapPanel>
+                                    <Button Content="Launch simulator" Command="{Binding LaunchIosSimulatorCommand}" MinWidth="160"/>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -172,57 +190,64 @@
                         <StackPanel Spacing="20" IsVisible="{Binding IsBuildSection}">
                             <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
                                 <TextBlock Text="Build" FontSize="18" FontWeight="SemiBold"/>
-                                <Button Grid.Column="1" Classes="icon-action-button" ToolTip.Tip="Screenshot this section" Click="OnCaptureDetailClick" Tag="Build" Padding="8" MinWidth="36" MinHeight="32">
+                                <Button Grid.Column="1" Classes="icon-action-button" ToolTip.Tip="Screenshot this section" AutomationProperties.Name="Screenshot this section" Click="OnCaptureDetailClick" Tag="Build" Padding="8" MinWidth="36" MinHeight="32">
                                     <PathIcon Data="M20 6h-3.17L15 4H9L7.17 6H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-8 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6zm0-10c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2z" Width="16" Height="16"/>
                                 </Button>
                             </Grid>
 
                             <Border Classes="card">
-                                <StackPanel Spacing="16">
+                                <StackPanel Spacing="14">
                                     <WrapPanel ItemSpacing="8" LineSpacing="8" VerticalAlignment="Center">
-                                        <TextBlock Text="Build Configuration" Classes="section-title" VerticalAlignment="Center"/>
-                                        <Button Content="Reset to Known-Good Defaults" Command="{Binding ResetToSafeDefaultsCommand}" Padding="10,6" FontSize="12" ToolTip.Tip="Reset all Build options for this platform to the baseline that reliably publishes"/>
+                                        <TextBlock Text="Build identity" Classes="section-title" VerticalAlignment="Center"/>
+                                        <Button Content="Reset to known-good defaults" Command="{Binding ResetToSafeDefaultsCommand}" Padding="10,6" FontSize="12"
+                                                ToolTip.Tip="Reset all Build options for this platform to the baseline that reliably publishes"
+                                                AutomationProperties.Name="Reset build options to known-good defaults"/>
                                     </WrapPanel>
                                     <TextBlock Text="TFM and RID default per platform; edit only if you know the target SDK." Classes="section-copy"/>
-
                                     <StackPanel Spacing="8">
                                         <TextBlock Text="{Binding PackageIdLabel}" FontWeight="SemiBold" FontSize="13"/>
                                         <TextBox Text="{Binding PackageId}" IsEnabled="{Binding IsEditorEnabled}" PlaceholderText="com.example.app"/>
                                         <TextBlock Text="{Binding PackageIdDescription}" Classes="section-copy" TextWrapping="Wrap"/>
                                     </StackPanel>
-
-                                    <WrapPanel ItemSpacing="16" LineSpacing="16">
-                                        <StackPanel MinWidth="220" MaxWidth="320" Spacing="8">
-                                            <TextBlock Text="Target Framework" FontWeight="SemiBold" FontSize="13"/>
+                                    <WrapPanel ItemSpacing="16" LineSpacing="12">
+                                        <StackPanel MinWidth="140" MaxWidth="320" Spacing="8">
+                                            <TextBlock Text="Target framework" FontWeight="SemiBold" FontSize="13"/>
                                             <TextBox Text="{Binding TargetFramework}" IsEnabled="{Binding IsEditorEnabled}"/>
                                         </StackPanel>
-                                        <StackPanel MinWidth="220" MaxWidth="320" Spacing="8">
+                                        <StackPanel MinWidth="140" MaxWidth="320" Spacing="8">
                                             <TextBlock Text="Runtime ID" FontWeight="SemiBold" FontSize="13"/>
                                             <TextBox Text="{Binding RuntimeIdentifier}" IsEnabled="{Binding IsEditorEnabled}"/>
                                         </StackPanel>
-                                        <StackPanel MinWidth="180" Spacing="8">
+                                    </WrapPanel>
+                                    <WrapPanel ItemSpacing="16" LineSpacing="12">
+                                        <StackPanel MinWidth="140" Spacing="8">
                                             <TextBlock Text="Configuration" FontWeight="SemiBold" FontSize="13"/>
                                             <ComboBox ItemsSource="{Binding ConfigurationOptions}" SelectedItem="{Binding Configuration}" IsEnabled="{Binding IsEditorEnabled}"/>
                                         </StackPanel>
-                                        <StackPanel MinWidth="180" Spacing="8" IsVisible="{Binding IsAndroidPlatform}">
-                                            <TextBlock Text="Signing Mode" FontWeight="SemiBold" FontSize="13"/>
+                                        <StackPanel MinWidth="140" Spacing="8" IsVisible="{Binding IsAndroidPlatform}">
+                                            <TextBlock Text="Signing mode" FontWeight="SemiBold" FontSize="13"/>
                                             <ComboBox ItemsSource="{Binding SignModeOptions}" SelectedItem="{Binding SignMode}" IsEnabled="{Binding IsEditorEnabled}"/>
                                         </StackPanel>
-                                        <StackPanel MinWidth="180" Spacing="8" IsVisible="{Binding IsAndroidPlatform}">
-                                            <TextBlock Text="Link Mode" FontWeight="SemiBold" FontSize="13"/>
+                                        <StackPanel MinWidth="140" Spacing="8" IsVisible="{Binding IsAndroidPlatform}">
+                                            <TextBlock Text="Link mode" FontWeight="SemiBold" FontSize="13"/>
                                             <ComboBox ItemsSource="{Binding LinkModeOptions}" SelectedItem="{Binding AndroidLinkMode}" IsEnabled="{Binding IsEditorEnabled}"/>
                                         </StackPanel>
                                     </WrapPanel>
+                                </StackPanel>
+                            </Border>
 
-                                    <TextBlock Text="Optimization" FontWeight="SemiBold" FontSize="13" Margin="0,8,0,0"/>
+                            <Border Classes="card">
+                                <StackPanel Spacing="14">
+                                    <TextBlock Text="Optimization and cleanup" Classes="section-title"/>
+                                    <TextBlock Text="These switches change size, startup, and reflection behavior. Disabled options explain why." Classes="section-copy"/>
                                     <WrapPanel ItemSpacing="12" LineSpacing="12">
                                         <CheckBox Content="Self-contained" IsChecked="{Binding SelfContained}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
                                         <StackPanel Orientation="Horizontal" Spacing="4">
-                                            <CheckBox Content="PublishTrimmed" IsChecked="{Binding PublishTrimmed}" IsEnabled="{Binding IsPublishTrimmedEnabled}" Margin="0,4"/>
+                                            <CheckBox Content="Publish trimmed" IsChecked="{Binding PublishTrimmed}" IsEnabled="{Binding IsPublishTrimmedEnabled}" Margin="0,4"/>
                                             <TextBlock Text="ⓘ" VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}" ToolTip.Tip="{Binding PublishTrimmedDisabledReason}" IsVisible="{Binding !IsPublishTrimmedEnabled}"/>
                                         </StackPanel>
                                         <StackPanel Orientation="Horizontal" Spacing="4">
-                                            <CheckBox Content="PublishAot" IsChecked="{Binding PublishAot}" IsEnabled="{Binding IsPublishAotEnabled}" Margin="0,4"/>
+                                            <CheckBox Content="Publish AOT" IsChecked="{Binding PublishAot}" IsEnabled="{Binding IsPublishAotEnabled}" Margin="0,4"/>
                                             <TextBlock Text="ⓘ" VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}" ToolTip.Tip="{Binding PublishAotDisabledReason}" IsVisible="{Binding !IsPublishAotEnabled}"/>
                                         </StackPanel>
                                         <StackPanel Orientation="Horizontal" Spacing="4">
@@ -230,20 +255,26 @@
                                             <TextBlock Text="ⓘ" VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}" ToolTip.Tip="{Binding ReadyToRunDisabledReason}" IsVisible="{Binding !IsReadyToRunCheckBoxEnabled}"/>
                                         </StackPanel>
                                         <StackPanel Orientation="Horizontal" Spacing="4">
-                                            <CheckBox Content="PublishSingleFile" IsChecked="{Binding PublishSingleFile}" IsEnabled="{Binding IsPublishSingleFileEnabled}" Margin="0,4"/>
+                                            <CheckBox Content="Single-file" IsChecked="{Binding PublishSingleFile}" IsEnabled="{Binding IsPublishSingleFileEnabled}" Margin="0,4"/>
                                             <TextBlock Text="ⓘ" VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}" ToolTip.Tip="{Binding PublishSingleFileDisabledReason}" IsVisible="{Binding !IsPublishSingleFileEnabled}"/>
                                         </StackPanel>
-                                        <CheckBox Content="UseAppHost" IsChecked="{Binding UseAppHost}" IsEnabled="{Binding IsUseAppHostEnabled}" Margin="0,4"/>
+                                        <CheckBox Content="Use app host" IsChecked="{Binding UseAppHost}" IsEnabled="{Binding IsUseAppHostEnabled}" Margin="0,4"/>
                                         <CheckBox Content="Create .app bundle" IsChecked="{Binding CreateMacAppBundle}" IsVisible="{Binding IsMacOsPublishOptionsVisible}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
                                         <CheckBox Content="Create .exe" IsChecked="{Binding CreateWindowsExecutable}" IsVisible="{Binding IsWindowsPublishOptionsVisible}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
                                         <CheckBox Content="Delete bin" IsChecked="{Binding DeleteBin}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
                                         <CheckBox Content="Delete obj" IsChecked="{Binding DeleteObj}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
                                     </WrapPanel>
-                                    <Border Background="{DynamicResource WarningBannerBackgroundColor}" BorderBrush="{DynamicResource WarningBannerBorderColor}" BorderThickness="1" CornerRadius="6" Padding="10" IsVisible="{Binding PublishAot}">
-                                        <TextBlock Text="⚠ AOT may cause issues with Avalonia's reflection features" FontSize="12" Foreground="{DynamicResource WarningBannerTextColor}" TextWrapping="Wrap"/>
+                                    <Border Background="{DynamicResource WarningBannerBackgroundColor}" BorderBrush="{DynamicResource WarningBannerBorderColor}" BorderThickness="1" CornerRadius="6" Padding="12" IsVisible="{Binding PublishAot}">
+                                        <StackPanel Spacing="3" VerticalAlignment="Center">
+                                            <TextBlock Text="AOT caution" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource WarningBannerTextColor}"/>
+                                            <TextBlock Text="AOT may cause issues with Avalonia's reflection features." FontSize="12" Foreground="{DynamicResource WarningBannerTextColor}" TextWrapping="Wrap"/>
+                                        </StackPanel>
                                     </Border>
-                                    <Border Background="{DynamicResource InfoBannerBackgroundColor}" BorderBrush="{DynamicResource InfoBannerBorderColor}" BorderThickness="1" CornerRadius="6" Padding="10" IsVisible="{Binding !IsPublishTrimmedEnabled}">
-                                        <TextBlock Text="{Binding PublishTrimmedDisabledReason}" FontSize="12" Foreground="{DynamicResource InfoBannerTextColor}" TextWrapping="Wrap"/>
+                                    <Border Background="{DynamicResource InfoBannerBackgroundColor}" BorderBrush="{DynamicResource InfoBannerBorderColor}" BorderThickness="1" CornerRadius="6" Padding="12" IsVisible="{Binding !IsPublishTrimmedEnabled}">
+                                        <StackPanel Spacing="3" VerticalAlignment="Center">
+                                            <TextBlock Text="Trimming unavailable" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource InfoBannerTextColor}"/>
+                                            <TextBlock Text="{Binding PublishTrimmedDisabledReason}" FontSize="12" Foreground="{DynamicResource InfoBannerTextColor}" TextWrapping="Wrap"/>
+                                        </StackPanel>
                                     </Border>
                                 </StackPanel>
                             </Border>
@@ -327,28 +358,31 @@
                         <StackPanel Spacing="20" IsVisible="{Binding IsSigningSection}">
                             <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
                                 <TextBlock Text="Signing" FontSize="18" FontWeight="SemiBold"/>
-                                <Button Grid.Column="1" Classes="icon-action-button" ToolTip.Tip="Screenshot this section" Click="OnCaptureDetailClick" Tag="Signing" Padding="8" MinWidth="36" MinHeight="32">
+                                <Button Grid.Column="1" Classes="icon-action-button" ToolTip.Tip="Screenshot this section" AutomationProperties.Name="Screenshot this section" Click="OnCaptureDetailClick" Tag="Signing" Padding="8" MinWidth="36" MinHeight="32">
                                     <PathIcon Data="M20 6h-3.17L15 4H9L7.17 6H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-8 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6zm0-10c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2z" Width="16" Height="16"/>
                                 </Button>
                             </Grid>
 
                             <Border Classes="card" IsVisible="{Binding IsSigningCardVisible}">
                                 <StackPanel Spacing="16">
-                                    <TextBlock Text="Signing" Classes="section-title"/>
-                                    <TextBlock Text="Only for Android when Signing Mode is 'Sign'. Keystore secrets are masked in command preview." Classes="section-copy"/>
+                                    <TextBlock Text="Manual Android signing" Classes="section-title"/>
+                                    <TextBlock Text="Use this keystore for a local signed Android build when Signing mode is Sign. Keystore secrets are masked in command preview." Classes="section-copy"/>
                                     <StackPanel Spacing="8">
                                         <TextBlock Text="Keystore Path" FontWeight="SemiBold" FontSize="13"/>
                                         <WrapPanel ItemSpacing="8" LineSpacing="8">
-                                            <TextBox MinWidth="320" MaxWidth="480" Text="{Binding KeystorePath}" IsEnabled="{Binding IsEditorEnabled}" PlaceholderText="/path/to/release.keystore"/>
-                                            <Button Content="Browse..." Command="{Binding BrowseKeystoreCommand}" Padding="12,8" MinWidth="100"/>
+                                            <TextBox MinWidth="180" MaxWidth="480" Text="{Binding KeystorePath}" IsEnabled="{Binding IsEditorEnabled}" PlaceholderText="/path/to/release.keystore"/>
+                                            <Button Classes="compact-icon" Command="{Binding BrowseKeystoreCommand}"
+                                                     ToolTip.Tip="Browse release keystore" AutomationProperties.Name="Browse release keystore">
+                                                 <PathIcon Data="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/>
+                                             </Button>
                                         </WrapPanel>
                                     </StackPanel>
                                     <WrapPanel ItemSpacing="16" LineSpacing="16">
-                                        <StackPanel MinWidth="220" Spacing="8">
+                                        <StackPanel MinWidth="160" Spacing="8">
                                             <TextBlock Text="Key Alias" FontWeight="SemiBold" FontSize="13"/>
                                             <TextBox Text="{Binding KeyAlias}" IsEnabled="{Binding IsEditorEnabled}"/>
                                         </StackPanel>
-                                        <StackPanel MinWidth="220" Spacing="8">
+                                        <StackPanel MinWidth="160" Spacing="8">
                                             <TextBlock Text="Store Password" FontWeight="SemiBold" FontSize="13"/>
                                             <TextBox Text="{Binding KeystorePassword}" PasswordChar="*" IsEnabled="{Binding IsEditorEnabled}"/>
                                         </StackPanel>
@@ -359,10 +393,63 @@
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
-                            <Border Classes="card" IsVisible="{Binding !IsSigningCardVisible}">
+                            <Border Classes="card" IsVisible="{Binding IsAndroidPlatform}">
+                                <StackPanel Spacing="14">
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                        <StackPanel Spacing="3">
+                                            <TextBlock Text="Google Play upload key" Classes="section-title"/>
+                                            <TextBlock Text="This key is used when a Google Play release is built. It stays in memory for this session." Classes="section-copy" Margin="0"/>
+                                             <TextBlock Text="Keystore file operations are available in the desktop app." FontSize="11" Foreground="{DynamicResource StatusWarningTextColor}"
+                                                        TextWrapping="Wrap" IsVisible="{Binding GooglePlay.IsBrowser}"/>
+                                        </StackPanel>
+                                        <Border Grid.Column="1" Classes="badge"
+                                                Background="{DynamicResource StatusSuccessBackgroundColor}"
+                                                BorderBrush="{DynamicResource StatusSuccessBorderColor}"
+                                                IsVisible="{Binding GooglePlay.HasSigningKey}">
+                                            <TextBlock Text="Ready" Foreground="{DynamicResource StatusSuccessTextColor}" FontWeight="SemiBold"/>
+                                        </Border>
+                                    </Grid>
+                                    <WrapPanel ItemSpacing="8" LineSpacing="8">
+                                        <TextBox MinWidth="180" MaxWidth="480" Text="{Binding GooglePlay.KeystorePath}" PlaceholderText="/path/to/upload.p12"/>
+                                        <Button Classes="compact-icon" Command="{Binding GooglePlay.ChooseKeystoreCommand}" IsEnabled="{Binding GooglePlay.IsDesktopSession}"
+                                                ToolTip.Tip="Choose upload keystore" AutomationProperties.Name="Choose upload keystore">
+                                             <PathIcon Data="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/>
+                                         </Button>
+                                        <Button Classes="compact-icon" Command="{Binding GooglePlay.CreateSigningKeyCommand}" IsEnabled="{Binding GooglePlay.IsDesktopSession}"
+                                                ToolTip.Tip="Create upload key" AutomationProperties.Name="Create upload key">
+                                             <PathIcon Data="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                                         </Button>
+                                        <Button Classes="compact-icon" Command="{Binding GooglePlay.InspectSigningKeyCommand}" IsEnabled="{Binding GooglePlay.IsDesktopSession}"
+                                                ToolTip.Tip="Inspect upload key" AutomationProperties.Name="Inspect upload key">
+                                             <PathIcon Data="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/>
+                                         </Button>
+                                        <Button Classes="compact-icon" Command="{Binding GooglePlay.ClearSigningKeyCommand}"
+                                                ToolTip.Tip="Clear upload key from memory" AutomationProperties.Name="Clear upload key from memory">
+                                             <PathIcon Data="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.3 9.17 12 2.89 5.71 4.3 4.3l6.29 6.29 6.29-6.29z"/>
+                                         </Button>
+                                    </WrapPanel>
+                                    <WrapPanel ItemSpacing="12" LineSpacing="8">
+                                        <StackPanel Spacing="5" MinWidth="180" MaxWidth="280">
+                                            <TextBlock Text="Key alias" FontSize="12" FontWeight="SemiBold"/>
+                                            <TextBox Text="{Binding GooglePlay.KeyAlias}" PlaceholderText="upload"/>
+                                        </StackPanel>
+                                        <StackPanel Spacing="5" MinWidth="180" MaxWidth="280">
+                                            <TextBlock Text="Store password" FontSize="12" FontWeight="SemiBold"/>
+                                            <TextBox Text="{Binding GooglePlay.KeystorePassword}" PasswordChar="●" PlaceholderText="Session only"/>
+                                        </StackPanel>
+                                        <StackPanel Spacing="5" MinWidth="180" MaxWidth="280">
+                                            <TextBlock Text="Key password" FontSize="12" FontWeight="SemiBold"/>
+                                            <TextBox Text="{Binding GooglePlay.KeyPassword}" PasswordChar="●" PlaceholderText="Session only"/>
+                                        </StackPanel>
+                                    </WrapPanel>
+                                    <TextBlock Text="{Binding GooglePlay.SigningKey.Sha256Fingerprint}" Classes="section-copy" Margin="0"
+                                               IsVisible="{Binding GooglePlay.HasSigningKey}" TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Classes="card" IsVisible="{Binding !IsAndroidPlatform}">
                                 <StackPanel Spacing="8">
-                                    <TextBlock Text="Signing not active" Classes="section-title"/>
-                                    <TextBlock Text="Switch platform to Android and set Signing Mode to 'Sign' to configure keystore." Classes="section-copy"/>
+                                    <TextBlock Text="Platform signing" Classes="section-title"/>
+                                    <TextBlock Text="Signing is configured for Android. Choose Signing on an Android project to manage the Play upload key." Classes="section-copy"/>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -371,7 +458,7 @@
                         <StackPanel Spacing="20" IsVisible="{Binding IsOutputSection}">
                             <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
                                 <TextBlock Text="Output &amp; Commands" FontSize="18" FontWeight="SemiBold"/>
-                                <Button Grid.Column="1" Classes="icon-action-button" ToolTip.Tip="Screenshot this section" Click="OnCaptureDetailClick" Tag="Output" Padding="8" MinWidth="36" MinHeight="32">
+                                <Button Grid.Column="1" Classes="icon-action-button" ToolTip.Tip="Screenshot this section" AutomationProperties.Name="Screenshot this section" Click="OnCaptureDetailClick" Tag="Output" Padding="8" MinWidth="36" MinHeight="32">
                                     <PathIcon Data="M20 6h-3.17L15 4H9L7.17 6H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-8 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6zm0-10c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2z" Width="16" Height="16"/>
                                 </Button>
                             </Grid>
@@ -380,9 +467,15 @@
                                 <StackPanel Spacing="16">
                                     <TextBlock Text="Output Folder" Classes="section-title"/>
                                     <WrapPanel ItemSpacing="8" LineSpacing="8">
-                                        <TextBox MinWidth="360" MaxWidth="520" Text="{Binding OutputDirectory}" IsEnabled="{Binding IsEditorEnabled}" PlaceholderText="bin/Config/TargetFramework/RID"/>
-                                        <Button Content="Browse..." Command="{Binding BrowseOutputDirectoryCommand}" Padding="12,8" MinWidth="100"/>
-                                        <Button Content="Open Folder" Command="{Binding OpenPublishFolderCommand}" Padding="12,8"/>
+                                        <TextBox MinWidth="180" MaxWidth="520" Text="{Binding OutputDirectory}" IsEnabled="{Binding IsEditorEnabled}" PlaceholderText="bin/Config/TargetFramework/RID"/>
+                                        <Button Classes="compact-icon" Command="{Binding BrowseOutputDirectoryCommand}"
+                                                 ToolTip.Tip="Browse output folder" AutomationProperties.Name="Browse output folder">
+                                             <PathIcon Data="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/>
+                                         </Button>
+                                        <Button Classes="compact-icon" Command="{Binding OpenPublishFolderCommand}"
+                                                 ToolTip.Tip="Open output folder" AutomationProperties.Name="Open output folder">
+                                             <PathIcon Data="M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59L7.76 14.83l1.41 1.41L19 6.41V10h2V3h-7z"/>
+                                         </Button>
                                     </WrapPanel>
                                     <TextBlock Text="Centralized artifacts (UseArtifactsOutput) resolve to the PublishDir automatically." Classes="section-copy"/>
                                 </StackPanel>
@@ -392,7 +485,10 @@
                                 <StackPanel Spacing="16">
                                     <WrapPanel ItemSpacing="8" LineSpacing="8">
                                         <TextBlock Text="Command Preview" Classes="section-title" VerticalAlignment="Center"/>
-                                        <Button Content="Copy" Command="{Binding CopyCommandPreviewCommand}" Padding="12,8" MinWidth="80" MinHeight="32"/>
+                                        <Button Classes="compact-icon" Command="{Binding CopyCommandPreviewCommand}"
+                                                     ToolTip.Tip="Copy command preview" AutomationProperties.Name="Copy command preview">
+                                             <PathIcon Data="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                                         </Button>
                                     </WrapPanel>
                                     <TextBlock Text="The exact publish command that will be executed (secrets masked)." Classes="section-copy"/>
                                     <Border Classes="console-shell" Padding="0" ClipToBounds="True">
@@ -407,7 +503,10 @@
                                 <StackPanel Spacing="16">
                                     <WrapPanel ItemSpacing="8" LineSpacing="8">
                                         <TextBlock Text="Known-Good Baseline" Classes="section-title" VerticalAlignment="Center"/>
-                                        <Button Content="Copy" Command="{Binding CopyKnownGoodBaselineCommand}" Padding="12,8" MinWidth="80" MinHeight="32"/>
+                                        <Button Classes="compact-icon" Command="{Binding CopyKnownGoodBaselineCommand}"
+                                                     ToolTip.Tip="Copy known-good baseline" AutomationProperties.Name="Copy known-good baseline">
+                                             <PathIcon Data="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                                         </Button>
                                     </WrapPanel>
                                     <TextBlock Text="Conservative command for this platform — safe defaults that reliably publish" Classes="section-copy"/>
                                     <Border Classes="console-shell" Padding="0" ClipToBounds="True">
@@ -419,11 +518,16 @@
                             </Border>
                         </StackPanel>
 
+                        <!-- Google Play Section -->
+                        <StackPanel Spacing="20" IsVisible="{Binding IsGooglePlaySection}">
+                            <googlePlay:GooglePlayView DataContext="{Binding GooglePlay}"/>
+                        </StackPanel>
+
                         <!-- Deploy Section -->
                         <StackPanel Spacing="20" IsVisible="{Binding IsDeploySection}">
                             <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
                                 <TextBlock Text="Deploy" FontSize="18" FontWeight="SemiBold"/>
-                                <Button Grid.Column="1" Classes="icon-action-button" ToolTip.Tip="Screenshot this section" Click="OnCaptureDetailClick" Tag="Deploy" Padding="8" MinWidth="36" MinHeight="32">
+                                <Button Grid.Column="1" Classes="icon-action-button" ToolTip.Tip="Screenshot this section" AutomationProperties.Name="Screenshot this section" Click="OnCaptureDetailClick" Tag="Deploy" Padding="8" MinWidth="36" MinHeight="32">
                                     <PathIcon Data="M20 6h-3.17L15 4H9L7.17 6H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-8 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6zm0-10c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2z" Width="16" Height="16"/>
                                 </Button>
                             </Grid>
@@ -473,7 +577,10 @@
                                 <StackPanel Spacing="12">
                                     <TextBlock Text="Linux" Classes="section-title"/>
                                     <TextBlock Text="Deploy the output folder to your target or container. No device actions." Classes="section-copy"/>
-                                    <Button Content="Open Publish Folder" Command="{Binding OpenPublishFolderCommand}" MinWidth="170"/>
+                                    <Button Classes="compact-icon" Command="{Binding OpenPublishFolderCommand}"
+                                             ToolTip.Tip="Open publish folder" AutomationProperties.Name="Open publish folder">
+                                         <PathIcon Data="M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59L7.76 14.83l1.41 1.41L19 6.41V10h2V3h-7z"/>
+                                     </Button>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -483,8 +590,11 @@
                             <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
                                 <TextBlock Text="Log" FontSize="18" FontWeight="SemiBold"/>
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                                    <Button Content="Copy" Command="{Binding CopyLiveOutputCommand}" Padding="12,8" MinWidth="80"/>
-                                    <Button Classes="icon-action-button" ToolTip.Tip="Screenshot this section" Click="OnCaptureDetailClick" Tag="Log" Padding="8" MinWidth="36" MinHeight="32">
+                                    <Button Classes="compact-icon" Command="{Binding CopyLiveOutputCommand}"
+                                                     ToolTip.Tip="Copy live output" AutomationProperties.Name="Copy live output">
+                                             <PathIcon Data="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                                         </Button>
+                                    <Button Classes="icon-action-button" ToolTip.Tip="Screenshot this section" AutomationProperties.Name="Screenshot this section" Click="OnCaptureDetailClick" Tag="Log" Padding="8" MinWidth="36" MinHeight="32">
                                         <PathIcon Data="M20 6h-3.17L15 4H9L7.17 6H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-8 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6zm0-10c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2z" Width="16" Height="16"/>
                                     </Button>
                                 </StackPanel>
@@ -512,13 +622,13 @@
         <Border Grid.Row="2" Classes="command-bar">
             <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
                 <StackPanel Spacing="6" VerticalAlignment="Center">
-                    <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" FontSize="13" Foreground="{DynamicResource TextSecondaryColor}" MaxWidth="700" HorizontalAlignment="Left"/>
+                    <TextBlock x:Name="StatusMessage" Text="{Binding StatusMessage}" TextWrapping="Wrap" FontSize="13" Foreground="{DynamicResource TextSecondaryColor}" MaxWidth="700" HorizontalAlignment="Left"/>
                     <StackPanel Spacing="6" IsVisible="{Binding IsSharedProgressVisible}">
                         <TextBlock Text="{Binding SharedProgressText}" FontWeight="SemiBold" Classes="progress-text"/>
                         <ProgressBar Value="{Binding SharedProgressValue}" IsIndeterminate="{Binding IsSharedProgressIndeterminate}" Minimum="0" Maximum="100" Height="4"/>
                     </StackPanel>
                 </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <StackPanel x:Name="StatusActions" Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                     <Button Classes="icon-action-button" Command="{Binding CopyWindowScreenshotCommand}" ToolTip.Tip="Screenshot to clipboard">
                         <PathIcon Data="M20 6h-3.17L15 4H9L7.17 6H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-8 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6zm0-10c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2z" Width="18" Height="18"/>
                     </Button>
