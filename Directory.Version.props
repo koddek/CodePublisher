@@ -1,0 +1,15 @@
+<Project>
+  <!--
+    Central version manager: the single source of truth for every project,
+    assembly, and macOS app bundle in this repository.
+    Bump the four values below together; nothing else should hardcode a version.
+    Imported by src/DotNetAppPublisher/Directory.Build.props (all src projects)
+    and tests/Directory.Build.props (test project).
+  -->
+  <PropertyGroup>
+    <Version>0.5.0</Version>
+    <AssemblyVersion>0.5.0.0</AssemblyVersion>
+    <FileVersion>0.5.0.0</FileVersion>
+    <InformationalVersion>0.5.0</InformationalVersion>
+  </PropertyGroup>
+</Project>

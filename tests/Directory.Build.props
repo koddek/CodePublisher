@@ -1,0 +1,8 @@
+<Project>
+  <!--
+    Applies to the test project under tests/. Without this file the test assembly
+    silently falls back to the default 1.0.0 and drifts from the app version.
+    Versions come from the central manager at the repository root.
+  -->
+  <Import Project="../Directory.Version.props" />
+</Project>

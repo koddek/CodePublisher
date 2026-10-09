@@ -17,10 +17,13 @@
   <string>.NET App Publisher</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
+  <!-- Version values are placeholders. The build stamps both from $(Version) in
+       the central version manager (see StampMacBundleVersion in
+       DotNetAppPublisher.Desktop.csproj), so they always match the assembly. -->
   <key>CFBundleShortVersionString</key>
-  <string>0.1.0</string>
+  <string>0.0.0</string>
   <key>CFBundleVersion</key>
-  <string>0.1.0</string>
+  <string>0.0.0</string>
   <key>CFBundleIconFile</key>
   <string>dotnet-app-publisher.icns</string>
   <key>CFBundleIconName</key>

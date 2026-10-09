@@ -115,4 +115,22 @@
             <_MacAppBundleCreated>true</_MacAppBundleCreated>
         </PropertyGroup>
     </Target>
+
+    <!--
+      Stamps the bundle version in the copied Info.plist from $(Version), so the
+      .app reports the version declared by the central version manager
+      (Directory.Version.props) instead of a value that drifts. Runs after every
+      path that writes Info.plist into a bundle: the build-time bundle and both
+      publish-time bundles (framework-dependent and NativeAOT).
+    -->
+    <Target Name="StampMacBundleVersion"
+            AfterTargets="PrepareMacBundle;CreateMacAppBundleAfterPublish;CreateMacAppBundleAfterNativePublish"
+            Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+        <XmlPoke XmlInputPath="$(AppContentsDir)/Info.plist"
+                 Query="/plist/dict/key[.='CFBundleShortVersionString']/following-sibling::string[1]"
+                 Value="$(Version)" />
+        <XmlPoke XmlInputPath="$(AppContentsDir)/Info.plist"
+                 Query="/plist/dict/key[.='CFBundleVersion']/following-sibling::string[1]"
+                 Value="$(Version)" />
+    </Target>
 </Project>
