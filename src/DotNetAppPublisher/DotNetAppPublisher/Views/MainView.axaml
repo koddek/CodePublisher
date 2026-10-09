@@ -6,6 +6,7 @@
              xmlns:services="using:DotNetAppPublisher.Services"
              xmlns:android="using:DotNetAppPublisher.Features.Deployment.Android"
              xmlns:googlePlay="using:DotNetAppPublisher.Views.GooglePlay"
+             xmlns:converters="using:DotNetAppPublisher.Views"
              mc:Ignorable="d"
              d:DesignWidth="1280"
              d:DesignHeight="800"
@@ -13,6 +14,11 @@
              x:CompileBindings="True"
              SizeChanged="OnSizeChanged"
              x:DataType="vm:MainViewModel">
+
+    <UserControl.Resources>
+        <!-- Merges a static option description with the live disabled reason for Build-tab tooltips. -->
+        <converters:OptionHelpConverter x:Key="OptionHelp"/>
+    </UserControl.Resources>
 
     <Grid RowDefinitions="Auto,*,Auto" Background="{DynamicResource ThemeBackgroundColor}">
 
@@ -203,33 +209,68 @@
                                                 ToolTip.Tip="Reset all Build options for this platform to the baseline that reliably publishes"
                                                 AutomationProperties.Name="Reset build options to known-good defaults"/>
                                     </WrapPanel>
-                                    <TextBlock Text="TFM and RID default per platform; edit only if you know the target SDK." Classes="section-copy"/>
-                                    <StackPanel Spacing="8">
-                                        <TextBlock Text="{Binding PackageIdLabel}" FontWeight="SemiBold" FontSize="13"/>
+                                    <TextBlock Text="TFM and RID default per platform; edit only if you know the target SDK." Classes="section-copy"/>                                    <StackPanel Spacing="8"
+                                                ToolTip.Tip="Package ID (reverse-DNS identifier): uniquely identifies your app (e.g., com.example.app). This ID is permanent for app stores - choose carefully before first release.">
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <TextBlock Text="{Binding PackageIdLabel}" FontWeight="SemiBold" FontSize="13"/>
+                                            <Border Classes="option-info">
+                                                <TextBlock Text="i"/>
+                                            </Border>
+                                        </StackPanel>
                                         <TextBox Text="{Binding PackageId}" IsEnabled="{Binding IsEditorEnabled}" PlaceholderText="com.example.app"/>
                                         <TextBlock Text="{Binding PackageIdDescription}" Classes="section-copy" TextWrapping="Wrap"/>
                                     </StackPanel>
                                     <WrapPanel ItemSpacing="16" LineSpacing="12">
-                                        <StackPanel MinWidth="140" MaxWidth="320" Spacing="8">
-                                            <TextBlock Text="Target framework" FontWeight="SemiBold" FontSize="13"/>
+                                        <StackPanel MinWidth="140" MaxWidth="320" Spacing="8"
+                                                    ToolTip.Tip="Target Framework (TFM): specifies which .NET version and platform your app targets (e.g., net10.0-android, net10.0-ios). This determines available APIs and which SDK is used.">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <TextBlock Text="Target framework" FontWeight="SemiBold" FontSize="13"/>
+                                                <Border Classes="option-info">
+                                                <TextBlock Text="i"/>
+                                            </Border>
+                                            </StackPanel>
                                             <TextBox Text="{Binding TargetFramework}" IsEnabled="{Binding IsEditorEnabled}"/>
                                         </StackPanel>
-                                        <StackPanel MinWidth="140" MaxWidth="320" Spacing="8">
-                                            <TextBlock Text="Runtime ID" FontWeight="SemiBold" FontSize="13"/>
+                                        <StackPanel MinWidth="140" MaxWidth="320" Spacing="8"
+                                                    ToolTip.Tip="Runtime Identifier (RID): specifies the exact operating system and CPU architecture to build for (e.g., android-arm64, win-x64, osx-arm64). Affects native code generation and self-contained builds.">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <TextBlock Text="Runtime ID" FontWeight="SemiBold" FontSize="13"/>
+                                                <Border Classes="option-info">
+                                                <TextBlock Text="i"/>
+                                            </Border>
+                                            </StackPanel>
                                             <TextBox Text="{Binding RuntimeIdentifier}" IsEnabled="{Binding IsEditorEnabled}"/>
                                         </StackPanel>
                                     </WrapPanel>
                                     <WrapPanel ItemSpacing="16" LineSpacing="12">
-                                        <StackPanel MinWidth="140" Spacing="8">
-                                            <TextBlock Text="Configuration" FontWeight="SemiBold" FontSize="13"/>
+                                        <StackPanel MinWidth="140" Spacing="8"
+                                                    ToolTip.Tip="Configuration: 'Release' enables compiler optimizations for faster, smaller builds; 'Debug' includes debug symbols and disables optimizations for easier debugging.">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <TextBlock Text="Configuration" FontWeight="SemiBold" FontSize="13"/>
+                                                <Border Classes="option-info">
+                                                <TextBlock Text="i"/>
+                                            </Border>
+                                            </StackPanel>
                                             <ComboBox ItemsSource="{Binding ConfigurationOptions}" SelectedItem="{Binding Configuration}" IsEnabled="{Binding IsEditorEnabled}"/>
                                         </StackPanel>
-                                        <StackPanel MinWidth="140" Spacing="8" IsVisible="{Binding IsAndroidPlatform}">
-                                            <TextBlock Text="Signing mode" FontWeight="SemiBold" FontSize="13"/>
+                                        <StackPanel MinWidth="140" Spacing="8" IsVisible="{Binding IsAndroidPlatform}"
+                                                    ToolTip.Tip="Android signing: 'Auto' uses the built-in debug key (for testing), 'Sign' uses your custom keystore (required for Play Store), 'Do Not Sign' produces an unsigned package.">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <TextBlock Text="Signing mode" FontWeight="SemiBold" FontSize="13"/>
+                                                <Border Classes="option-info">
+                                                <TextBlock Text="i"/>
+                                            </Border>
+                                            </StackPanel>
                                             <ComboBox ItemsSource="{Binding SignModeOptions}" SelectedItem="{Binding SignMode}" IsEnabled="{Binding IsEditorEnabled}"/>
                                         </StackPanel>
-                                        <StackPanel MinWidth="140" Spacing="8" IsVisible="{Binding IsAndroidPlatform}">
-                                            <TextBlock Text="Link mode" FontWeight="SemiBold" FontSize="13"/>
+                                        <StackPanel MinWidth="140" Spacing="8" IsVisible="{Binding IsAndroidPlatform}"
+                                                    ToolTip.Tip="Linker (code shrinking): 'None' keeps all code. 'SdkOnly' removes unused .NET framework code. 'Full' removes unused framework AND your app code. More aggressive shrinking = smaller app, higher risk that reflection (code found by name) breaks.">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <TextBlock Text="Link mode" FontWeight="SemiBold" FontSize="13"/>
+                                                <Border Classes="option-info">
+                                                <TextBlock Text="i"/>
+                                            </Border>
+                                            </StackPanel>
                                             <ComboBox ItemsSource="{Binding LinkModeOptions}" SelectedItem="{Binding AndroidLinkMode}" IsEnabled="{Binding IsEditorEnabled}"/>
                                         </StackPanel>
                                     </WrapPanel>
@@ -241,28 +282,76 @@
                                     <TextBlock Text="Optimization and cleanup" Classes="section-title"/>
                                     <TextBlock Text="These switches change size, startup, and reflection behavior. Disabled options explain why." Classes="section-copy"/>
                                     <WrapPanel ItemSpacing="12" LineSpacing="12">
-                                        <CheckBox Content="Self-contained" IsChecked="{Binding SelfContained}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
-                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <StackPanel Orientation="Horizontal" Spacing="4"
+                                                    ToolTip.Tip="Ships the .NET runtime (the components that run .NET apps) together with your app. Users don't need to install .NET separately, but it increases download and install size.">
+                                            <CheckBox Content="Self-contained" IsChecked="{Binding SelfContained}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
+                                            <Border Classes="option-info">
+                                                <TextBlock Text="i"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Spacing="4"
+                                                    ToolTip.Tip="{Binding PublishTrimmedDisabledReason, Converter={StaticResource OptionHelp}, ConverterParameter='Trimming (removing unused code) cuts the app size and can speed startup. The risk: reflection (code that finds types/methods by name) can call code that gets trimmed and then fail at runtime.'}">
                                             <CheckBox Content="Publish trimmed" IsChecked="{Binding PublishTrimmed}" IsEnabled="{Binding IsPublishTrimmedEnabled}" Margin="0,4"/>
-                                            <TextBlock Text="ⓘ" VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}" ToolTip.Tip="{Binding PublishTrimmedDisabledReason}" IsVisible="{Binding !IsPublishTrimmedEnabled}"/>
+                                            <Border Classes="option-info">
+                                                <TextBlock Text="i"/>
+                                            </Border>
                                         </StackPanel>
-                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <StackPanel Orientation="Horizontal" Spacing="4"
+                                                    ToolTip.Tip="{Binding PublishAotDisabledReason, Converter={StaticResource OptionHelp}, ConverterParameter='Ahead-Of-Time (AOT) compilation: compiles your app to native (machine) code before publishing. Faster startup, smaller runtime overhead, but longer build times and some reflection (finding code by name) may break.'}">
                                             <CheckBox Content="Publish AOT" IsChecked="{Binding PublishAot}" IsEnabled="{Binding IsPublishAotEnabled}" Margin="0,4"/>
-                                            <TextBlock Text="ⓘ" VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}" ToolTip.Tip="{Binding PublishAotDisabledReason}" IsVisible="{Binding !IsPublishAotEnabled}"/>
+                                            <Border Classes="option-info">
+                                                <TextBlock Text="i"/>
+                                            </Border>
                                         </StackPanel>
-                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <StackPanel Orientation="Horizontal" Spacing="4"
+                                                    ToolTip.Tip="{Binding ReadyToRunDisabledReason, Converter={StaticResource OptionHelp}, ConverterParameter='ReadyToRun (R2R): partially compiles code to native machine code when publishing. Improves startup vs JIT (Just-In-Time compilation, where code is compiled on first run), but makes the output larger and cannot be used with AOT.'}">
                                             <CheckBox Content="ReadyToRun" IsChecked="{Binding PublishReadyToRun}" IsEnabled="{Binding IsReadyToRunCheckBoxEnabled}" Margin="0,4"/>
-                                            <TextBlock Text="ⓘ" VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}" ToolTip.Tip="{Binding ReadyToRunDisabledReason}" IsVisible="{Binding !IsReadyToRunCheckBoxEnabled}"/>
+                                            <Border Classes="option-info">
+                                                <TextBlock Text="i"/>
+                                            </Border>
                                         </StackPanel>
-                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <StackPanel Orientation="Horizontal" Spacing="4"
+                                                    ToolTip.Tip="{Binding PublishSingleFileDisabledReason, Converter={StaticResource OptionHelp}, ConverterParameter='Single-file: bundles all app files into one executable (EXE/dmg-like single file). Easier to distribute. Some native libraries may unpack to a temporary folder on first run.'}">
                                             <CheckBox Content="Single-file" IsChecked="{Binding PublishSingleFile}" IsEnabled="{Binding IsPublishSingleFileEnabled}" Margin="0,4"/>
-                                            <TextBlock Text="ⓘ" VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}" ToolTip.Tip="{Binding PublishSingleFileDisabledReason}" IsVisible="{Binding !IsPublishSingleFileEnabled}"/>
+                                            <Border Classes="option-info">
+                                                <TextBlock Text="i"/>
+                                            </Border>
                                         </StackPanel>
-                                        <CheckBox Content="Use app host" IsChecked="{Binding UseAppHost}" IsEnabled="{Binding IsUseAppHostEnabled}" Margin="0,4"/>
-                                        <CheckBox Content="Create .app bundle" IsChecked="{Binding CreateMacAppBundle}" IsVisible="{Binding IsMacOsPublishOptionsVisible}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
-                                        <CheckBox Content="Create .exe" IsChecked="{Binding CreateWindowsExecutable}" IsVisible="{Binding IsWindowsPublishOptionsVisible}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
-                                        <CheckBox Content="Delete bin" IsChecked="{Binding DeleteBin}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
-                                        <CheckBox Content="Delete obj" IsChecked="{Binding DeleteObj}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
+                                        <StackPanel Orientation="Horizontal" Spacing="4"
+                                                    ToolTip.Tip="App host: creates a small native launcher (EXE on Windows) that starts your app. This is what most users expect when launching an app. Disable only if you plan to run via 'dotnet yourapp.dll'.">
+                                            <CheckBox Content="Use app host" IsChecked="{Binding UseAppHost}" IsEnabled="{Binding IsUseAppHostEnabled}" Margin="0,4"/>
+                                            <Border Classes="option-info">
+                                                <TextBlock Text="i"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding IsMacOsPublishOptionsVisible}"
+                                                    ToolTip.Tip="Creates a macOS .app bundle (application package). This makes the app appear as a normal Mac app in Finder with an icon and proper structure.">
+                                            <CheckBox Content="Create .app bundle" IsChecked="{Binding CreateMacAppBundle}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
+                                            <Border Classes="option-info">
+                                                <TextBlock Text="i"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding IsWindowsPublishOptionsVisible}"
+                                                    ToolTip.Tip="Creates a Windows .exe launcher (the app host). Without this, you get a .dll file and users must run 'dotnet yourapp.dll' from command line.">
+                                            <CheckBox Content="Create .exe" IsChecked="{Binding CreateWindowsExecutable}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
+                                            <Border Classes="option-info">
+                                                <TextBlock Text="i"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Spacing="4"
+                                                    ToolTip.Tip="Deletes the 'bin' folder (final build output files) after a successful publish to save disk space. Next build will recreate it.">
+                                            <CheckBox Content="Delete bin" IsChecked="{Binding DeleteBin}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
+                                            <Border Classes="option-info">
+                                                <TextBlock Text="i"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Spacing="4"
+                                                    ToolTip.Tip="Deletes the 'obj' folder (temporary/intermediate build files) after publish. Saves space but makes the next full rebuild slightly slower.">
+                                            <CheckBox Content="Delete obj" IsChecked="{Binding DeleteObj}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
+                                            <Border Classes="option-info">
+                                                <TextBlock Text="i"/>
+                                            </Border>
+                                        </StackPanel>
                                     </WrapPanel>
                                     <Border Background="{DynamicResource WarningBannerBackgroundColor}" BorderBrush="{DynamicResource WarningBannerBorderColor}" BorderThickness="1" CornerRadius="6" Padding="12" IsVisible="{Binding PublishAot}">
                                         <StackPanel Spacing="3" VerticalAlignment="Center">
@@ -285,28 +374,82 @@
                                     <TextBlock Text="Android Options" Classes="section-title"/>
                                     <TextBlock Text="Package formats require at least one of APK/AAB. Link settings affect size vs. runtime safety." Classes="section-copy"/>
                                     <WrapPanel ItemSpacing="12" LineSpacing="12">
-                                        <CheckBox Content="Generate APK" IsChecked="{Binding IncludeApk}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
-                                        <CheckBox Content="Generate AAB" IsChecked="{Binding IncludeAab}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
-                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <StackPanel Orientation="Horizontal" Spacing="4"
+                                                    ToolTip.Tip="APK: the installable Android package you can sideload or share directly. Needed for manual installs and for stores other than Google Play.">
+                                            <CheckBox Content="Generate APK" IsChecked="{Binding IncludeApk}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
+                                            <Border Classes="option-info">
+                                                <TextBlock Text="i"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Spacing="4"
+                                                    ToolTip.Tip="AAB (Android App Bundle): the upload format Google Play expects; Play builds and delivers the store APKs from it. Required for new Play apps.">
+                                            <CheckBox Content="Generate AAB" IsChecked="{Binding IncludeAab}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
+                                            <Border Classes="option-info">
+                                                <TextBlock Text="i"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Spacing="4"
+                                                    ToolTip.Tip="{Binding RunAotDisabledReason, Converter={StaticResource OptionHelp}, ConverterParameter='RunAOT (Ahead-Of-Time): compiles native code before installing on Android. Speeds up app startup on device. Requires Link mode (SdkOnly or Full) to strip unused code; increases app size.'}">
                                             <CheckBox Content="RunAOT" IsChecked="{Binding RunAotCompilation}" IsEnabled="{Binding IsRunAotEnabled}" Margin="0,4"/>
-                                            <TextBlock Text="ⓘ" VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}" ToolTip.Tip="{Binding RunAotDisabledReason}" IsVisible="{Binding !IsRunAotEnabled}"/>
+                                            <Border Classes="option-info">
+                                                <TextBlock Text="i"/>
+                                            </Border>
                                         </StackPanel>
-                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <StackPanel Orientation="Horizontal" Spacing="4"
+                                                    ToolTip.Tip="{Binding ProfiledAotDisabledReason, Converter={StaticResource OptionHelp}, ConverterParameter='Profiled AOT: profiles code paths used at runtime and compiles them ahead of time. Gives most of RunAOT speedup with less size. Requires RunAOT.'}">
                                             <CheckBox Content="Profiled AOT" IsChecked="{Binding EnableProfiledAot}" IsEnabled="{Binding IsProfiledAotEnabled}" Margin="0,4"/>
-                                            <TextBlock Text="ⓘ" VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}" ToolTip.Tip="{Binding ProfiledAotDisabledReason}" IsVisible="{Binding !IsProfiledAotEnabled}"/>
+                                            <Border Classes="option-info">
+                                                <TextBlock Text="i"/>
+                                            </Border>
                                         </StackPanel>
-                                        <CheckBox Content="Enable MultiDex" IsChecked="{Binding EnableMultiDex}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
-                                        <CheckBox Content="Use AAPT2" IsChecked="{Binding UseAapt2}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
-                                        <CheckBox Content="Enable Desugar" IsChecked="{Binding EnableDesugar}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
-                                        <CheckBox Content="Create mapping" IsChecked="{Binding CreateMappingFile}" IsEnabled="{Binding IsShrinkerSettingsEnabled}" Margin="0,4"/>
+                                        <StackPanel Orientation="Horizontal" Spacing="4"
+                                                    ToolTip.Tip="Dex files store your app's compiled code. Android has a limit of ~65,536 methods per dex file. MultiDex splits code across multiple dex files so large apps can run. Needed only for very large apps.">
+                                            <CheckBox Content="Enable MultiDex" IsChecked="{Binding EnableMultiDex}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
+                                            <Border Classes="option-info">
+                                                <TextBlock Text="i"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Spacing="4"
+                                                    ToolTip.Tip="AAPT2 (Android Asset Packaging Tool 2): compiles and packages Android resources. Faster, stricter, and the modern default - keep enabled.">
+                                            <CheckBox Content="Use AAPT2" IsChecked="{Binding UseAapt2}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
+                                            <Border Classes="option-info">
+                                                <TextBlock Text="i"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Spacing="4"
+                                                    ToolTip.Tip="Desugaring (Java 8+ language feature conversion): rewrites newer Java features (like lambdas, default interface methods) to work on older Android versions. Keep enabled unless you know you don't need it.">
+                                            <CheckBox Content="Enable Desugar" IsChecked="{Binding EnableDesugar}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
+                                            <Border Classes="option-info">
+                                                <TextBlock Text="i"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Spacing="4"
+                                                    ToolTip.Tip="Creates a mapping file that lets you de-obfuscate (restore readable names to) stack traces from crashes after code shrinking. Only available when a code shrinker (R8) is active.">
+                                            <CheckBox Content="Create mapping" IsChecked="{Binding CreateMappingFile}" IsEnabled="{Binding IsShrinkerSettingsEnabled}" Margin="0,4"/>
+                                            <Border Classes="option-info">
+                                                <TextBlock Text="i"/>
+                                            </Border>
+                                        </StackPanel>
                                     </WrapPanel>
                                     <WrapPanel ItemSpacing="16" LineSpacing="16">
-                                        <StackPanel MinWidth="180" Spacing="8">
-                                            <TextBlock Text="Code Shrinker" FontWeight="SemiBold" FontSize="13"/>
+                                        <StackPanel MinWidth="180" Spacing="8"
+                                                    ToolTip.Tip="Code shrinker (R8): removes unused code and resources to make the app smaller. R8 is the modern Android shrinker and is the only one supported by the current .NET Android workload.">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <TextBlock Text="Code Shrinker" FontWeight="SemiBold" FontSize="13"/>
+                                                <Border Classes="option-info">
+                                                <TextBlock Text="i"/>
+                                            </Border>
+                                            </StackPanel>
                                             <ComboBox ItemsSource="{Binding LinkToolOptions}" SelectedItem="{Binding AndroidLinkTool}" IsEnabled="{Binding IsShrinkerSettingsEnabled}"/>
                                         </StackPanel>
-                                        <StackPanel MinWidth="180" Spacing="8">
-                                            <TextBlock Text="Dex Compiler" FontWeight="SemiBold" FontSize="13"/>
+                                        <StackPanel MinWidth="180" Spacing="8"
+                                                    ToolTip.Tip="Dex compiler (D8): converts .NET/Java bytecode to Android's DEX (Dalvik Executable) format for running on Android devices. D8 is the modern compiler; dx is deprecated.">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <TextBlock Text="Dex Compiler" FontWeight="SemiBold" FontSize="13"/>
+                                                <Border Classes="option-info">
+                                                <TextBlock Text="i"/>
+                                            </Border>
+                                            </StackPanel>
                                             <ComboBox ItemsSource="{Binding DexToolOptions}" SelectedItem="{Binding AndroidDexTool}" IsEnabled="{Binding IsEditorEnabled}"/>
                                         </StackPanel>
                                     </WrapPanel>
@@ -337,9 +480,27 @@
                                 <StackPanel Spacing="16">
                                     <TextBlock Text="iOS Options" Classes="section-title"/>
                                     <WrapPanel ItemSpacing="12" LineSpacing="12">
-                                        <CheckBox Content="PublishTrimmed (required)" IsChecked="{Binding PublishTrimmed}" IsEnabled="False" Margin="0,4"/>
-                                        <CheckBox Content="ArchiveOnBuild" IsChecked="{Binding ArchiveOnBuild}" IsEnabled="{Binding IsEditorEnabled}" IsVisible="{Binding IsIosDeviceRuntime}" Margin="0,4"/>
-                                        <CheckBox Content="BuildIpa" IsChecked="{Binding BuildIpa}" IsEnabled="{Binding IsEditorEnabled}" IsVisible="{Binding IsIosDeviceRuntime}" Margin="0,4"/>
+                                        <StackPanel Orientation="Horizontal" Spacing="4"
+                                                    ToolTip.Tip="iOS always publishes trimmed: the Apple workload forces PublishTrimmed=true, so this option is shown for reference and cannot be switched off.">
+                                            <CheckBox Content="PublishTrimmed (required)" IsChecked="{Binding PublishTrimmed}" IsEnabled="False" Margin="0,4"/>
+                                            <Border Classes="option-info">
+                                                <TextBlock Text="i"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding IsIosDeviceRuntime}"
+                                                    ToolTip.Tip="Creates an .xcarchive of the build, required before uploading to the App Store. Only available for device builds, not simulators.">
+                                            <CheckBox Content="ArchiveOnBuild" IsChecked="{Binding ArchiveOnBuild}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
+                                            <Border Classes="option-info">
+                                                <TextBlock Text="i"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding IsIosDeviceRuntime}"
+                                                    ToolTip.Tip="Builds an .ipa package from a device build, ready for App Store or ad-hoc distribution. Simulator builds do not produce an IPA.">
+                                            <CheckBox Content="BuildIpa" IsChecked="{Binding BuildIpa}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
+                                            <Border Classes="option-info">
+                                                <TextBlock Text="i"/>
+                                            </Border>
+                                        </StackPanel>
                                     </WrapPanel>
                                     <TextBlock Text="Simulator RIDs (iossimulator-*) build without packaging; Archive/IPA only for device." Classes="section-copy"/>
                                 </StackPanel>

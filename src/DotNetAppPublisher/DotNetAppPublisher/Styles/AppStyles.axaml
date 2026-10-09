@@ -562,4 +562,24 @@
         <Setter Property="Background" Value="{DynamicResource SurfaceColor}"/>
     </Style>
 
+    <!-- Information affordance next to build options: hovering it (or the option) shows the option tooltip.
+         Drawn as a bordered badge instead of a Unicode info glyph so it renders in every font. -->
+    <Style Selector="Border.option-info">
+        <Setter Property="Width" Value="14" />
+        <Setter Property="Height" Value="14" />
+        <Setter Property="CornerRadius" Value="7" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="{DynamicResource TextTertiaryColor}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Help" />
+    </Style>
+    <Style Selector="Border.option-info TextBlock">
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource TextTertiaryColor}" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Margin" Value="0,-1,0,0" />
+    </Style>
+
 </Styles>
