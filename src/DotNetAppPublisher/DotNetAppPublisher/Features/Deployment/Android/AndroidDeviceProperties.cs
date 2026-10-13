@@ -7,7 +7,8 @@ public sealed record AndroidDeviceProperties(
     string? Model,
     string? AndroidVersion,
     string? ApiLevel,
-    bool IsEmulator)
+    bool IsEmulator,
+    string? Abi = null)
 {
     private static readonly Regex PropertyLine = new(
         @"^\[(?<key>[^\]]*)\]:\s*\[(?<value>.*)\]$",
@@ -35,7 +36,24 @@ public sealed record AndroidDeviceProperties(
             FirstNonEmpty(values, "ro.product.model", "ro.product.vendor.model", "ro.product.name"),
             FirstNonEmpty(values, "ro.build.version.release", "ro.system.build.version.release"),
             FirstNonEmpty(values, "ro.build.version.sdk"),
-            isEmulator);
+            isEmulator,
+            GetAbi(values));
+    }
+
+    /// <summary>
+    /// Primary CPU ABI, trimmed of the abi-list tail (`arm64-v8a,armeabi-v7a,...`). The ABI decides which
+    /// Runtime Identifier a build for this device needs, so the first entry is the useful one.
+    /// </summary>
+    private static string? GetAbi(IReadOnlyDictionary<string, string> values)
+    {
+        var abi = FirstNonEmpty(values, "ro.product.cpu.abi", "ro.product.vendor.cpu.abi", "ro.system.product.cpu.abi");
+        if (abi is not null)
+        {
+            return abi;
+        }
+
+        var abiList = FirstNonEmpty(values, "ro.product.cpu.abilist", "ro.system.product.cpu.abilist");
+        return abiList?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
     }
 
     private static bool IsSet(IReadOnlyDictionary<string, string> values, string key) =>

@@ -739,12 +739,16 @@ public sealed partial class GooglePlayViewModel : ObservableObject
         IsBusy = true;
         _operationCts = new CancellationTokenSource();
         NotifyCommands();
+        var succeeded = false;
+        var cancelled = false;
         try
         {
             await operation(_operationCts.Token);
+            succeeded = true;
         }
         catch (OperationCanceledException)
         {
+            cancelled = true;
             SetStatus("Cancelled", $"{action} was cancelled.", GooglePlayStatusTone.Info);
         }
         catch (Exception ex)
@@ -755,6 +759,12 @@ public sealed partial class GooglePlayViewModel : ObservableObject
         }
         finally
         {
+            // Cancelling is the user's own choice, so only a real outcome rings.
+            if (!cancelled)
+            {
+                _publisherService.AlertSounds.Play(succeeded ? AlertTone.Success : AlertTone.Failure);
+            }
+
             _operationCts?.Dispose();
             _operationCts = null;
             IsBusy = false;

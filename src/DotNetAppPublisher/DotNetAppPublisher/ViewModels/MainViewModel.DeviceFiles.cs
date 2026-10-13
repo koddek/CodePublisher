@@ -193,10 +193,12 @@ public partial class MainViewModel
             var message = await _publisherService.DeleteAndroidFileAsync(serial, path, entry.IsDirectory, CancellationToken.None);
             AppendLog(Environment.NewLine + $"[Delete on device] {message}" + Environment.NewLine);
             StatusMessage = $"Deleted {entry.Name} on the device.";
+            PlayCompletionAlert(failed: false);
         }
         catch (Exception ex)
         {
             StatusMessage = "Delete failed.";
+            PlayCompletionAlert(failed: true);
             await _desktopInteractionService.ShowErrorAsync("Delete on device", ex.Message);
         }
         finally
@@ -231,10 +233,12 @@ public partial class MainViewModel
                 CancellationToken.None);
             AppendLog(Environment.NewLine + $"[Save from device] {message}" + Environment.NewLine);
             StatusMessage = $"Saved {entry.Name} to {folder}.";
+            PlayCompletionAlert(failed: false);
         }
         catch (Exception ex)
         {
             StatusMessage = "Save from device failed.";
+            PlayCompletionAlert(failed: true);
             await _desktopInteractionService.ShowErrorAsync("Save from device", ex.Message);
         }
         finally
@@ -258,10 +262,12 @@ public partial class MainViewModel
             var message = await _publisherService.UploadToAndroidDeviceAsync(serial, localPaths, directory, CancellationToken.None);
             AppendLog(Environment.NewLine + $"[Send to device] {message}" + Environment.NewLine);
             StatusMessage = $"Sent {localPaths.Count} item(s) to {directory}.";
+            PlayCompletionAlert(failed: false);
         }
         catch (Exception ex)
         {
             StatusMessage = "Send to device failed.";
+            PlayCompletionAlert(failed: true);
             await _desktopInteractionService.ShowErrorAsync("Send to device", ex.Message);
             return;
         }
@@ -336,10 +342,12 @@ public partial class MainViewModel
             AppendLog(Environment.NewLine + $"[Pair over Wi-Fi] {message}" + Environment.NewLine);
             WirelessSummary = "Paired. Scan again, then connect using the debugging port shown on the device.";
             StatusMessage = "Paired over Wi-Fi. Now connect to the debugging port.";
+            PlayCompletionAlert(failed: false);
         }
         catch (Exception ex)
         {
             StatusMessage = "Pairing failed.";
+            PlayCompletionAlert(failed: true);
             await _desktopInteractionService.ShowErrorAsync("Pair over Wi-Fi", ex.Message);
         }
         finally
@@ -360,10 +368,12 @@ public partial class MainViewModel
             AppendLog(Environment.NewLine + $"[Connect over Wi-Fi] {message}" + Environment.NewLine);
             WirelessSummary = $"Connected to {address}. It now appears in the device list.";
             StatusMessage = $"Connected to {address}.";
+            PlayCompletionAlert(failed: false);
         }
         catch (Exception ex)
         {
             StatusMessage = "Wireless connect failed.";
+            PlayCompletionAlert(failed: true);
             await _desktopInteractionService.ShowErrorAsync("Connect over Wi-Fi", ex.Message);
             return;
         }
@@ -385,10 +395,12 @@ public partial class MainViewModel
             AppendLog(Environment.NewLine + $"[Disconnect over Wi-Fi] {message}" + Environment.NewLine);
             WirelessSummary = $"Disconnected from {WirelessAddress}.";
             StatusMessage = WirelessSummary;
+            PlayCompletionAlert(failed: false);
         }
         catch (Exception ex)
         {
             StatusMessage = "Wireless disconnect failed.";
+            PlayCompletionAlert(failed: true);
             await _desktopInteractionService.ShowErrorAsync("Disconnect over Wi-Fi", ex.Message);
         }
         finally
@@ -423,10 +435,12 @@ public partial class MainViewModel
 
             WirelessSummary = result.Message;
             StatusMessage = "Wi-Fi debugging enabled. Unplug USB, then press Connect.";
+            PlayCompletionAlert(failed: false);
         }
         catch (Exception ex)
         {
             StatusMessage = "Could not enable Wi-Fi debugging.";
+            PlayCompletionAlert(failed: true);
             await _desktopInteractionService.ShowErrorAsync("Enable Wi-Fi debugging", ex.Message);
         }
         finally

@@ -19,13 +19,15 @@ It is built with Avalonia and currently supports Android, macOS, Windows, and iO
 - Stream live publish output in the app
 - Open the publish folder
 - Detect and deploy to real Android phones and tablets over USB or Wi-Fi, alongside emulators
+- See what the selected target reports about itself — model, Android version, API level, CPU ABI, transport, and readiness — in a row under the device selector
 - Install as an in-place update (`adb install -r`) that keeps app data; a preflight compares the APK's signing certificate with the copy already on the device and blocks a mismatched build — with both fingerprints and its Google Play update impact — before any command runs, instead of wiping data for you
 - Pair and connect wireless debugging (Android 11+ pairing code, or the legacy `adb tcpip` step for Android 10 and older)
 - Browse the device's public folders (Downloads, Pictures, DCIM, Documents, Movies, Music), delete files with a confirmation, drag files from the computer into the open folder, and save device files back to the computer
 - Detect real iPhone and iPad targets with `xcrun devicectl` (macOS, Xcode 15+) and install, launch, or stop a signed build on one
-- Uninstall, launch, or stop (force-quit) the app through `adb` — stopping never removes the app or its data
+- Uninstall, launch, or close the app through `adb`: **Close app** stops every process *and* removes the app from Recents (the app switcher), so the app is really gone instead of only stopped. The installed app and its data are always kept
 - Discover available Android emulators and launch the one you want
 - Capture the app window to clipboard or disk with a visible countdown
+- Hear a short alert when a task finishes — publish, deploy actions, device file transfers, and clipboard copies — and mute it from the speaker button in the header
 - Publish Android App Bundles to Google Play from a dedicated Google Play workspace
 - Configure the Google Desktop OAuth client ID directly in the app, with session-only or user-profile persistence and visible configured/not-configured status
 - Connect a personal Google account with browser OAuth, choose internal, closed, open, or production tracks, add release notes, and submit staged or full rollouts
@@ -171,6 +173,8 @@ The app is already useful for Android, macOS, Windows, and iOS publish flows, pl
 - The browser host uses Avalonia's software renderer, synchronizes its canvas backing store after startup, and disables desktop-only device discovery, elevated processes, file browsing, and Google OAuth in browser mode.
 - The master-detail view narrows its navigation, stacks header actions, wraps form groups, and uses compact icon controls for low-emphasis actions at smaller window sizes.
 - `Signing` and `Google Play` are adjacent master-detail destinations; routine status stays inline, while modal alerts are reserved for errors and confirmations with a title and vertically centered details.
+- The navigation reads Project, Platform, Build, Signing, Google Play, Deploy, Device Files, Output, Log, so build output and the log stay side by side.
+- Task alerts are played by one shared `AlertSoundService`; the header speaker button mutes them, and alerts that arrive within its coalesce window sound once.
 - Release verification uses `dotnet restore -p:Configuration=Release`, a Release solution build, and the TUnit suite; no live Google Play or device calls are made by tests.
 
 ## Contributing

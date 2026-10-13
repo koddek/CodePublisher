@@ -65,9 +65,20 @@ Source: [adb](https://developer.android.com/tools/adb),
   the install with both fingerprints and the Play impact spelled out before any command touches the
   device; a Play-installed copy is never steered toward uninstall, because a differently-signed
   replacement can never be updated by Play again.
-- **Stop**: `adb -s SERIAL shell am force-stop PACKAGE` kills every process of the package but keeps
-  the installed app and its data. It succeeds whether or not the app is running, so the UI action is
-  safe to press repeatedly.
+- **Close**: two steps, because stopping alone is not closing. `adb -s SERIAL shell am force-stop PACKAGE`
+  kills every process of the package but leaves its card in Recents (verified: the task stays listed, just
+  further down). `am stack remove <ROOT_TASK_ID>` then dismisses that card — the ids come from
+  `adb shell dumpsys activity recents`, where each entry reports `taskId`/`rootTaskId` plus the owning
+  package and component. Only tasks the dump attributes to the requested package are dismissed, and
+  `type=home` (and the Recents surface itself) is never touched, so closing one app cannot remove another
+  app's card or the launcher's task. App data and the installed app are kept, and the operation succeeds
+  whether or not the app is running.
+  - `am stack remove` is the legacy-but-present `am` subcommand for this (`am help` lists it on
+    Android 11 through 17); `am task remove` and `cmd activity remove-task` do not exist. Its exit code
+    is not a success signal — it also exits 0 for an unknown id — so the app re-reads `dumpsys activity
+    recents` afterwards and reports what is genuinely gone. A device that refuses the command reports
+    "removing its Recents card failed" with the device's own message and the manual swipe-away fix
+    instead of claiming success.
 - **Files**: `/sdcard` is the shell alias of `/storage/emulated/<user>` for the foreground user.
   `ls -la`, `rm -rf`, `mkdir -p`, `adb push`, and `adb pull` work on the public folders (Download, Pictures,
   DCIM, Documents, Movies, Music, and friends). `ls -la` needs toybox, so the browser requires Android 7+.
@@ -103,7 +114,9 @@ Sources: Apple's
 ## What this change implements
 
 - Real devices and emulators in one ranked list with model, Android version, transport (USB/Wi-Fi/emulator),
-  and a plain-language reason for targets that cannot be used yet.
+  and a plain-language reason for targets that cannot be used yet. The selected target also gets a detail
+  row — model, `Android <version> (API <level>)`, CPU ABI, transport, and readiness — read from one
+  `getprop` call, so the ABI needed for the Runtime Identifier is visible before publishing.
 - Wireless debugging: `adb mdns services` scanning, pair with code, connect, disconnect, and the legacy
   `adb tcpip` step with the Wi-Fi address read from `ip route` (fallback: `dhcp.wlan0.ipaddress`).
 - Install is update-in-place and never uninstalls. One automatic retry with `--no-streaming`; every other
@@ -115,10 +128,11 @@ Sources: Apple's
   from the host, per-row delete with confirmation, and pull to this computer.
 - Real iOS device discovery plus install/launch through `devicectl`, with the missing prerequisite named
   when a device is unpaired or has Developer Mode off.
-- A Stop action next to Install/Uninstall/Launch on the Deploy tab for every target: Android device or
-  emulator (`am force-stop`), iOS simulator (`simctl terminate`), and real iOS device (devicectl process
-  discovery plus SIGKILL). Stopping never removes the app or its data, and stopping an app that is not
-  running reports "nothing to stop" instead of an error.
+- A **Close app** action next to Install/Uninstall/Launch on the Deploy tab for Android device or
+  emulator (`am force-stop` plus `am stack remove` for the Recents card), and Stop for iOS simulator
+  (`simctl terminate`) and real iOS device (devicectl process discovery plus SIGKILL). Closing never
+  removes the app or its data, and closing an app that is not running reports "nothing to stop" / "no
+  card in Recents" instead of an error.
 
 ## Not verified in this environment
 
@@ -126,7 +140,12 @@ Sources: Apple's
   behaviour is covered by parsers, unit tests, and documented sources rather than a live deployment.
   The device-specific behaviours listed above (mDNS on a guest network, `Android/data` access, OEM
   `monkey` restrictions, `--no-streaming` retries) need a real-device pass.
-- The Android install preflight was exercised end-to-end against an Android 16 emulator (API 37): fresh
+- Close was exercised end-to-end against the same Android 17 emulator (API 37) with the production service code:
+  an app in the foreground and an app in the background were both stopped **and** removed from Recents,
+  a stopped app with no card reported the no-card no-op, and a second app's card plus the launcher stayed
+  untouched. `am stack remove` behaviour on older OEM builds (a command rejection) is covered by the
+  reported-failure path, not by a live test.
+- The Android install preflight was exercised end-to-end against an Android 17 emulator (API 37): fresh
   install, same-key update, and a differently-signed build blocked with both fingerprints and guidance.
   The Google Play-installed branch (`installer=com.android.vending`) could not be produced live — adb
   installs record `installer=null` — so it is covered by unit tests on the captured output shape only,

@@ -305,6 +305,16 @@
         <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundColor}" />
     </Style>
     
+    <Style Selector="Border.badge-device">
+        <Setter Property="Background" Value="{DynamicResource SurfaceColor}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}" />
+    </Style>
+
+    <Style Selector="TextBlock.badge-text-device">
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryColor}" />
+        <Setter Property="FontWeight" Value="Medium" />
+    </Style>
+
     <Style Selector="TextBlock.badge-text-dotnet">
         <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundColor}" />
         <Setter Property="FontWeight" Value="SemiBold" />

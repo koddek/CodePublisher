@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using DotNetAppPublisher.Features.Publishing.Inspect;
 using DotNetAppPublisher.Features.Publishing.Process;
@@ -208,22 +209,110 @@ public sealed class AndroidDeploymentService
     }
 
     /// <summary>
-    /// Force-stops the app on a device or emulator (`am force-stop`). Every process of the package is
-    /// shut down, but the installed app and its data are untouched, so this is safe to press at any
-    /// time - including when the app is already closed (force-stop succeeds either way).
+    /// Closes the app completely on a device or emulator. Two steps, in order: every process of the
+    /// package is stopped (`am force-stop`), then the app's card is dismissed from Recents / the app
+    /// switcher (`am stack remove` on the task read back from `dumpsys activity recents`). Stopping
+    /// alone leaves the card behind, which is why this exists; the installed app and its data are kept,
+    /// and only tasks the device reports as belonging to this package are dismissed, so no other app is
+    /// ever removed from Recents.
     /// </summary>
-    public async Task<string> StopAppAsync(string packageId, string? deviceSerial, CancellationToken cancellationToken)
+    public async Task<string> CloseAppAsync(string packageId, string? deviceSerial, CancellationToken cancellationToken)
     {
         var adbPath = _adbPath ?? throw new InvalidOperationException("`adb` was not found. Install Android platform-tools or add adb to PATH.");
         if (string.IsNullOrWhiteSpace(packageId))
         {
-            throw new InvalidOperationException("Package id is required to stop the app.");
+            throw new InvalidOperationException("Package id is required to close the app.");
         }
 
         var targetDevice = !string.IsNullOrWhiteSpace(deviceSerial)
             ? deviceSerial!.Trim()
             : throw new InvalidOperationException("No device selected. Select a device first.");
         var package = packageId.Trim();
+        var stopped = await ForceStopAsync(adbPath, targetDevice, package, cancellationToken);
+
+        string recentsDump;
+        try
+        {
+            recentsDump = await ReadRecentTasksAsync(adbPath, targetDevice, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            return $"Stopped every process of {package} on {targetDevice}, but its Recents card could not be removed: " +
+                $"{ex.Message}{Environment.NewLine}Swipe the card away in the app switcher. The installed app and its data are kept.";
+        }
+
+        var tasks = AndroidRecentTaskParser.FindDismissable(AndroidRecentTaskParser.Parse(recentsDump), package);
+        if (tasks.Count == 0)
+        {
+            return $"Closed {package} on {targetDevice}: every process was stopped, and it had no card in Recents." +
+                $"{Environment.NewLine}{stopped}The installed app and its data are kept.";
+        }
+
+        var commandFailures = new List<string>();
+        foreach (var task in tasks)
+        {
+            var removeOutput = new StringBuilder();
+            var exitCode = await ProcessRunner.RunAsync(
+                [adbPath, "-s", targetDevice, "shell", "am", "stack", "remove", task.RootTaskId.ToString(CultureInfo.InvariantCulture)],
+                text => removeOutput.Append(text),
+                cancellationToken);
+
+            if (exitCode != 0 || removeOutput.ToString().Trim().Length > 0)
+            {
+                var detail = removeOutput.ToString().Trim();
+                commandFailures.Add(detail.Length > 0
+                    ? $"task {task.RootTaskId} (exit code {exitCode}): {detail}"
+                    : $"task {task.RootTaskId} (exit code {exitCode})");
+            }
+        }
+
+        // Verify against the device instead of trusting the exit code: `am stack remove` also exits 0 for
+        // an id that does not exist, so the card list has to be read back.
+        IReadOnlyList<AndroidRecentTask>? remaining;
+        string? verificationError = null;
+        try
+        {
+            remaining = AndroidRecentTaskParser.FindDismissable(
+                AndroidRecentTaskParser.Parse(await ReadRecentTasksAsync(adbPath, targetDevice, cancellationToken)),
+                package);
+        }
+        catch (Exception ex)
+        {
+            remaining = null;
+            verificationError = ex.Message;
+        }
+
+        var removed = remaining is null
+            ? []
+            : tasks.Where(task => remaining.All(entry => entry.RootTaskId != task.RootTaskId)).ToArray();
+        var stillListed = remaining is null
+            ? tasks
+            : tasks.Where(task => remaining.Any(entry => entry.RootTaskId == task.RootTaskId)).ToArray();
+
+        if (stillListed.Count == 0 && commandFailures.Count == 0)
+        {
+            var removedLabel = string.Join(", ", removed.Select(task => $"task {task.RootTaskId} ({task.DisplayLabel})"));
+            return $"Closed {package} on {targetDevice}: every process was stopped and its Recents card was dismissed " +
+                $"({removedLabel}). The installed app and its data are kept." +
+                $"{Environment.NewLine}{stopped}";
+        }
+
+        var problems = new List<string>(commandFailures);
+        problems.AddRange(stillListed.Select(task => $"task {task.RootTaskId} ({task.DisplayLabel}) is still listed"));
+        if (verificationError is not null)
+        {
+            problems.Add($"the Recents list could not be read back ({verificationError})");
+        }
+
+        return $"Stopped every process of {package} on {targetDevice}, but removing its Recents card failed " +
+            $"({string.Join("; ", problems)}). Swipe the card away in the app switcher, or update platform-tools. " +
+            $"The installed app and its data are kept." +
+            $"{Environment.NewLine}{stopped}";
+    }
+
+    /// <summary>Stops every process of the package (`am force-stop`) and returns the device output.</summary>
+    private static async Task<string> ForceStopAsync(string adbPath, string targetDevice, string package, CancellationToken cancellationToken)
+    {
         var output = new StringBuilder();
         var exitCode = await ProcessRunner.RunAsync(
             [adbPath, "-s", targetDevice, "shell", "am", "force-stop", package],
@@ -232,13 +321,34 @@ public sealed class AndroidDeploymentService
 
         if (exitCode == 0)
         {
-            return $"Stopped {package} on {targetDevice}. Every process of the app was shut down; the app and its data are kept." +
-                $"{Environment.NewLine}{output}";
+            return $"Stopped every process of {package} on {targetDevice}.{Environment.NewLine}{output}";
         }
 
         throw new InvalidOperationException(
-            $"Stop failed for {package} on {targetDevice}. Make sure the app is installed and the device is ready." +
+            $"Close failed for {package} on {targetDevice}: the app could not be stopped. Make sure the app is installed and the device is ready." +
             $"{Environment.NewLine}{output}");
+    }
+
+    /// <summary>
+    /// Reads `dumpsys activity recents`, the list that backs the device's app switcher. Its `taskId`
+    /// and `rootTaskId` fields are what `am stack remove` needs, and its `type`/component fields say
+    /// which package owns each card.
+    /// </summary>
+    private static async Task<string> ReadRecentTasksAsync(string adbPath, string targetDevice, CancellationToken cancellationToken)
+    {
+        var output = new StringBuilder();
+        var exitCode = await ProcessRunner.RunAsync(
+            [adbPath, "-s", targetDevice, "shell", "dumpsys", "activity", "recents"],
+            text => output.Append(text),
+            cancellationToken);
+        if (exitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"the device did not return its Recents list (exit code {exitCode})." +
+                $"{Environment.NewLine}{output}");
+        }
+
+        return output.ToString();
     }
 
     /// <summary>Sends one file to the device Downloads folder (kept for the Deploy tab shortcut).</summary>
@@ -318,7 +428,8 @@ public sealed class AndroidDeploymentService
                     connection,
                     model ?? string.Empty,
                     properties?.AndroidVersion ?? string.Empty,
-                    properties?.ApiLevel ?? string.Empty));
+                    properties?.ApiLevel ?? string.Empty,
+                    properties?.Abi ?? string.Empty));
             }
         }
 

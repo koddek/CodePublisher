@@ -87,6 +87,12 @@ public sealed class PublisherService
 
     public string? EmulatorPath { get; }
 
+    /// <summary>
+    /// The one alert-sound player for the app: publishing, deploy actions, device file transfers, and
+    /// clipboard copies all report through this instance, so the mute toggle silences everything.
+    /// </summary>
+    public AlertSoundService AlertSounds { get; } = new();
+
     public string? ApkSignerPath => ResolveApkSignerPath();
 
     public string? XcrunPath => ResolveExecutable("xcrun", ["/usr/bin/xcrun"]);
@@ -228,12 +234,12 @@ public sealed class PublisherService
             }
 
             writeOutput(Environment.NewLine + "=== Publish completed successfully ===" + Environment.NewLine);
-            PlayCompletionSound(success: true);
+            AlertSounds.Play(AlertTone.Success);
             return true;
         }
 
         writeOutput(Environment.NewLine + $"=== Publish failed (exit code {exitCode}) ===" + Environment.NewLine);
-        PlayCompletionSound(success: false);
+        AlertSounds.Play(AlertTone.Failure);
         return false;
     }
 
@@ -450,8 +456,8 @@ public sealed class PublisherService
     public Task<string> LaunchAsync(string packageId, string? deviceSerial, CancellationToken cancellationToken) =>
         _androidDeploymentService.LaunchAsync(packageId, deviceSerial, cancellationToken);
 
-    public Task<string> StopAsync(string packageId, string? deviceSerial, CancellationToken cancellationToken) =>
-        _androidDeploymentService.StopAppAsync(packageId, deviceSerial, cancellationToken);
+    public Task<string> CloseAsync(string packageId, string? deviceSerial, CancellationToken cancellationToken) =>
+        _androidDeploymentService.CloseAppAsync(packageId, deviceSerial, cancellationToken);
 
     public Task<string> PushFileToDownloadsAsync(string localFilePath, string? deviceSerial, CancellationToken cancellationToken) =>
         _androidDeploymentService.PushFileToDownloadsAsync(localFilePath, deviceSerial, cancellationToken);
@@ -1354,37 +1360,6 @@ public sealed class PublisherService
 
     public FileInfo? FindBestAab(string outputDirectory, string? projectName = null, string? packageId = null) =>
         ArtifactLocator.FindBestAab(outputDirectory, projectName, packageId);
-
-    private static void PlayCompletionSound(bool success)
-    {
-        try
-        {
-            if (OperatingSystem.IsMacOS())
-            {
-                var soundName = success ? "Glass" : "Basso";
-                var startInfo = new ProcessStartInfo("afplay")
-                {
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                startInfo.ArgumentList.Add($"/System/Library/Sounds/{soundName}.aiff");
-                Process.Start(startInfo);
-                return;
-            }
-
-            if (OperatingSystem.IsWindows())
-            {
-                Console.Beep(success ? 880 : 220, 180);
-                return;
-            }
-
-            Console.Write("\a");
-        }
-        catch
-        {
-            // Best-effort only.
-        }
-    }
 
     private static void KillProcessTree(Process process)
     {

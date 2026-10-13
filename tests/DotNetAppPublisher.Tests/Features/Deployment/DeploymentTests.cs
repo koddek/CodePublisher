@@ -98,6 +98,55 @@ public sealed class DeploymentTests
     }
 
     [Test]
+    public async Task AndroidDeviceInfo_DetailSummaryShowsVersionApiAbiTransportAndReadiness()
+    {
+        var phone = new AndroidDeviceInfo(
+            "R5CT123456A",
+            "Galaxy S21",
+            "device",
+            true,
+            AndroidDeviceState.Ready,
+            AndroidDeviceConnection.Usb,
+            "SM-G991B",
+            "14",
+            "34",
+            "arm64-v8a");
+        var wireless = new AndroidDeviceInfo(
+            "192.168.1.42:37123",
+            "Pixel 5",
+            "device",
+            true,
+            AndroidDeviceState.Ready,
+            AndroidDeviceConnection.Wireless,
+            "Pixel 5",
+            "13",
+            "33",
+            "arm64-v8a");
+        var unauthorized = new AndroidDeviceInfo(
+            "R5CT123456B",
+            "Galaxy S21",
+            "device",
+            false,
+            AndroidDeviceState.Unauthorized);
+        var offlineAvd = new AndroidDeviceInfo(
+            string.Empty,
+            "Pixel_8_API_35",
+            "emulator",
+            false,
+            AndroidDeviceState.Offline,
+            AndroidDeviceConnection.Emulator);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(phone.DetailSummary).IsEqualTo("SM-G991B  ·  Android 14 (API 34)  ·  arm64-v8a  ·  USB  ·  ready");
+            await Assert.That(wireless.DetailSummary).IsEqualTo("Pixel 5  ·  Android 13 (API 33)  ·  arm64-v8a  ·  Wi-Fi  ·  ready");
+            await Assert.That(unauthorized.DetailSummary).Contains("unauthorized");
+            await Assert.That(offlineAvd.DetailSummary).Contains("offline");
+            await Assert.That(offlineAvd.HasDetail).IsTrue();
+        }
+    }
+
+    [Test]
     public async Task ResolveLauncherComponent_ReadsTheComponentFromResolveActivity()
     {
         const string output =

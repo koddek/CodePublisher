@@ -74,7 +74,7 @@ public partial class MainViewModel : ViewModelBase
     [NotifyCanExecuteChangedFor(nameof(InstallLatestApkCommand))]
     [NotifyCanExecuteChangedFor(nameof(UninstallAppCommand))]
     [NotifyCanExecuteChangedFor(nameof(LaunchAppCommand))]
-    [NotifyCanExecuteChangedFor(nameof(StopAppCommand))]
+    [NotifyCanExecuteChangedFor(nameof(CloseAppCommand))]
     [NotifyCanExecuteChangedFor(nameof(CopyFileToAndroidDeviceCommand))]
     [NotifyCanExecuteChangedFor(nameof(RefreshDeviceFilesCommand))]
     [NotifyCanExecuteChangedFor(nameof(GoUpDeviceFilesCommand))]
@@ -83,7 +83,17 @@ public partial class MainViewModel : ViewModelBase
     [NotifyCanExecuteChangedFor(nameof(SendFilesToDeviceCommand))]
     [NotifyCanExecuteChangedFor(nameof(EnableWirelessDebuggingCommand))]
     [NotifyPropertyChangedFor(nameof(DeviceFilesHint))]
+    [NotifyPropertyChangedFor(nameof(SelectedDeviceDetail))]
+    [NotifyPropertyChangedFor(nameof(HasSelectedDeviceDetail))]
     private AndroidDeviceInfo? _selectedDevice;
+
+    /// <summary>
+    /// Detail row under the device selector: Android version and API level, CPU ABI, transport, and
+    /// readiness, read from the device itself.
+    /// </summary>
+    public string SelectedDeviceDetail => SelectedDevice?.DetailSummary ?? string.Empty;
+
+    public bool HasSelectedDeviceDetail => SelectedDevice?.HasDetail == true;
 
     public MainViewModel(
         PublisherService publisherService,
@@ -129,7 +139,7 @@ public partial class MainViewModel : ViewModelBase
         _ = InstallLatestApkCommand;
         _ = UninstallAppCommand;
         _ = LaunchAppCommand;
-        _ = StopAppCommand;
+        _ = CloseAppCommand;
         _ = CopyFileToAndroidDeviceCommand;
         _ = InstallIosAppCommand;
         _ = UninstallIosAppCommand;
@@ -138,6 +148,7 @@ public partial class MainViewModel : ViewModelBase
         _ = CopyFileToIosDeviceCommand;
         _ = DeleteDesktopAppCommand;
         _ = CopyCommandPreviewCommand;
+        _ = ToggleAlertSoundCommand;
         _ = CopyKnownGoodBaselineCommand;
         _ = CopyLiveOutputCommand;
         _ = CopyWindowScreenshotCommand;
@@ -191,7 +202,7 @@ public partial class MainViewModel : ViewModelBase
     [NotifyCanExecuteChangedFor(nameof(InstallLatestApkCommand))]
     [NotifyCanExecuteChangedFor(nameof(UninstallAppCommand))]
     [NotifyCanExecuteChangedFor(nameof(LaunchAppCommand))]
-    [NotifyCanExecuteChangedFor(nameof(StopAppCommand))]
+    [NotifyCanExecuteChangedFor(nameof(CloseAppCommand))]
     [NotifyCanExecuteChangedFor(nameof(DeleteDesktopAppCommand))]
     [NotifyCanExecuteChangedFor(nameof(RefreshEmulatorsCommand))]
     [NotifyCanExecuteChangedFor(nameof(LaunchEmulatorCommand))]
@@ -282,7 +293,7 @@ private string _projectDirectory = string.Empty;
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(UninstallAppCommand))]
     [NotifyCanExecuteChangedFor(nameof(LaunchAppCommand))]
-    [NotifyCanExecuteChangedFor(nameof(StopAppCommand))]
+    [NotifyCanExecuteChangedFor(nameof(CloseAppCommand))]
     private string _packageId = string.Empty;
 
     [ObservableProperty]
@@ -488,7 +499,7 @@ private string _projectDirectory = string.Empty;
     [NotifyCanExecuteChangedFor(nameof(InstallLatestApkCommand))]
     [NotifyCanExecuteChangedFor(nameof(UninstallAppCommand))]
     [NotifyCanExecuteChangedFor(nameof(LaunchAppCommand))]
-    [NotifyCanExecuteChangedFor(nameof(StopAppCommand))]
+    [NotifyCanExecuteChangedFor(nameof(CloseAppCommand))]
     [NotifyCanExecuteChangedFor(nameof(DeleteDesktopAppCommand))]
     [NotifyCanExecuteChangedFor(nameof(CopyWindowScreenshotCommand))]
     [NotifyCanExecuteChangedFor(nameof(SaveWindowScreenshotToDiskCommand))]
@@ -1419,25 +1430,26 @@ private string _projectDirectory = string.Empty;
     }
 
     /// <summary>
-    /// Force-stops the app on the selected Android device or emulator. Every process of the package is
-    /// shut down; the installed app and its data are kept.
+    /// Closes the app on the selected Android device or emulator: every process of the package is
+    /// stopped, and its card is dismissed from Recents (the app switcher) so the app is really gone
+    /// instead of merely stopped. The installed app and its data are kept.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanRunAndroidActions))]
-    private async Task StopAppAsync()
+    private async Task CloseAppAsync()
     {
-        if (!TryValidateAndroidDeviceSelection("Stop app"))
+        if (!TryValidateAndroidDeviceSelection("Close app"))
         {
             return;
         }
 
-        if (!TryValidatePackageId("Stop app"))
+        if (!TryValidatePackageId("Close app"))
         {
             return;
         }
 
         await RunQuickActionAsync(
-            async () => await _publisherService.StopAsync(PackageId, SelectedDevice?.Serial, CancellationToken.None),
-            "Stop app");
+            async () => await _publisherService.CloseAsync(PackageId, SelectedDevice?.Serial, CancellationToken.None),
+            "Close app");
     }
 
     [RelayCommand(CanExecute = nameof(CanDeleteDesktopApp))]
@@ -1485,15 +1497,18 @@ private string _projectDirectory = string.Empty;
             });
             
             // Update status
-            StatusMessage = IsFailureMessage(message)
+            var failed = IsFailureMessage(message);
+            StatusMessage = failed
                 ? $"{actionName} failed. Check Live Output for details."
                 : $"✓ {actionName} complete!";
             
             AppendLog(Environment.NewLine + $"[{actionName}] {message}" + Environment.NewLine);
+            PlayCompletionAlert(failed);
         }
         catch (Exception ex)
         {
             StatusMessage = $"{actionName} failed.";
+            PlayCompletionAlert(failed: true);
             await _desktopInteractionService.ShowErrorAsync(actionName, ex.Message);
         }
         finally
@@ -1521,6 +1536,7 @@ private string _projectDirectory = string.Empty;
     {
         await _desktopInteractionService.CopyTextToClipboardAsync(CommandPreview);
         StatusMessage = "Command preview copied.";
+        PlayCompletionAlert(failed: false);
     }
 
     private bool CanCopyCommandPreview()
@@ -1533,6 +1549,7 @@ private string _projectDirectory = string.Empty;
     {
         await _desktopInteractionService.CopyTextToClipboardAsync(KnownGoodBaselineCommand);
         StatusMessage = "Known-good baseline command copied.";
+        PlayCompletionAlert(failed: false);
     }
 
     private bool CanCopyKnownGoodBaseline()
@@ -1545,6 +1562,7 @@ private string _projectDirectory = string.Empty;
     {
         await _desktopInteractionService.CopyTextToClipboardAsync(LiveOutput);
         StatusMessage = "Live output copied.";
+        PlayCompletionAlert(failed: false);
     }
 
     private bool CanCopyLiveOutput()
@@ -1575,13 +1593,16 @@ private string _projectDirectory = string.Empty;
             IsBusy = true;
             var message = await action();
             AppendLog(Environment.NewLine + $"[{actionName}] {message}" + Environment.NewLine);
-            StatusMessage = IsFailureMessage(message)
+            var failed = IsFailureMessage(message);
+            StatusMessage = failed
                 ? $"{actionName} failed. Check Live Output for details."
                 : $"{actionName} finished.";
+            PlayCompletionAlert(failed);
         }
         catch (Exception ex)
         {
             StatusMessage = $"{actionName} failed.";
+            PlayCompletionAlert(failed: true);
             await _desktopInteractionService.ShowErrorAsync(actionName, ex.Message);
         }
         finally
@@ -1589,6 +1610,53 @@ private string _projectDirectory = string.Empty;
             IsBusy = false;
         }
     }
+
+    /// <summary>
+    /// The one alert-sound player, shared with publishing and Google Play, so a single mute toggle
+    /// silences every task alert in the app.
+    /// </summary>
+    private AlertSoundService AlertSounds => _publisherService.AlertSounds;
+
+    /// <summary>
+    /// Plays the alert that marks a finished task. Deploy actions, device file transfers, clipboard
+    /// copies, screenshots, publishing, and Google Play all report through here.
+    /// </summary>
+    private void PlayCompletionAlert(bool failed) =>
+        AlertSounds.Play(failed ? AlertTone.Failure : AlertTone.Success);
+
+    /// <summary>Turn alerts off from the header when a quiet run is wanted.</summary>
+    public bool IsAlertSoundEnabled
+    {
+        get => AlertSounds.IsEnabled;
+        set
+        {
+            if (AlertSounds.IsEnabled == value)
+            {
+                return;
+            }
+
+            AlertSounds.IsEnabled = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(AlertSoundToggleHint));
+            if (!value)
+            {
+                StatusMessage = "Alert sounds muted. Press the speaker again to turn them back on.";
+            }
+            else
+            {
+                PlayCompletionAlert(failed: false);
+                StatusMessage = "Alert sounds on.";
+            }
+        }
+    }
+
+    /// <summary>Tooltip for the header speaker button, so its current state is readable.</summary>
+    public string AlertSoundToggleHint => IsAlertSoundEnabled
+        ? "Alert sounds are on — finished publish, deploy, and file tasks play a sound. Click to mute."
+        : "Alert sounds are muted. Click to hear a sound when a task finishes.";
+
+    [RelayCommand]
+    private void ToggleAlertSound() => IsAlertSoundEnabled = !IsAlertSoundEnabled;
 
     private void ResetScreenshotCountdown()
     {

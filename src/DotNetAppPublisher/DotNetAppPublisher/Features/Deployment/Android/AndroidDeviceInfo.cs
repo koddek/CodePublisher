@@ -29,7 +29,8 @@ public sealed record AndroidDeviceInfo(
     string Connection = AndroidDeviceConnection.Usb,
     string Model = "",
     string AndroidVersion = "",
-    string ApiLevel = "")
+    string ApiLevel = "",
+    string Abi = "")
 {
     public bool IsEmulator => string.Equals(Type, "emulator", StringComparison.Ordinal);
 
@@ -60,6 +61,44 @@ public sealed record AndroidDeviceInfo(
         AndroidDeviceState.Unknown => "state unknown — run a refresh (adb is restarted on failure)",
         _ => string.Empty
     };
+
+    /// <summary>
+    /// Detail row shown under the device selector: Android version and API level, the CPU ABI that the
+    /// Runtime Identifier has to match, the transport, and whether the target can accept work yet.
+    /// Empty parts are dropped so an offline target still shows what is known about it.
+    /// </summary>
+    public string DetailSummary
+    {
+        get
+        {
+            var parts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(Model))
+            {
+                parts.Add(Model);
+            }
+
+            if (PlatformLabel.Length > 0)
+            {
+                parts.Add(PlatformLabel);
+            }
+
+            if (!string.IsNullOrWhiteSpace(Abi))
+            {
+                parts.Add(Abi);
+            }
+
+            parts.Add(ConnectionLabel);
+            parts.Add(IsReady
+                ? "ready"
+                : StateDetail.Length > 0
+                    ? StateDetail
+                    : $"not ready ({State})");
+            return string.Join("  ·  ", parts);
+        }
+    }
+
+    /// <summary>Whether there is anything worth showing in the detail row.</summary>
+    public bool HasDetail => DetailSummary.Length > 0;
 
     public string DisplayName
     {

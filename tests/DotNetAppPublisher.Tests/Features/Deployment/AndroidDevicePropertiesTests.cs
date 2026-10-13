@@ -49,11 +49,36 @@ public sealed class AndroidDevicePropertiesTests
     }
 
     [Test]
+    public async Task Parse_ReadsThePrimaryAbi()
+    {
+        const string output =
+            """
+            [ro.product.model]: [Pixel 8]
+            [ro.product.cpu.abi]: [arm64-v8a]
+            [ro.product.cpu.abilist]: [arm64-v8a,armeabi-v7a,armeabi]
+            """;
+
+        await Assert.That(AndroidDeviceProperties.Parse(output).Abi).IsEqualTo("arm64-v8a");
+    }
+
+    [Test]
+    public async Task Parse_FallsBackToTheFirstAbiOfTheAbiList()
+    {
+        const string output =
+            """
+            [ro.system.product.cpu.abilist]: [x86_64,x86,arm64-v8a]
+            """;
+
+        await Assert.That(AndroidDeviceProperties.Parse(output).Abi).IsEqualTo("x86_64");
+    }
+
+    [Test]
     public async Task Parse_HandlesEmptyAndMalformedOutput()
     {
         using (Assert.Multiple())
         {
             await Assert.That(AndroidDeviceProperties.Parse(null).Model).IsNull();
+            await Assert.That(AndroidDeviceProperties.Parse(null).Abi).IsNull();
             await Assert.That(AndroidDeviceProperties.Parse("noise without brackets").IsEmulator).IsFalse();
         }
     }
