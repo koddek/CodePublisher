@@ -1,9 +1,11 @@
 using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using DotNetAppPublisher.Features.Publishing.Capture;
@@ -15,6 +17,7 @@ namespace DotNetAppPublisher.Views;
 public partial class MainView : UserControl
 {
     private MainViewModel? _viewModel;
+    private Border? _deviceFilesDropTarget;
 
     public MainView()
     {
@@ -23,8 +26,51 @@ public partial class MainView : UserControl
         Loaded += (_, _) =>
         {
             ApplyResponsiveLayout(Bounds.Width);
+            AttachDeviceFilesDropTarget();
             Dispatcher.UIThread.Post(() => ApplyResponsiveLayout(Bounds.Width), DispatcherPriority.Loaded);
         };
+    }
+
+    /// <summary>Turns the file list into a drop target so files can be dragged from the computer.</summary>
+    private void AttachDeviceFilesDropTarget()
+    {
+        if (_deviceFilesDropTarget is not null || this.FindControl<Border>("DeviceFilesDropZone") is not { } dropZone)
+        {
+            return;
+        }
+
+        _deviceFilesDropTarget = dropZone;
+        DragDrop.SetAllowDrop(dropZone, true);
+        dropZone.AddHandler(DragDrop.DragOverEvent, OnDeviceFilesDragOver);
+        dropZone.AddHandler(DragDrop.DropEvent, OnDeviceFilesDrop);
+    }
+
+    private static void OnDeviceFilesDragOver(object? sender, DragEventArgs e)
+    {
+        e.DragEffects = e.DataTransfer.Contains(DataFormat.File) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private async void OnDeviceFilesDrop(object? sender, DragEventArgs e)
+    {
+        if (_viewModel is null || !e.DataTransfer.Contains(DataFormat.File))
+        {
+            return;
+        }
+
+        var files = e.DataTransfer.TryGetFiles();
+        e.Handled = true;
+        if (files is null)
+        {
+            return;
+        }
+
+        var paths = files
+            .Select(item => item.TryGetLocalPath())
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => path!)
+            .ToArray();
+        await _viewModel.AcceptDroppedFilesAsync(paths);
     }
 
     private void OnSizeChanged(object? sender, SizeChangedEventArgs e)

@@ -10,13 +10,108 @@ public sealed class DeploymentTests
     {
         var devices = new[]
         {
-            new AndroidDeviceInfo("emulator-5554", "Pixel", "emulator", true),
+            new AndroidDeviceInfo("emulator-5554", "Pixel", "emulator", true, Connection: AndroidDeviceConnection.Emulator),
             new AndroidDeviceInfo("device-1", "Phone", "device", true)
         };
 
         var serial = AndroidDeploymentService.GetFirstRunningDeviceSerial(devices);
 
         await Assert.That(serial).IsEqualTo("device-1");
+    }
+
+    [Test]
+    public async Task AndroidDeviceSelection_PrefersReadyDeviceOverUnusableTargets()
+    {
+        var devices = new[]
+        {
+            new AndroidDeviceInfo("R5CT123456A", "Galaxy S21", "device", false, AndroidDeviceState.Unauthorized),
+            new AndroidDeviceInfo("emulator-5554", "Pixel", "emulator", true, Connection: AndroidDeviceConnection.Emulator),
+            new AndroidDeviceInfo("192.168.1.42:37123", "Pixel 5", "device", true, Connection: AndroidDeviceConnection.Wireless)
+        };
+
+        var serial = AndroidDeploymentService.SelectPreferredSerial(devices);
+
+        await Assert.That(serial).IsEqualTo("192.168.1.42:37123");
+    }
+
+    [Test]
+    public async Task AndroidDeviceSelection_ReturnsNullWhenNothingIsReady()
+    {
+        var devices = new[]
+        {
+            new AndroidDeviceInfo(string.Empty, "Pixel_8_API_35", "emulator", false, AndroidDeviceState.Offline)
+        };
+
+        await Assert.That(AndroidDeploymentService.SelectPreferredSerial(devices)).IsNull();
+    }
+
+    [Test]
+    public async Task AndroidDeviceRank_OrdersReadyDevicesThenRunningEmulatorsThenTheRest()
+    {
+        var ready = new AndroidDeviceInfo("device-1", "Phone", "device", true);
+        var emulator = new AndroidDeviceInfo("emulator-5554", "Pixel", "emulator", true, Connection: AndroidDeviceConnection.Emulator);
+        var offline = new AndroidDeviceInfo("device-2", "Tablet", "device", false, AndroidDeviceState.Offline);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(AndroidDeviceInfo.Rank(ready)).IsEqualTo(0);
+            await Assert.That(AndroidDeviceInfo.Rank(emulator)).IsEqualTo(1);
+            await Assert.That(AndroidDeviceInfo.Rank(offline)).IsEqualTo(2);
+        }
+    }
+
+    [Test]
+    public async Task AndroidDeviceInfo_DisplayNameExplainsConnectionAndState()
+    {
+        var phone = new AndroidDeviceInfo(
+            "R5CT123456A",
+            "Galaxy S21",
+            "device",
+            true,
+            AndroidDeviceState.Ready,
+            AndroidDeviceConnection.Usb,
+            "Galaxy S21",
+            "14",
+            "34");
+        var unauthorized = new AndroidDeviceInfo(
+            "R5CT123456B",
+            "Galaxy S21",
+            "device",
+            false,
+            AndroidDeviceState.Unauthorized);
+        var wireless = new AndroidDeviceInfo(
+            "192.168.1.42:37123",
+            "Pixel 5",
+            "device",
+            true,
+            AndroidDeviceState.Ready,
+            AndroidDeviceConnection.Wireless);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(phone.DisplayName).IsEqualTo("Galaxy S21 (R5CT123456A, USB) · Android 14 (API 34)");
+            await Assert.That(unauthorized.DisplayName).Contains("unauthorized");
+            await Assert.That(wireless.DisplayName).Contains("Wi-Fi");
+            await Assert.That(wireless.IsReady).IsTrue();
+            await Assert.That(unauthorized.IsReady).IsFalse();
+        }
+    }
+
+    [Test]
+    public async Task ResolveLauncherComponent_ReadsTheComponentFromResolveActivity()
+    {
+        const string output =
+            """
+            priority=0 preferredOrder=0 match=0x108000 specificIndex=-1 isDefault=false
+            com.example.app/.MainActivity
+            """;
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(AndroidDeploymentService.ResolveLauncherComponent(output)).IsEqualTo("com.example.app/.MainActivity");
+            await Assert.That(AndroidDeploymentService.ResolveLauncherComponent("No activity found")).IsNull();
+            await Assert.That(AndroidDeploymentService.ResolveLauncherComponent(null)).IsNull();
+        }
     }
 
     [Test]

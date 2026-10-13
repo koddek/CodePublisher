@@ -18,7 +18,12 @@ It is built with Avalonia and currently supports Android, macOS, Windows, and iO
 - Preview the exact `dotnet publish` command before running it
 - Stream live publish output in the app
 - Open the publish folder
-- Install, uninstall, and launch the app through `adb`
+- Detect and deploy to real Android phones and tablets over USB or Wi-Fi, alongside emulators
+- Install as an in-place update (`adb install -r`) that keeps app data; a signature clash tells you to Uninstall then Install instead of wiping data for you
+- Pair and connect wireless debugging (Android 11+ pairing code, or the legacy `adb tcpip` step for Android 10 and older)
+- Browse the device's public folders (Downloads, Pictures, DCIM, Documents, Movies, Music), delete files with a confirmation, drag files from the computer into the open folder, and save device files back to the computer
+- Detect real iPhone and iPad targets with `xcrun devicectl` (macOS, Xcode 15+) and install, launch, or stop a signed build on one
+- Uninstall, launch, or stop (force-quit) the app through `adb` — stopping never removes the app or its data
 - Discover available Android emulators and launch the one you want
 - Capture the app window to clipboard or disk with a visible countdown
 - Publish Android App Bundles to Google Play from a dedicated Google Play workspace
@@ -36,8 +41,9 @@ MAUI Android publish commands can become long and easy to get wrong, especially 
 
 - .NET 10 SDK (the repository `global.json` pins the .NET 10 feature band)
 - Android SDK command-line tools
-- `adb` available on `PATH` for emulator install/launch actions
+- `adb` available on `PATH` for device and emulator actions (Android platform-tools 30.0.0 or newer for `adb pair` and `adb mdns`)
 - Android `emulator` tool available on `PATH` or in the default SDK install location for AVD discovery and launch
+- For real iOS devices: macOS with Xcode 15 or newer selected through `xcode-select`, the device paired once over USB and trusted, and Developer Mode enabled. Real-device file browsing is Android-only, because iOS app storage is sandboxed
 
 ### Run locally
 
@@ -65,7 +71,8 @@ dotnet run --project src/DotNetAppPublisher/DotNetAppPublisher.Browser/DotNetApp
 4. Confirm the command preview looks correct.
 5. Configure Android signing and the Google Play upload key from the Signing workspace.
 6. Publish and watch the live output panel.
-7. Open the output folder or push the build to an emulator.
+7. Open the output folder, or deploy to a real device or emulator from the Platform and Deploy sections.
+8. Use Device Files to browse the selected Android device's public folders, send files to it, and save files from it.
 
 ## Project structure
 

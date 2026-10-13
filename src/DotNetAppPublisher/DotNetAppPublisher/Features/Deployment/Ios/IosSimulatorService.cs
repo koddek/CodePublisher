@@ -125,6 +125,43 @@ public sealed class IosSimulatorService
             : $"iOS launch failed for {packageId}.{Environment.NewLine}{output}";
     }
 
+    /// <summary>
+    /// Force-quits the app on a simulator (`simctl terminate`). The installed app and its data are
+    /// kept. Pressing Stop when the app is already closed is reported as "not running" rather than an
+    /// error, so the action stays safe to press repeatedly.
+    /// </summary>
+    public async Task<string> TerminateAppAsync(string packageId, string simulator, CancellationToken cancellationToken)
+    {
+        var xcrunPath = RequireXcrun();
+        if (string.IsNullOrWhiteSpace(packageId))
+        {
+            throw new InvalidOperationException("Bundle id is required to stop the app.");
+        }
+
+        var simulatorId = RequireSimulator(simulator);
+        await EnsureBootedAsync(xcrunPath, simulatorId, cancellationToken);
+        var bundleId = packageId.Trim();
+        var output = new StringBuilder();
+        var exitCode = await ProcessRunner.RunAsync(
+            [xcrunPath, "simctl", "terminate", simulatorId, bundleId],
+            text => output.Append(text),
+            cancellationToken);
+
+        if (exitCode == 0)
+        {
+            return $"Stopped {bundleId} on {simulator}. The app and its data are kept.{Environment.NewLine}{output}";
+        }
+
+        if (IosStopParsers.LooksLikeNotRunning(output.ToString()))
+        {
+            return $"{bundleId} is not running on {simulator} (nothing to stop).{Environment.NewLine}{output}";
+        }
+
+        throw new InvalidOperationException(
+            $"Stop failed for {bundleId} on {simulator}. Make sure the app is installed and the simulator is booted." +
+            $"{Environment.NewLine}{output}");
+    }
+
     public async Task<string> PushFileAsync(string localFilePath, string simulator, CancellationToken cancellationToken)
     {
         var xcrunPath = RequireXcrun();

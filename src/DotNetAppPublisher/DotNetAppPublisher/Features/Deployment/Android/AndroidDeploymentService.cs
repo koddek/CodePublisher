@@ -5,6 +5,10 @@ using DotNetAppPublisher.Models;
 
 namespace DotNetAppPublisher.Features.Deployment.Android;
 
+/// <summary>
+/// Everything adb does for a real device or emulator: discovery, Wireless debugging setup,
+/// install/update, launch, and file transfer. SDK paths and process execution are injected.
+/// </summary>
 public sealed class AndroidDeploymentService
 {
     private readonly string? _adbPath;
@@ -16,14 +20,24 @@ public sealed class AndroidDeploymentService
         string? adbPath,
         string? emulatorPath,
         Func<string?> apkSignerPath,
-        Func<string, string?, string?, FileInfo?> findApk)
+        Func<string, string?, string?, FileInfo?> findApk,
+        AndroidDeviceFileService? fileService = null)
     {
         _adbPath = adbPath;
         _emulatorPath = emulatorPath;
         _apkSignerPath = apkSignerPath;
         _findApk = findApk;
+        Files = fileService ?? new AndroidDeviceFileService(adbPath);
     }
 
+    /// <summary>File browsing, transfer, and delete operations for the selected device.</summary>
+    public AndroidDeviceFileService Files { get; }
+
+    /// <summary>
+    /// Installs the newest APK from the publish folder. The default install keeps the existing app and
+    /// its data (`adb install -r`): the app is never uninstalled automatically, so a signature clash
+    /// fails with an explanation instead of silently wiping app data.
+    /// </summary>
     public async Task<string> InstallLatestApkAsync(
         PublishConfiguration configuration,
         string? deviceSerial,
@@ -62,57 +76,40 @@ public sealed class AndroidDeploymentService
             ?? throw new InvalidOperationException($"No APK found in {outputDirectory}.");
         await EnsureApkHasValidSignatureAsync(apk.FullName, cancellationToken);
 
-        var output = new StringBuilder();
-        var exitCode = await ProcessRunner.RunAsync(
-            [adbPath, "-s", targetDevice, "install", "-r", apk.FullName],
-            text => output.Append(text),
-            cancellationToken);
-
-        if (exitCode != 0 && output.ToString().Contains("INSTALL_FAILED_UPDATE_INCOMPATIBLE", StringComparison.OrdinalIgnoreCase))
+        var log = new StringBuilder();
+        var wroteHeader = false;
+        void Append(string text)
         {
-            var packageName = ExtractPackageName(apk.Name);
-            if (!string.IsNullOrWhiteSpace(packageName))
+            if (!wroteHeader)
             {
-                output.Clear();
-                output.Append($"Existing package has incompatible signatures. Uninstalling {packageName} first...{Environment.NewLine}");
-                var uninstallExitCode = await ProcessRunner.RunAsync(
-                    [adbPath, "-s", targetDevice, "uninstall", packageName],
-                    text => output.Append(text),
-                    cancellationToken);
-
-                if (uninstallExitCode == 0)
-                {
-                    output.Append($"Uninstalled {packageName}. Retrying install...{Environment.NewLine}");
-                    exitCode = await ProcessRunner.RunAsync(
-                        [adbPath, "-s", targetDevice, "install", apk.FullName],
-                        text => output.Append(text),
-                        cancellationToken);
-                    if (exitCode == 0)
-                    {
-                        return $"Installed {apk.Name} on {targetDevice} after uninstalling incompatible version.{Environment.NewLine}{output}";
-                    }
-                }
-                else
-                {
-                    output.Append($"Uninstall failed, attempting install anyway...{Environment.NewLine}");
-                    exitCode = await ProcessRunner.RunAsync(
-                        [adbPath, "-s", targetDevice, "install", apk.FullName],
-                        text => output.Append(text),
-                        cancellationToken);
-                    if (exitCode == 0)
-                    {
-                        return $"Installed {apk.Name} on {targetDevice}.{Environment.NewLine}{output}";
-                    }
-                }
+                log.Append($"Updating the installed app on {targetDevice} (existing app data is kept).{Environment.NewLine}");
+                wroteHeader = true;
             }
+
+            log.Append(text);
+        }
+
+        var arguments = new List<string> { adbPath, "-s", targetDevice, "install", "-r", apk.FullName };
+        var exitCode = await ProcessRunner.RunAsync(arguments, Append, cancellationToken);
+
+        // Older devices reject streaming installs; retry once with the APK copied to the device first.
+        if (exitCode != 0 && AndroidInstallDiagnostics.IsStreamingFailure(log.ToString()))
+        {
+            Append($"Streaming install is not supported on this device. Retrying with --no-streaming...{Environment.NewLine}");
+            arguments.Insert(arguments.Count - 1, "--no-streaming");
+            exitCode = await ProcessRunner.RunAsync(arguments, Append, cancellationToken);
         }
 
         if (exitCode == 0)
         {
-            return $"Installed {apk.Name} on {targetDevice}.{Environment.NewLine}{output}";
+            return $"Installed {apk.Name} on {targetDevice}.{Environment.NewLine}{log}";
         }
 
-        throw new InvalidOperationException($"APK install failed for {apk.Name} on {targetDevice}.{Environment.NewLine}{output}");
+        var guidance = AndroidInstallDiagnostics.DescribeFailure(log.ToString());
+        throw new InvalidOperationException(
+            $"APK install failed for {apk.Name} on {targetDevice}." +
+            (guidance is null ? string.Empty : $"{Environment.NewLine}{guidance}") +
+            $"{Environment.NewLine}{log}");
     }
 
     public async Task<string> UninstallAsync(string packageId, string? deviceSerial, CancellationToken cancellationToken)
@@ -134,12 +131,16 @@ public sealed class AndroidDeploymentService
 
         if (exitCode == 0)
         {
-            return $"Uninstall requested for {packageId}.{Environment.NewLine}{output}";
+            return $"Uninstalled {packageId} on {targetDevice}. App data for this package is gone; a later Install starts fresh.{Environment.NewLine}{output}";
         }
 
         throw new InvalidOperationException($"Uninstall failed for {packageId} on {targetDevice}.{Environment.NewLine}{output}");
     }
 
+    /// <summary>
+    /// Starts the app on the device. The launcher activity is resolved from the package first, because
+    /// `monkey` (the legacy launcher) is restricted on some OEM builds.
+    /// </summary>
     public async Task<string> LaunchAsync(string packageId, string? deviceSerial, CancellationToken cancellationToken)
     {
         var adbPath = _adbPath ?? throw new InvalidOperationException("`adb` was not found. Install Android platform-tools or add adb to PATH.");
@@ -151,23 +152,73 @@ public sealed class AndroidDeploymentService
         var targetDevice = !string.IsNullOrWhiteSpace(deviceSerial)
             ? deviceSerial!.Trim()
             : throw new InvalidOperationException("No device selected. Select a device first.");
+        var package = packageId.Trim();
+
+        var resolveOutput = new StringBuilder();
+        await ProcessRunner.RunAsync(
+            [adbPath, "-s", targetDevice, "shell", "cmd", "package", "resolve-activity", "--brief", "-c", "android.intent.category.LAUNCHER", package],
+            text => resolveOutput.Append(text),
+            cancellationToken);
+
+        var component = ResolveLauncherComponent(resolveOutput.ToString());
+        var output = new StringBuilder();
+        var exitCode = component is null
+            ? await ProcessRunner.RunAsync(
+                [adbPath, "-s", targetDevice, "shell", "monkey", "-p", package, "-c", "android.intent.category.LAUNCHER", "1"],
+                text => output.Append(text),
+                cancellationToken)
+            : await ProcessRunner.RunAsync(
+                [adbPath, "-s", targetDevice, "shell", "am", "start", "-n", component],
+                text => output.Append(text),
+                cancellationToken);
+
+        if (exitCode == 0)
+        {
+            return $"Launch requested for {package} on {targetDevice}.{Environment.NewLine}{output}";
+        }
+
+        throw new InvalidOperationException(
+            $"Launch failed for {package} on {targetDevice}. Check the Package ID, and make sure the app is installed." +
+            $"{Environment.NewLine}{output}");
+    }
+
+    /// <summary>
+    /// Force-stops the app on a device or emulator (`am force-stop`). Every process of the package is
+    /// shut down, but the installed app and its data are untouched, so this is safe to press at any
+    /// time - including when the app is already closed (force-stop succeeds either way).
+    /// </summary>
+    public async Task<string> StopAppAsync(string packageId, string? deviceSerial, CancellationToken cancellationToken)
+    {
+        var adbPath = _adbPath ?? throw new InvalidOperationException("`adb` was not found. Install Android platform-tools or add adb to PATH.");
+        if (string.IsNullOrWhiteSpace(packageId))
+        {
+            throw new InvalidOperationException("Package id is required to stop the app.");
+        }
+
+        var targetDevice = !string.IsNullOrWhiteSpace(deviceSerial)
+            ? deviceSerial!.Trim()
+            : throw new InvalidOperationException("No device selected. Select a device first.");
+        var package = packageId.Trim();
         var output = new StringBuilder();
         var exitCode = await ProcessRunner.RunAsync(
-            [adbPath, "-s", targetDevice, "shell", "monkey", "-p", packageId.Trim(), "-c", "android.intent.category.LAUNCHER", "1"],
+            [adbPath, "-s", targetDevice, "shell", "am", "force-stop", package],
             text => output.Append(text),
             cancellationToken);
 
         if (exitCode == 0)
         {
-            return $"Launch requested for {packageId}.{Environment.NewLine}{output}";
+            return $"Stopped {package} on {targetDevice}. Every process of the app was shut down; the app and its data are kept." +
+                $"{Environment.NewLine}{output}";
         }
 
-        throw new InvalidOperationException($"Launch failed for {packageId} on {targetDevice}.{Environment.NewLine}{output}");
+        throw new InvalidOperationException(
+            $"Stop failed for {package} on {targetDevice}. Make sure the app is installed and the device is ready." +
+            $"{Environment.NewLine}{output}");
     }
 
-    public async Task<string> PushFileToDownloadsAsync(string localFilePath, string? deviceSerial, CancellationToken cancellationToken)
+    /// <summary>Sends one file to the device Downloads folder (kept for the Deploy tab shortcut).</summary>
+    public Task<string> PushFileToDownloadsAsync(string localFilePath, string? deviceSerial, CancellationToken cancellationToken)
     {
-        var adbPath = _adbPath ?? throw new InvalidOperationException("`adb` was not found. Install Android platform-tools or add adb to PATH.");
         if (string.IsNullOrWhiteSpace(localFilePath))
         {
             throw new InvalidOperationException("File path is required.");
@@ -178,21 +229,7 @@ public sealed class AndroidDeploymentService
             throw new InvalidOperationException($"File not found: {localFilePath}");
         }
 
-        var targetDevice = !string.IsNullOrWhiteSpace(deviceSerial)
-            ? deviceSerial!.Trim()
-            : throw new InvalidOperationException("No device selected. Select a device first.");
-        var output = new StringBuilder();
-        var exitCode = await ProcessRunner.RunAsync(
-            [adbPath, "-s", targetDevice, "push", localFilePath, "/storage/emulated/0/Download/"],
-            text => output.Append(text),
-            cancellationToken);
-        var resultText = output.ToString();
-        if (exitCode == 0)
-        {
-            return $"Pushed {Path.GetFileName(localFilePath)} to Downloads on {targetDevice}.{Environment.NewLine}{resultText}";
-        }
-
-        throw new InvalidOperationException($"Failed to push file to {targetDevice}.{Environment.NewLine}{resultText}");
+        return Files.UploadAsync(deviceSerial ?? string.Empty, [localFilePath], AndroidStorageLocations.Downloads, cancellationToken);
     }
 
     public async Task<IReadOnlyList<string>> DiscoverEmulatorsAsync(CancellationToken cancellationToken)
@@ -214,6 +251,10 @@ public sealed class AndroidDeploymentService
             .ToArray();
     }
 
+    /// <summary>
+    /// Lists every adb target: physical devices on USB or Wi-Fi (including unauthorized and offline
+    /// ones, so the app can explain what to do) plus running and available emulators.
+    /// </summary>
     public async Task<IReadOnlyList<AndroidDeviceInfo>> DiscoverAndroidDevicesAsync(CancellationToken cancellationToken)
     {
         var devices = new List<AndroidDeviceInfo>();
@@ -227,33 +268,37 @@ public sealed class AndroidDeploymentService
                 throw new InvalidOperationException($"Failed to query Android devices with adb (exit code {adbExitCode}).{Environment.NewLine}{adbOutput}");
             }
 
-            foreach (var line in adbOutput.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Skip(1))
+            foreach (var entry in AndroidDeviceListParser.Parse(adbOutput.ToString()))
             {
-                var parts = line.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length < 2 || !string.Equals(parts[1], "device", StringComparison.Ordinal))
-                {
-                    continue;
-                }
+                runningSerials.Add(entry.Serial);
+                var isReady = string.Equals(entry.State, AndroidDeviceState.Ready, StringComparison.Ordinal);
+                var properties = isReady ? await ReadDevicePropertiesAsync(entry.Serial, cancellationToken) : null;
 
-                var serial = parts[0];
-                runningSerials.Add(serial);
-                var isEmulator = serial.StartsWith("emulator-", StringComparison.OrdinalIgnoreCase);
-                var name = serial;
-                if (isEmulator)
-                {
-                    name = await GetAvdNameAsync(serial, cancellationToken) ?? serial;
-                }
-                else
-                {
-                    name = ExtractModelFromAdbOutput(line) ?? serial;
-                }
+                var isEmulator = entry.IsEmulatorSerial || properties?.IsEmulator == true;
+                var connection = isEmulator
+                    ? AndroidDeviceConnection.Emulator
+                    : entry.IsWirelessSerial ? AndroidDeviceConnection.Wireless : AndroidDeviceConnection.Usb;
 
-                devices.Add(new AndroidDeviceInfo(serial, name, isEmulator ? "emulator" : "device", true));
+                var model = properties?.Model ?? entry.Model;
+                var name = isEmulator
+                    ? await GetAvdNameAsync(entry.Serial, cancellationToken) ?? model ?? entry.Serial
+                    : model ?? entry.Serial;
+
+                devices.Add(new AndroidDeviceInfo(
+                    entry.Serial,
+                    name,
+                    isEmulator ? "emulator" : "device",
+                    isReady,
+                    entry.State,
+                    connection,
+                    model ?? string.Empty,
+                    properties?.AndroidVersion ?? string.Empty,
+                    properties?.ApiLevel ?? string.Empty));
             }
         }
 
         var runningAvdNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var serial in runningSerials.Where(s => s.StartsWith("emulator-", StringComparison.OrdinalIgnoreCase)))
+        foreach (var serial in runningSerials.Where(serial => serial.StartsWith("emulator-", StringComparison.OrdinalIgnoreCase)))
         {
             var avdName = await GetAvdNameAsync(serial, cancellationToken);
             if (!string.IsNullOrWhiteSpace(avdName))
@@ -273,14 +318,20 @@ public sealed class AndroidDeploymentService
                     .Distinct(StringComparer.Ordinal)
                     .Where(avdName => !runningAvdNames.Contains(avdName)))
                 {
-                    devices.Add(new AndroidDeviceInfo(string.Empty, avdName, "emulator", false));
+                    devices.Add(new AndroidDeviceInfo(
+                        string.Empty,
+                        avdName,
+                        "emulator",
+                        false,
+                        AndroidDeviceState.Offline,
+                        AndroidDeviceConnection.Emulator));
                 }
             }
         }
 
         return devices
-            .OrderByDescending(d => d.Type == "device" ? 0 : d.IsRunning ? 1 : 2)
-            .ThenBy(d => d.Name, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(AndroidDeviceInfo.Rank)
+            .ThenBy(device => device.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
 
@@ -305,9 +356,207 @@ public sealed class AndroidDeploymentService
         return Task.FromResult($"Launching emulator `{emulatorName.Trim()}`.");
     }
 
+    // --- Wireless debugging (Android 11+ pairing, plus the legacy adb tcpip flow) ---
+
+    /// <summary>Lists the wireless debugging services the devices advertise over mDNS.</summary>
+    public async Task<IReadOnlyList<AndroidWirelessService>> DiscoverWirelessServicesAsync(CancellationToken cancellationToken)
+    {
+        var adbPath = _adbPath ?? throw new InvalidOperationException("`adb` was not found. Install Android platform-tools or add adb to PATH.");
+        var output = new StringBuilder();
+        var exitCode = await ProcessRunner.RunAsync([adbPath, "mdns", "services"], text => output.Append(text), cancellationToken);
+        if (exitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"Failed to scan for wireless debugging services (exit code {exitCode}). " +
+                "Wireless debugging must be enabled on the device, both devices must be on the same network, " +
+                "and the network must allow mDNS discovery." +
+                $"{Environment.NewLine}{output}");
+        }
+
+        return AndroidWirelessDebug.ParseMdnsServices(output.ToString());
+    }
+
+    /// <summary>Pairs with a device using the code shown under Wireless debugging.</summary>
+    public async Task<string> PairWirelessDeviceAsync(string address, string pairingCode, CancellationToken cancellationToken)
+    {
+        var adbPath = _adbPath ?? throw new InvalidOperationException("`adb` was not found. Install Android platform-tools or add adb to PATH.");
+        if (!AndroidWirelessDebug.TryNormalizeAddress(address, out var endpoint, out var addressError))
+        {
+            throw new InvalidOperationException(addressError);
+        }
+
+        if (!AndroidWirelessDebug.TryNormalizePairingCode(pairingCode, out var code, out var codeError))
+        {
+            throw new InvalidOperationException(codeError);
+        }
+
+        var output = new StringBuilder();
+        var exitCode = await ProcessRunner.RunAsync([adbPath, "pair", endpoint, code], text => output.Append(text), cancellationToken);
+        if (exitCode == 0)
+        {
+            return $"Paired with {endpoint}. Now connect using the debugging port shown on the device.{Environment.NewLine}{output}";
+        }
+
+        throw new InvalidOperationException(
+            $"Pairing with {endpoint} failed.{Environment.NewLine}" +
+            "Check that the pair address and the pairing code are the ones currently shown under Wireless debugging " +
+            "(the pairing port closes when that dialog closes), and that adb is platform-tools 30.0.0 or newer." +
+            $"{Environment.NewLine}{output}");
+    }
+
+    /// <summary>Connects to a device that is already paired (or to a legacy adb tcpip port).</summary>
+    public async Task<string> ConnectWirelessDeviceAsync(string address, CancellationToken cancellationToken)
+    {
+        var adbPath = _adbPath ?? throw new InvalidOperationException("`adb` was not found. Install Android platform-tools or add adb to PATH.");
+        if (!AndroidWirelessDebug.TryNormalizeAddress(address, out var endpoint, out var addressError))
+        {
+            throw new InvalidOperationException(addressError);
+        }
+
+        var output = new StringBuilder();
+        var exitCode = await ProcessRunner.RunAsync([adbPath, "connect", endpoint], text => output.Append(text), cancellationToken);
+        var text = output.ToString();
+        if (exitCode == 0 && !text.Contains("failed", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"Connected to {endpoint}.{Environment.NewLine}{text}";
+        }
+
+        throw new InvalidOperationException(
+            $"Could not connect to {endpoint}.{Environment.NewLine}" +
+            "Use the debugging port from Wireless debugging (it differs from the pairing port), keep the device " +
+            "awake on the same network, and pair first for a new computer." +
+            $"{Environment.NewLine}{text}");
+    }
+
+    public async Task<string> DisconnectWirelessDeviceAsync(string address, CancellationToken cancellationToken)
+    {
+        var adbPath = _adbPath ?? throw new InvalidOperationException("`adb` was not found. Install Android platform-tools or add adb to PATH.");
+        if (!AndroidWirelessDebug.TryNormalizeAddress(address, out var endpoint, out var addressError))
+        {
+            throw new InvalidOperationException(addressError);
+        }
+
+        var output = new StringBuilder();
+        var exitCode = await ProcessRunner.RunAsync([adbPath, "disconnect", endpoint], text => output.Append(text), cancellationToken);
+        return exitCode == 0
+            ? $"Disconnected from {endpoint}.{Environment.NewLine}{output}"
+            : $"Failed to disconnect from {endpoint}.{Environment.NewLine}{output}";
+    }
+
+    /// <summary>
+    /// Enables TCP/IP debugging on a USB-connected device (Android 10 and older need this step) and
+    /// reports the address to connect to.
+    /// </summary>
+    public async Task<AndroidWirelessEnableResult> EnableWirelessDebuggingAsync(string deviceSerial, int port, CancellationToken cancellationToken)
+    {
+        var adbPath = _adbPath ?? throw new InvalidOperationException("`adb` was not found. Install Android platform-tools or add adb to PATH.");
+        if (string.IsNullOrWhiteSpace(deviceSerial))
+        {
+            throw new InvalidOperationException("Connect the device over USB first, then select it.");
+        }
+
+        var serial = deviceSerial.Trim();
+        var output = new StringBuilder();
+        var exitCode = await ProcessRunner.RunAsync([adbPath, "-s", serial, "tcpip", port.ToString()], text => output.Append(text), cancellationToken);
+        if (exitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"Could not switch {serial} to TCP/IP port {port}. On Android 11 and newer use Wireless debugging " +
+                $"and Pair instead.{Environment.NewLine}{output}");
+        }
+
+        var wifiIp = await ReadWifiIpAddressAsync(adbPath, serial, cancellationToken);
+        var address = wifiIp is null ? null : $"{wifiIp}:{port}";
+        var message = $"Wireless debugging is enabled on {serial}. Disconnect USB, then connect to {address ?? $"<device-ip>:{port}"}." +
+            (wifiIp is null
+                ? " The Wi-Fi address could not be read (the device may be on mobile data only); check Settings > About phone > Status for the IP address."
+                : string.Empty) +
+            $"{Environment.NewLine}{output}";
+        return new AndroidWirelessEnableResult(address, message);
+    }
+
+    private async Task<string?> ReadWifiIpAddressAsync(string adbPath, string serial, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var routeOutput = new StringBuilder();
+            await ProcessRunner.RunAsync([adbPath, "-s", serial, "shell", "ip", "route"], text => routeOutput.Append(text), cancellationToken);
+            var address = AndroidWirelessDebug.ExtractWifiIpAddress(routeOutput.ToString());
+            if (address is not null)
+            {
+                return address;
+            }
+
+            var propOutput = new StringBuilder();
+            await ProcessRunner.RunAsync([adbPath, "-s", serial, "shell", "getprop"], text => propOutput.Append(text), cancellationToken);
+            return AndroidWirelessDebug.ExtractWifiIpAddressFromProperties(propOutput.ToString());
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Reads model and Android version for one target with a single `getprop` call.</summary>
+    private async Task<AndroidDeviceProperties?> ReadDevicePropertiesAsync(string serial, CancellationToken cancellationToken)
+    {
+        if (_adbPath is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var output = new StringBuilder();
+            var exitCode = await ProcessRunner.RunAsync(
+                [_adbPath, "-s", serial, "shell", "getprop"],
+                text => output.Append(text),
+                cancellationToken);
+            return exitCode == 0 ? AndroidDeviceProperties.Parse(output.ToString()) : null;
+        }
+        catch
+        {
+            // A device can disappear mid-scan; discovery must still report the other targets.
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Reads the launcher component (`package/activity`) from `cmd package resolve-activity --brief`.
+    /// Returns null when the package has no launcher, so the caller can fall back to `monkey`.
+    /// </summary>
+    public static string? ResolveLauncherComponent(string? resolveActivityOutput)
+    {
+        if (string.IsNullOrWhiteSpace(resolveActivityOutput))
+        {
+            return null;
+        }
+
+        foreach (var rawLine in resolveActivityOutput.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (rawLine.Contains('/') && !rawLine.Contains(' ') && rawLine.Contains('.', StringComparison.Ordinal))
+            {
+                return rawLine;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Picks the target used when nothing is selected yet: a ready physical device, then a running
+    /// emulator. Offline and unauthorized targets are never chosen.
+    /// </summary>
+    public static string? SelectPreferredSerial(IReadOnlyList<AndroidDeviceInfo> devices) =>
+        devices
+            .Where(device => device.IsReady && !string.IsNullOrEmpty(device.Serial))
+            .OrderBy(AndroidDeviceInfo.Rank)
+            .ThenBy(device => device.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(device => device.Serial)
+            .FirstOrDefault();
+
     public static string? GetFirstRunningDeviceSerial(IReadOnlyList<AndroidDeviceInfo> devices) =>
-        devices.FirstOrDefault(d => d.IsRunning && d.Type == "device")?.Serial
-        ?? devices.FirstOrDefault(d => d.IsRunning && d.Type == "emulator")?.Serial;
+        SelectPreferredSerial(devices);
 
     private async Task<string?> GetAvdNameAsync(string serial, CancellationToken cancellationToken)
     {
@@ -356,28 +605,5 @@ public sealed class AndroidDeploymentService
             "The APK appears unsigned or signed incorrectly. " +
             "Publish with proper signing (or use a debug-signed APK) and retry." +
             $"{Environment.NewLine}{output}");
-    }
-
-    private static string? ExtractModelFromAdbOutput(string line)
-    {
-        var modelMatch = System.Text.RegularExpressions.Regex.Match(line, @"model:(\S+)");
-        return modelMatch.Success && modelMatch.Groups.Count > 1
-            ? modelMatch.Groups[1].Value.Replace('_', ' ')
-            : null;
-    }
-
-    private static string? ExtractPackageName(string apkFileName)
-    {
-        var nameWithoutExtension = Path.GetFileNameWithoutExtension(apkFileName);
-        foreach (var suffix in new[] { "-Signed", "-unsigned", "-debug", "-release" })
-        {
-            if (nameWithoutExtension.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
-            {
-                return nameWithoutExtension[..^suffix.Length];
-            }
-        }
-
-        var dashIndex = nameWithoutExtension.LastIndexOf('-');
-        return dashIndex > 0 ? nameWithoutExtension[..dashIndex] : nameWithoutExtension;
     }
 }

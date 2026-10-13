@@ -5,6 +5,7 @@
              xmlns:vm="using:DotNetAppPublisher.ViewModels"
              xmlns:services="using:DotNetAppPublisher.Services"
              xmlns:android="using:DotNetAppPublisher.Features.Deployment.Android"
+             xmlns:ios="using:DotNetAppPublisher.Features.Deployment.Ios"
              xmlns:googlePlay="using:DotNetAppPublisher.Views.GooglePlay"
              xmlns:converters="using:DotNetAppPublisher.Views"
              mc:Ignorable="d"
@@ -150,7 +151,7 @@
                             <Border Classes="card" IsVisible="{Binding IsAndroidPlatform}">
                                 <StackPanel Spacing="12">
                                     <TextBlock Text="Android device" Classes="section-title"/>
-                                    <TextBlock Text="Choose a connected device or start an emulator before deploying." Classes="section-copy"/>
+                                    <TextBlock Text="Real phones and tablets appear automatically over USB or Wi-Fi; emulators you can start. Targets that are unauthorized or offline stay listed so you can see what to fix." Classes="section-copy" TextWrapping="Wrap"/>
                                     <WrapPanel ItemSpacing="8" LineSpacing="8" VerticalAlignment="Center">
                                         <ComboBox MinWidth="180" MaxWidth="380" ItemsSource="{Binding AvailableAndroidDevices}" SelectedItem="{Binding SelectedDevice, Mode=TwoWay}">
                                             <ComboBox.ItemTemplate>
@@ -176,6 +177,47 @@
                                 </StackPanel>
                             </Border>
 
+                            <Border Classes="card" IsVisible="{Binding IsAndroidPlatform}">
+                                <StackPanel Spacing="12">
+                                    <TextBlock Text="Wireless debugging (Wi-Fi)" Classes="section-title"/>
+                                    <TextBlock Text="Android 11 and newer: turn on Developer options &gt; Wireless debugging, scan, then pair with the code shown on the device. Android 10 and older: connect USB once and switch on Wi-Fi debugging, then unplug." Classes="section-copy" TextWrapping="Wrap"/>
+                                    <WrapPanel ItemSpacing="8" LineSpacing="8">
+                                        <Button Content="Scan for devices" Command="{Binding RefreshWirelessPeersCommand}" MinWidth="150"/>
+                                        <Button Content="Wi-Fi debugging over USB" Command="{Binding EnableWirelessDebuggingCommand}" MinWidth="190"
+                                                ToolTip.Tip="Sends `adb tcpip 5555` to the selected USB device and reports the Wi-Fi address to connect to"/>
+                                    </WrapPanel>
+                                    <ItemsControl ItemsSource="{Binding WirelessPeers}" IsVisible="{Binding HasWirelessPeers}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:WirelessPeerRowViewModel">
+                                                <Grid ColumnDefinitions="*,Auto" Margin="0,4" ColumnSpacing="8">
+                                                    <StackPanel Spacing="2" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold"/>
+                                                        <TextBlock Text="{Binding KindText}" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}"/>
+                                                    </StackPanel>
+                                                    <Button Grid.Column="1" Content="{Binding ActionLabel}" Command="{Binding UseCommand}" MinWidth="110"/>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <WrapPanel ItemSpacing="8" LineSpacing="8">
+                                        <StackPanel MinWidth="190" MaxWidth="300" Spacing="5">
+                                            <TextBlock Text="Address (IP:PORT)" FontSize="12" FontWeight="SemiBold"/>
+                                            <TextBox Text="{Binding WirelessAddress}" PlaceholderText="192.168.1.42:37123"/>
+                                        </StackPanel>
+                                        <StackPanel MinWidth="130" MaxWidth="200" Spacing="5">
+                                            <TextBlock Text="Pairing code" FontSize="12" FontWeight="SemiBold"/>
+                                            <TextBox Text="{Binding WirelessPairingCode}" PlaceholderText="6 digits"/>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom" Margin="0,0,0,1">
+                                            <Button Content="Pair" Command="{Binding PairWirelessDeviceCommand}" MinWidth="90"/>
+                                            <Button Content="Connect" Command="{Binding ConnectWirelessDeviceCommand}" MinWidth="100"/>
+                                            <Button Content="Disconnect" Command="{Binding DisconnectWirelessDeviceCommand}" MinWidth="110"/>
+                                        </StackPanel>
+                                    </WrapPanel>
+                                    <TextBlock Text="{Binding WirelessSummary}" Classes="section-copy" Margin="0" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+
                             <Border Classes="card" IsVisible="{Binding IsIosActionsVisible}">
                                 <StackPanel Spacing="12">
                                     <TextBlock Text="iOS simulator" Classes="section-title"/>
@@ -188,6 +230,31 @@
                                         </Button>
                                     </WrapPanel>
                                     <Button Content="Launch simulator" Command="{Binding LaunchIosSimulatorCommand}" MinWidth="160"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Classes="card" IsVisible="{Binding IsIosActionsVisible}">
+                                <StackPanel Spacing="12">
+                                    <TextBlock Text="Real iOS device (iPhone / iPad)" Classes="section-title"/>
+                                    <TextBlock Text="{Binding IosDeviceSupportNote}" Classes="section-copy" TextWrapping="Wrap"/>
+                                    <WrapPanel ItemSpacing="8" LineSpacing="8" VerticalAlignment="Center">
+                                        <ComboBox MinWidth="200" MaxWidth="440" ItemsSource="{Binding AvailableIosDevices}" SelectedItem="{Binding SelectedIosDevice, Mode=TwoWay}">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate x:DataType="ios:IosDeviceInfo">
+                                                    <TextBlock Text="{Binding DisplayName}"/>
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
+                                        <Button Classes="compact-icon" Command="{Binding RefreshIosDevicesCommand}"
+                                                ToolTip.Tip="Scan for iOS devices" AutomationProperties.Name="Scan for iOS devices">
+                                            <PathIcon Data="M17.65 6.35A7.95 7.95 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                                        </Button>
+                                        <Button Classes="compact-icon" Command="{Binding RefreshWirelessPeersCommand}"
+                                                ToolTip.Tip="Scan for wireless debugging services" AutomationProperties.Name="Scan for wireless debugging services">
+                                            <PathIcon Data="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3a4.237 4.237 0 0 0-6 0zm-4-4 2 2a7.074 7.074 0 0 1 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/>
+                                        </Button>
+                                    </WrapPanel>
+                                    <TextBlock Text="iPhone and iPad storage is sandboxed, so files on the device cannot be browsed from a computer. Install and Launch below deploy a signed build to the selected device." Classes="section-copy" TextWrapping="Wrap"/>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -701,12 +768,17 @@
                                         <TextBox Text="{Binding PackageId}" IsEnabled="{Binding IsEditorEnabled}" PlaceholderText="com.example.app"/>
                                     </StackPanel>
                                     <WrapPanel ItemSpacing="8" LineSpacing="8">
-                                        <Button Content="Install APK" Command="{Binding InstallLatestApkCommand}" MinWidth="120"/>
-                                        <Button Content="Uninstall" Command="{Binding UninstallAppCommand}" MinWidth="100"/>
+                                        <Button Content="Install APK" Command="{Binding InstallLatestApkCommand}" MinWidth="120"
+                                                ToolTip.Tip="Installs the newest APK from the publish folder over the installed app (adb install -r). The app and its data are kept."/>
+                                        <Button Content="Uninstall" Command="{Binding UninstallAppCommand}" MinWidth="100"
+                                                ToolTip.Tip="Removes the app from the device. This deletes the app's data as well."/>
                                         <Button Content="Launch" Command="{Binding LaunchAppCommand}" MinWidth="100"/>
+                                        <Button Content="Stop" Command="{Binding StopAppCommand}" MinWidth="100"
+                                                ToolTip.Tip="Force-stops the running app on the device or emulator. The installed app and its data are kept; safe to press when the app is closed."/>
                                         <Button Content="Push File..." Command="{Binding CopyFileToAndroidDeviceCommand}" MinWidth="110"/>
                                     </WrapPanel>
-                                    <TextBlock Text="Install uses the publish folder; Uninstall and Launch only need the Package ID above." Classes="section-copy"/>
+                                    <TextBlock Text="Install updates in place and keeps app data. It never uninstalls first: if the APK is signed with a different key, Uninstall (which deletes app data) then Install for a clean start. Browse and transfer files in the Device Files section." Classes="section-copy" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Install uses the publish folder; Uninstall, Launch, and Stop only need the Package ID above." Classes="section-copy"/>
                                 </StackPanel>
                             </Border>
 
@@ -721,9 +793,20 @@
                                         <Button Content="Install" Command="{Binding InstallIosAppCommand}" MinWidth="100"/>
                                         <Button Content="Uninstall" Command="{Binding UninstallIosAppCommand}" MinWidth="100"/>
                                         <Button Content="Launch" Command="{Binding LaunchIosAppCommand}" MinWidth="100"/>
+                                        <Button Content="Stop" Command="{Binding StopIosAppCommand}" MinWidth="100"
+                                                ToolTip.Tip="Force-quits the running app on the selected simulator. The installed app and its data are kept; safe to press when the app is closed."/>
                                         <Button Content="Push File..." Command="{Binding CopyFileToIosDeviceCommand}" MinWidth="110"/>
                                     </WrapPanel>
-                                    <TextBlock Text="Install uses the publish folder; Uninstall and Launch only need the Bundle ID above." Classes="section-copy"/>
+                                    <TextBlock Text="Install uses the publish folder; Uninstall, Launch, and Stop only need the Bundle ID above." Classes="section-copy"/>
+                                    <TextBlock Text="Real device" FontWeight="SemiBold" FontSize="13"/>
+                                    <WrapPanel ItemSpacing="8" LineSpacing="8">
+                                        <Button Content="Install on device" Command="{Binding InstallIosDeviceAppCommand}" MinWidth="150"
+                                                ToolTip.Tip="Installs the newest .app bundle on the selected iPhone/iPad with devicectl. The build must be signed for that device."/>
+                                        <Button Content="Launch on device" Command="{Binding LaunchIosDeviceAppCommand}" MinWidth="150"/>
+                                        <Button Content="Stop on device" Command="{Binding StopIosDeviceAppCommand}" MinWidth="150"
+                                                ToolTip.Tip="Force-quits the running app on the selected iPhone/iPad. The installed app and its data are kept; safe to press when the app is closed."/>
+                                    </WrapPanel>
+                                    <TextBlock Text="{Binding IosDeviceSupportNote}" Classes="section-copy" TextWrapping="Wrap"/>
                                 </StackPanel>
                             </Border>
 
@@ -742,6 +825,125 @@
                                              ToolTip.Tip="Open publish folder" AutomationProperties.Name="Open publish folder">
                                          <PathIcon Data="M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59L7.76 14.83l1.41 1.41L19 6.41V10h2V3h-7z"/>
                                      </Button>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Device Files Section -->
+                        <StackPanel Spacing="20" IsVisible="{Binding IsDeviceFilesSection}">
+                            <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+                                <TextBlock Text="Device Files" FontSize="18" FontWeight="SemiBold"/>
+                                <Button Grid.Column="1" Classes="icon-action-button" ToolTip.Tip="Screenshot this section" AutomationProperties.Name="Screenshot this section" Click="OnCaptureDetailClick" Tag="Files" Padding="8" MinWidth="36" MinHeight="32">
+                                    <PathIcon Data="M20 6h-3.17L15 4H9L7.17 6H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-8 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6zm0-10c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2z" Width="16" Height="16"/>
+                                </Button>
+                            </Grid>
+
+                            <Border Classes="card" IsVisible="{Binding IsAndroidPlatform}">
+                                <StackPanel Spacing="12">
+                                    <TextBlock Text="Device" Classes="section-title"/>
+                                    <WrapPanel ItemSpacing="8" LineSpacing="8" VerticalAlignment="Center">
+                                        <ComboBox MinWidth="200" MaxWidth="420" ItemsSource="{Binding AvailableAndroidDevices}" SelectedItem="{Binding SelectedDevice, Mode=TwoWay}">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate x:DataType="android:AndroidDeviceInfo">
+                                                    <TextBlock Text="{Binding DisplayName}"/>
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
+                                        <Button Classes="compact-icon" Command="{Binding RefreshDevicesCommand}"
+                                                ToolTip.Tip="Refresh devices" AutomationProperties.Name="Refresh devices">
+                                            <PathIcon Data="M17.65 6.35A7.95 7.95 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                                        </Button>
+                                        <Border Classes="badge badge-adb">
+                                            <TextBlock Text="{Binding AdbStatus}" Classes="badge-text-adb" FontSize="11"/>
+                                        </Border>
+                                    </WrapPanel>
+                                    <TextBlock Text="{Binding DeviceFilesHint}" Classes="section-copy" Margin="0" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Classes="card" IsVisible="{Binding IsAndroidPlatform}">
+                                <StackPanel Spacing="12">
+                                    <TextBlock Text="Public folders" Classes="section-title"/>
+                                    <TextBlock Text="Folders shared by apps and the system. App-private storage (Android/data) is not readable from adb on Android 11 and newer." Classes="section-copy" Margin="0" TextWrapping="Wrap"/>
+                                    <ItemsControl ItemsSource="{Binding DeviceFileLocations}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <WrapPanel ItemSpacing="8" LineSpacing="8"/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="android:AndroidStorageLocation">
+                                                <Button Content="{Binding Label}" Padding="12,6" FontSize="12"
+                                                        Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).GoToDeviceLocationCommand}"
+                                                        CommandParameter="{Binding}"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Classes="card" IsVisible="{Binding IsAndroidPlatform}">
+                                <StackPanel Spacing="14">
+                                    <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+                                        <TextBlock Text="Files" Classes="section-title"/>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                            <Button Classes="compact-icon" Command="{Binding SendFilesToDeviceCommand}"
+                                                    ToolTip.Tip="Send files from this computer to this folder" AutomationProperties.Name="Send files to device">
+                                                <PathIcon Data="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/>
+                                            </Button>
+                                            <Button Classes="compact-icon" Command="{Binding GoUpDeviceFilesCommand}"
+                                                    ToolTip.Tip="Up one folder" AutomationProperties.Name="Up one folder">
+                                                <PathIcon Data="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z"/>
+                                            </Button>
+                                            <Button Classes="compact-icon" Command="{Binding RefreshDeviceFilesCommand}"
+                                                    ToolTip.Tip="Refresh this folder" AutomationProperties.Name="Refresh this folder">
+                                                <PathIcon Data="M17.65 6.35A7.95 7.95 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                                            </Button>
+                                        </StackPanel>
+                                    </Grid>
+                                    <WrapPanel ItemSpacing="8" LineSpacing="8" VerticalAlignment="Center">
+                                        <TextBox MinWidth="240" MaxWidth="460" Text="{Binding DeviceFilesPath}" PlaceholderText="/sdcard/Download"/>
+                                        <Button Content="Go" Command="{Binding OpenDeviceFilesPathCommand}" MinWidth="70"/>
+                                    </WrapPanel>
+                                    <TextBlock Text="{Binding DeviceFilesSummary}" Classes="section-copy" Margin="0" TextWrapping="Wrap"/>
+                                    <ProgressBar IsIndeterminate="True" Height="3" IsVisible="{Binding IsDeviceFilesBusy}"/>
+                                    <Border x:Name="DeviceFilesDropZone" Classes="drop-zone">
+                                        <StackPanel Spacing="8">
+                                            <TextBlock Text="Drop files here to send them to this folder (or use the up-arrow button)." FontSize="12" Foreground="{DynamicResource TextTertiaryColor}"/>
+                                            <TextBlock Text="This folder has no items." FontSize="12" Foreground="{DynamicResource TextTertiaryColor}" IsVisible="{Binding !HasDeviceFiles}"/>
+                                            <ScrollViewer MaxHeight="340" HorizontalScrollBarVisibility="Disabled">
+                                                <ItemsControl ItemsSource="{Binding DeviceFiles}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="vm:DeviceFileRowViewModel">
+                                                            <Border Classes="file-row">
+                                                                <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10" VerticalAlignment="Center">
+                                                                    <PathIcon Data="{Binding IconData}" Width="16" Height="16" VerticalAlignment="Center" Foreground="{DynamicResource TextSecondaryColor}"/>
+                                                                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                                                        <TextBlock Text="{Binding Name}" FontSize="13" TextTrimming="CharacterEllipsis"/>
+                                                                        <TextBlock Text="{Binding DetailText}" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}"/>
+                                                                    </StackPanel>
+                                                                    <Button Grid.Column="2" Content="Open" Command="{Binding OpenCommand}" MinWidth="80" IsVisible="{Binding IsDirectory}"/>
+                                                                    <Button Grid.Column="2" Content="Save..." Command="{Binding SaveCommand}" MinWidth="80" IsVisible="{Binding IsFile}"/>
+                                                                    <Button Grid.Column="3" Classes="compact-icon" Command="{Binding DeleteCommand}"
+                                                                            ToolTip.Tip="Delete on the device" AutomationProperties.Name="Delete on the device">
+                                                                        <PathIcon Data="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                                                                    </Button>
+                                                                </Grid>
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </ScrollViewer>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Classes="card" IsVisible="{Binding !IsAndroidPlatform}">
+                                <StackPanel Spacing="10">
+                                    <TextBlock Text="Device files" Classes="section-title"/>
+                                    <TextBlock Text="Browsing a device's own folders needs Android: adb exposes the shared storage folders, so they can be listed, cleaned up, and filled from here." Classes="section-copy" TextWrapping="Wrap"/>
+                                    <TextBlock Text="iPhone and iPad storage is sandboxed and cannot be browsed from a computer, and desktop targets have no device storage. Switch Publish target to Android in the Platform section to use the browser." Classes="section-copy" TextWrapping="Wrap"/>
                                 </StackPanel>
                             </Border>
                         </StackPanel>

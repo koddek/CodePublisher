@@ -54,6 +54,25 @@ public sealed class DesktopInteractionService
         return result.Count > 0 ? result[0].TryGetLocalPath() : null;
     }
 
+    /// <summary>Picks one or more files, used when sending files to a device.</summary>
+    public async Task<IReadOnlyList<string>> PickFilesAsync(string title, string? startPath = null)
+    {
+        var folder = await TryGetFolderAsync(startPath);
+        var result = await Window.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = title,
+            AllowMultiple = true,
+            SuggestedStartLocation = folder,
+            FileTypeFilter = [new FilePickerFileType("All files") { Patterns = ["*.*"] }]
+        });
+
+        return result
+            .Select(item => item.TryGetLocalPath())
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => path!)
+            .ToArray();
+    }
+
     public Task ShowInfoAsync(string title, string message)
     {
         return ShowDialogAsync(title, message, AlertKind.Info);

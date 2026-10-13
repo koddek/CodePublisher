@@ -38,6 +38,7 @@ public sealed class PublisherService
 
     private readonly AndroidDeploymentService _androidDeploymentService;
     private readonly IosSimulatorService _iosSimulatorService;
+    private readonly IosDeviceService _iosDeviceService;
 
     public PublisherService()
     {
@@ -70,14 +71,14 @@ public sealed class PublisherService
             .. androidCandidates.Where(p => p.EndsWith("emulator", StringComparison.OrdinalIgnoreCase))
         ]);
 
+        var xcrunPath = ResolveExecutable("xcrun", ["/usr/bin/xcrun"]);
         _androidDeploymentService = new AndroidDeploymentService(
             AdbPath,
             EmulatorPath,
             () => ApkSignerPath,
             FindBestApk);
-        _iosSimulatorService = new IosSimulatorService(
-            ResolveExecutable("xcrun", ["/usr/bin/xcrun"]),
-            FindNewestAppBundle);
+        _iosSimulatorService = new IosSimulatorService(xcrunPath, FindNewestAppBundle);
+        _iosDeviceService = new IosDeviceService(xcrunPath, FindNewestAppBundle);
     }
 
     public string? DotnetPath { get; }
@@ -449,8 +450,38 @@ public sealed class PublisherService
     public Task<string> LaunchAsync(string packageId, string? deviceSerial, CancellationToken cancellationToken) =>
         _androidDeploymentService.LaunchAsync(packageId, deviceSerial, cancellationToken);
 
+    public Task<string> StopAsync(string packageId, string? deviceSerial, CancellationToken cancellationToken) =>
+        _androidDeploymentService.StopAppAsync(packageId, deviceSerial, cancellationToken);
+
     public Task<string> PushFileToDownloadsAsync(string localFilePath, string? deviceSerial, CancellationToken cancellationToken) =>
         _androidDeploymentService.PushFileToDownloadsAsync(localFilePath, deviceSerial, cancellationToken);
+
+    public Task<IReadOnlyList<AndroidDeviceFileEntry>> ListAndroidFilesAsync(string? deviceSerial, string remotePath, CancellationToken cancellationToken) =>
+        _androidDeploymentService.Files.ListAsync(deviceSerial ?? string.Empty, remotePath, cancellationToken);
+
+    public Task<string> DeleteAndroidFileAsync(string? deviceSerial, string remotePath, bool isDirectory, CancellationToken cancellationToken) =>
+        _androidDeploymentService.Files.DeleteAsync(deviceSerial ?? string.Empty, remotePath, isDirectory, cancellationToken);
+
+    public Task<string> UploadToAndroidDeviceAsync(string? deviceSerial, IReadOnlyList<string> localPaths, string remoteDirectory, CancellationToken cancellationToken) =>
+        _androidDeploymentService.Files.UploadAsync(deviceSerial ?? string.Empty, localPaths, remoteDirectory, cancellationToken);
+
+    public Task<string> DownloadFromAndroidDeviceAsync(string? deviceSerial, string remotePath, string localDirectory, CancellationToken cancellationToken) =>
+        _androidDeploymentService.Files.DownloadAsync(deviceSerial ?? string.Empty, remotePath, localDirectory, cancellationToken);
+
+    public Task<IReadOnlyList<AndroidWirelessService>> DiscoverAndroidWirelessServicesAsync(CancellationToken cancellationToken) =>
+        _androidDeploymentService.DiscoverWirelessServicesAsync(cancellationToken);
+
+    public Task<string> PairAndroidWirelessAsync(string address, string pairingCode, CancellationToken cancellationToken) =>
+        _androidDeploymentService.PairWirelessDeviceAsync(address, pairingCode, cancellationToken);
+
+    public Task<string> ConnectAndroidWirelessAsync(string address, CancellationToken cancellationToken) =>
+        _androidDeploymentService.ConnectWirelessDeviceAsync(address, cancellationToken);
+
+    public Task<string> DisconnectAndroidWirelessAsync(string address, CancellationToken cancellationToken) =>
+        _androidDeploymentService.DisconnectWirelessDeviceAsync(address, cancellationToken);
+
+    public Task<AndroidWirelessEnableResult> EnableAndroidWirelessDebuggingAsync(string? deviceSerial, int port, CancellationToken cancellationToken) =>
+        _androidDeploymentService.EnableWirelessDebuggingAsync(deviceSerial ?? string.Empty, port, cancellationToken);
 
     public Task<string> DeletePublishedDesktopAppAsync(string outputDirectory, CancellationToken cancellationToken)
     {
@@ -520,6 +551,18 @@ public sealed class PublisherService
     public Task<IReadOnlyList<string>> DiscoverIosSimulatorsAsync(CancellationToken cancellationToken) =>
         _iosSimulatorService.DiscoverAsync(cancellationToken);
 
+    public Task<IReadOnlyList<IosDeviceInfo>> DiscoverIosDevicesAsync(CancellationToken cancellationToken) =>
+        _iosDeviceService.DiscoverAsync(cancellationToken);
+
+    public Task<string> InstallIosDeviceAppAsync(string outputDirectory, string udid, CancellationToken cancellationToken) =>
+        _iosDeviceService.InstallAppAsync(outputDirectory, udid, cancellationToken);
+
+    public Task<string> LaunchIosDeviceAppAsync(string packageId, string udid, CancellationToken cancellationToken) =>
+        _iosDeviceService.LaunchAppAsync(packageId, udid, cancellationToken);
+
+    public Task<string> StopIosDeviceAppAsync(string packageId, string udid, CancellationToken cancellationToken) =>
+        _iosDeviceService.TerminateAppAsync(packageId, udid, cancellationToken);
+
     public Task<string> LaunchEmulatorAsync(string emulatorName, CancellationToken cancellationToken) =>
         _androidDeploymentService.LaunchEmulatorAsync(emulatorName, cancellationToken);
 
@@ -534,6 +577,9 @@ public sealed class PublisherService
 
     public Task<string> LaunchIosAppAsync(string packageId, string simulator, CancellationToken cancellationToken) =>
         _iosSimulatorService.LaunchAppAsync(packageId, simulator, cancellationToken);
+
+    public Task<string> StopIosAppAsync(string packageId, string simulator, CancellationToken cancellationToken) =>
+        _iosSimulatorService.TerminateAppAsync(packageId, simulator, cancellationToken);
 
     public Task<string> PushFileToSimulatorAsync(string localFilePath, string simulator, CancellationToken cancellationToken) =>
         _iosSimulatorService.PushFileAsync(localFilePath, simulator, cancellationToken);

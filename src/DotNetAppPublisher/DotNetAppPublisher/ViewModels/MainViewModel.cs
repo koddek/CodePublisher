@@ -74,7 +74,15 @@ public partial class MainViewModel : ViewModelBase
     [NotifyCanExecuteChangedFor(nameof(InstallLatestApkCommand))]
     [NotifyCanExecuteChangedFor(nameof(UninstallAppCommand))]
     [NotifyCanExecuteChangedFor(nameof(LaunchAppCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StopAppCommand))]
     [NotifyCanExecuteChangedFor(nameof(CopyFileToAndroidDeviceCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RefreshDeviceFilesCommand))]
+    [NotifyCanExecuteChangedFor(nameof(GoUpDeviceFilesCommand))]
+    [NotifyCanExecuteChangedFor(nameof(GoToDeviceLocationCommand))]
+    [NotifyCanExecuteChangedFor(nameof(OpenDeviceFilesPathCommand))]
+    [NotifyCanExecuteChangedFor(nameof(SendFilesToDeviceCommand))]
+    [NotifyCanExecuteChangedFor(nameof(EnableWirelessDebuggingCommand))]
+    [NotifyPropertyChangedFor(nameof(DeviceFilesHint))]
     private AndroidDeviceInfo? _selectedDevice;
 
     public MainViewModel(
@@ -121,10 +129,12 @@ public partial class MainViewModel : ViewModelBase
         _ = InstallLatestApkCommand;
         _ = UninstallAppCommand;
         _ = LaunchAppCommand;
+        _ = StopAppCommand;
         _ = CopyFileToAndroidDeviceCommand;
         _ = InstallIosAppCommand;
         _ = UninstallIosAppCommand;
         _ = LaunchIosAppCommand;
+        _ = StopIosAppCommand;
         _ = CopyFileToIosDeviceCommand;
         _ = DeleteDesktopAppCommand;
         _ = CopyCommandPreviewCommand;
@@ -136,6 +146,19 @@ public partial class MainViewModel : ViewModelBase
         _ = BrowseKeystoreCommand;
         _ = ResetToSafeDefaultsCommand;
         _ = ToggleThemeCommand;
+        _ = RefreshDeviceFilesCommand;
+        _ = GoUpDeviceFilesCommand;
+        _ = GoToDeviceLocationCommand;
+        _ = OpenDeviceFilesPathCommand;
+        _ = SendFilesToDeviceCommand;
+        _ = RefreshWirelessPeersCommand;
+        _ = PairWirelessDeviceCommand;
+        _ = ConnectWirelessDeviceCommand;
+        _ = DisconnectWirelessDeviceCommand;
+        _ = EnableWirelessDebuggingCommand;
+        _ = RefreshIosDevicesCommand;
+        _ = InstallIosDeviceAppCommand;
+        _ = LaunchIosDeviceAppCommand;
         _ = IsPublishing;
         _ = GooglePlay;
     }
@@ -168,6 +191,7 @@ public partial class MainViewModel : ViewModelBase
     [NotifyCanExecuteChangedFor(nameof(InstallLatestApkCommand))]
     [NotifyCanExecuteChangedFor(nameof(UninstallAppCommand))]
     [NotifyCanExecuteChangedFor(nameof(LaunchAppCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StopAppCommand))]
     [NotifyCanExecuteChangedFor(nameof(DeleteDesktopAppCommand))]
     [NotifyCanExecuteChangedFor(nameof(RefreshEmulatorsCommand))]
     [NotifyCanExecuteChangedFor(nameof(LaunchEmulatorCommand))]
@@ -175,6 +199,8 @@ public partial class MainViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsMacOsPlatform))]
     [NotifyPropertyChangedFor(nameof(IsLinuxPlatform))]
     [NotifyPropertyChangedFor(nameof(IsAndroidActionsVisible))]
+    [NotifyPropertyChangedFor(nameof(IsDeviceFilesAvailable))]
+    [NotifyPropertyChangedFor(nameof(IosDeviceSupportNote))]
     [NotifyPropertyChangedFor(nameof(IsDesktopActionsVisible))]
     [NotifyPropertyChangedFor(nameof(IsAndroidPublishOptionsVisible))]
     [NotifyPropertyChangedFor(nameof(IsMacOsPublishOptionsVisible))]
@@ -256,6 +282,7 @@ private string _projectDirectory = string.Empty;
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(UninstallAppCommand))]
     [NotifyCanExecuteChangedFor(nameof(LaunchAppCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StopAppCommand))]
     private string _packageId = string.Empty;
 
     [ObservableProperty]
@@ -450,6 +477,7 @@ private string _projectDirectory = string.Empty;
     [NotifyCanExecuteChangedFor(nameof(InstallIosAppCommand))]
     [NotifyCanExecuteChangedFor(nameof(UninstallIosAppCommand))]
     [NotifyCanExecuteChangedFor(nameof(LaunchIosAppCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StopIosAppCommand))]
     [NotifyCanExecuteChangedFor(nameof(CopyFileToIosDeviceCommand))]
     private string _selectedIosSimulator = string.Empty;
 
@@ -460,6 +488,7 @@ private string _projectDirectory = string.Empty;
     [NotifyCanExecuteChangedFor(nameof(InstallLatestApkCommand))]
     [NotifyCanExecuteChangedFor(nameof(UninstallAppCommand))]
     [NotifyCanExecuteChangedFor(nameof(LaunchAppCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StopAppCommand))]
     [NotifyCanExecuteChangedFor(nameof(DeleteDesktopAppCommand))]
     [NotifyCanExecuteChangedFor(nameof(CopyWindowScreenshotCommand))]
     [NotifyCanExecuteChangedFor(nameof(SaveWindowScreenshotToDiskCommand))]
@@ -475,6 +504,7 @@ private string _projectDirectory = string.Empty;
     [NotifyCanExecuteChangedFor(nameof(InstallIosAppCommand))]
     [NotifyCanExecuteChangedFor(nameof(UninstallIosAppCommand))]
     [NotifyCanExecuteChangedFor(nameof(LaunchIosAppCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StopIosAppCommand))]
     [NotifyCanExecuteChangedFor(nameof(CopyFileToAndroidDeviceCommand))]
     [NotifyCanExecuteChangedFor(nameof(CopyFileToIosDeviceCommand))]
     [NotifyCanExecuteChangedFor(nameof(CancelPublishCommand))]
@@ -597,7 +627,7 @@ private string _projectDirectory = string.Empty;
     {
         // Keep device/simulator lists fresh when entering the sections that use them.
         // Only auto-discover when idle and the backing tool exists so section entry never throws.
-        if (section is PublishSection.Platform or PublishSection.Deploy && !IsBusy)
+        if (section is PublishSection.Platform or PublishSection.Deploy or PublishSection.DeviceFiles && !IsBusy)
         {
             if (IsAndroidPlatform && _publisherService.AdbPath is not null && AvailableAndroidDevices.Count == 0)
             {
@@ -608,6 +638,26 @@ private string _projectDirectory = string.Empty;
             {
                 _ = RefreshIosSimulatorsAsync();
             }
+
+            if (IsIosPlatform)
+            {
+                _ = AutoDiscoverIosDevicesAsync();
+            }
+
+            if (section == PublishSection.DeviceFiles)
+            {
+                _ = LoadDeviceFilesFromSectionAsync();
+            }
+        }
+    }
+
+    /// <summary>Keeps the open folder in sync when the user switches target.</summary>
+    partial void OnSelectedDeviceChanged(AndroidDeviceInfo? value)
+    {
+        OnPropertyChanged(nameof(DeviceFilesHint));
+        if (IsDeviceFilesSection)
+        {
+            _ = LoadDeviceFilesFromSectionAsync();
         }
     }
 
@@ -1018,6 +1068,14 @@ private string _projectDirectory = string.Empty;
             "Launch iOS app");
     }
 
+    [RelayCommand(CanExecute = nameof(CanUseIosPackageActions))]
+    private async Task StopIosAppAsync()
+    {
+        await RunQuickActionAsync(
+            async () => await _publisherService.StopIosAppAsync(PackageId, SelectedIosSimulator, CancellationToken.None),
+            "Stop iOS app");
+    }
+
     private bool CanUseIosPackageActions()
     {
         return !OperatingSystem.IsBrowser() && IsIosPlatform && !IsBusy && !string.IsNullOrWhiteSpace(PackageId) && !string.IsNullOrWhiteSpace(SelectedIosSimulator);
@@ -1360,6 +1418,28 @@ private string _projectDirectory = string.Empty;
             "Launch app");
     }
 
+    /// <summary>
+    /// Force-stops the app on the selected Android device or emulator. Every process of the package is
+    /// shut down; the installed app and its data are kept.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanRunAndroidActions))]
+    private async Task StopAppAsync()
+    {
+        if (!TryValidateAndroidDeviceSelection("Stop app"))
+        {
+            return;
+        }
+
+        if (!TryValidatePackageId("Stop app"))
+        {
+            return;
+        }
+
+        await RunQuickActionAsync(
+            async () => await _publisherService.StopAsync(PackageId, SelectedDevice?.Serial, CancellationToken.None),
+            "Stop app");
+    }
+
     [RelayCommand(CanExecute = nameof(CanDeleteDesktopApp))]
     private async Task DeleteDesktopAppAsync()
     {
@@ -1530,9 +1610,13 @@ private string _projectDirectory = string.Empty;
             return false;
         }
 
-        if (!SelectedDevice.IsRunning || string.IsNullOrWhiteSpace(SelectedDevice.Serial))
+        if (!SelectedDevice.IsReady || string.IsNullOrWhiteSpace(SelectedDevice.Serial))
         {
-            ReportPreflightFailure(actionName, "Select a running Android device first.");
+            ReportPreflightFailure(
+                actionName,
+                SelectedDevice.StateDetail.Length > 0
+                    ? $"This target is not ready: {SelectedDevice.StateDetail}."
+                    : "Select a running Android device first.");
             return false;
         }
 
