@@ -58,12 +58,11 @@ public static class PublishSettingsPolicy
             trimmed = selfContained && !publishAot && trimmed;
         }
 
-        var includeApk = state.IncludeApk;
+        // The APK is always built: it is the fast artifact for local testing and device
+        // deploys. Checking AAB adds the store bundle to the same publish, so a release
+        // build never needs a second run; unchecking it keeps the publish APK-only.
+        var includeApk = true;
         var includeAab = state.IncludeAab;
-        if (!includeApk && !includeAab)
-        {
-            includeAab = true;
-        }
 
         var androidLinkTool = state.AndroidLinkTool.Trim();
         var androidDexTool = state.AndroidDexTool.Trim();

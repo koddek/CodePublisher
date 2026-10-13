@@ -60,7 +60,7 @@ public sealed class PublishSettingsStateTests
     }
 
     [Test]
-    public async Task Normalize_RequiresAtLeastOnePackageFormat()
+    public async Task Normalize_AlwaysIncludesApk_WhenNoPackageFormatIsSelected()
     {
         var state = new PublishSettingsState(
             PublisherService.AndroidPlatform,
@@ -81,8 +81,37 @@ public sealed class PublishSettingsStateTests
 
         var result = PublishSettingsPolicy.Normalize(state);
 
-        await Assert.That(result.IncludeAab).IsTrue();
-        await Assert.That(result.IncludeApk).IsFalse();
+        await Assert.That(result.IncludeApk).IsTrue();
+        await Assert.That(result.IncludeAab).IsFalse();
+    }
+
+    [Test]
+    public async Task Normalize_SelectingAab_AlsoBuildsApk()
+    {
+        var state = new PublishSettingsState(
+            PublisherService.AndroidPlatform,
+            "net10.0-android",
+            "android-arm64",
+            SelfContained: true,
+            PublishAot: false,
+            PublishReadyToRun: false,
+            PublishSingleFile: true,
+            PublishTrimmed: false,
+            AndroidLinkMode: "SdkOnly",
+            AndroidLinkTool: "r8",
+            AndroidDexTool: "d8",
+            RunAotCompilation: false,
+            EnableProfiledAot: false,
+            IncludeApk: false,
+            IncludeAab: true);
+
+        var result = PublishSettingsPolicy.Normalize(state);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(result.IncludeApk).IsTrue();
+            await Assert.That(result.IncludeAab).IsTrue();
+        }
     }
 
     [Test]

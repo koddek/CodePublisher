@@ -494,6 +494,23 @@ public sealed class AndroidDeploymentService
 
     // --- Wireless debugging (Android 11+ pairing, plus the legacy adb tcpip flow) ---
 
+    /// <summary>
+    /// `adb devices -l` on its own: no per-device probing, so it is cheap enough to poll while the app
+    /// watches for a phone to be plugged in, authorized, or an emulator to finish booting.
+    /// </summary>
+    public async Task<IReadOnlyList<AndroidDeviceListEntry>> ProbeAndroidDevicesAsync(CancellationToken cancellationToken)
+    {
+        var adbPath = _adbPath ?? throw new InvalidOperationException("`adb` was not found. Install Android platform-tools or add adb to PATH.");
+        var output = new StringBuilder();
+        var exitCode = await ProcessRunner.RunAsync([adbPath, "devices", "-l"], text => output.Append(text), cancellationToken);
+        if (exitCode != 0)
+        {
+            throw new InvalidOperationException($"Failed to query Android devices with adb (exit code {exitCode}).{Environment.NewLine}{output}");
+        }
+
+        return AndroidDeviceListParser.Parse(output.ToString());
+    }
+
     /// <summary>Lists the wireless debugging services the devices advertise over mDNS.</summary>
     public async Task<IReadOnlyList<AndroidWirelessService>> DiscoverWirelessServicesAsync(CancellationToken cancellationToken)
     {
@@ -515,19 +532,35 @@ public sealed class AndroidDeploymentService
     /// <summary>Pairs with a device using the code shown under Wireless debugging.</summary>
     public async Task<string> PairWirelessDeviceAsync(string address, string pairingCode, CancellationToken cancellationToken)
     {
+        if (!AndroidWirelessDebug.TryNormalizePairingCode(pairingCode, out var code, out var codeError))
+        {
+            throw new InvalidOperationException(codeError);
+        }
+
+        return await PairWirelessAsync(address, code, "the pairing code shown on the device", cancellationToken);
+    }
+
+    /// <summary>Pairs with a device using the password this computer put in a pairing QR code.</summary>
+    public async Task<string> PairWirelessSecretAsync(string address, string secret, CancellationToken cancellationToken)
+    {
+        if (!AndroidQrPairing.TryNormalizeSecret(secret, out var normalized, out var secretError))
+        {
+            throw new InvalidOperationException(secretError);
+        }
+
+        return await PairWirelessAsync(address, normalized, "the QR pairing password", cancellationToken);
+    }
+
+    private async Task<string> PairWirelessAsync(string address, string secret, string secretDescription, CancellationToken cancellationToken)
+    {
         var adbPath = _adbPath ?? throw new InvalidOperationException("`adb` was not found. Install Android platform-tools or add adb to PATH.");
         if (!AndroidWirelessDebug.TryNormalizeAddress(address, out var endpoint, out var addressError))
         {
             throw new InvalidOperationException(addressError);
         }
 
-        if (!AndroidWirelessDebug.TryNormalizePairingCode(pairingCode, out var code, out var codeError))
-        {
-            throw new InvalidOperationException(codeError);
-        }
-
         var output = new StringBuilder();
-        var exitCode = await ProcessRunner.RunAsync([adbPath, "pair", endpoint, code], text => output.Append(text), cancellationToken);
+        var exitCode = await ProcessRunner.RunAsync([adbPath, "pair", endpoint, secret], text => output.Append(text), cancellationToken);
         if (exitCode == 0)
         {
             return $"Paired with {endpoint}. Now connect using the debugging port shown on the device.{Environment.NewLine}{output}";
@@ -535,8 +568,8 @@ public sealed class AndroidDeploymentService
 
         throw new InvalidOperationException(
             $"Pairing with {endpoint} failed.{Environment.NewLine}" +
-            "Check that the pair address and the pairing code are the ones currently shown under Wireless debugging " +
-            "(the pairing port closes when that dialog closes), and that adb is platform-tools 30.0.0 or newer." +
+            $"Check that {secretDescription} is the one the device is expecting, that the pairing port is still open " +
+            "(it closes when the dialog closes or the pairing times out), and that adb is platform-tools 30.0.0 or newer." +
             $"{Environment.NewLine}{output}");
     }
 

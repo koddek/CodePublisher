@@ -10,22 +10,23 @@ It is built with Avalonia and currently supports Android, macOS, Windows, and iO
 
 - Select a .NET project folder and auto-detect the `.csproj`
 - Read project metadata and pick platform-appropriate target framework/runtime combinations
-- Generate Android APK, AAB, or both
+- Generate the Android APK on every publish, and check AAB once to add the Google Play bundle to the same build
 - Generate macOS outputs with optional `.app` bundle creation
 - Generate Windows publish outputs with `.exe` launcher support
 - Generate iOS publish commands with archive/IPA toggles
 - Toggle platform-specific publish settings including trimming, AOT, linker/shrinker, and cleanup behavior
 - Preview the exact `dotnet publish` command before running it
 - Stream live publish output in the app
-- Open the publish folder
+- Open the folder that actually holds the published APK/AAB — never a parent you have to dig through
 - Detect and deploy to real Android phones and tablets over USB or Wi-Fi, alongside emulators
 - See what the selected target reports about itself — model, Android version, API level, CPU ABI, transport, and readiness — in a row under the device selector
 - Install as an in-place update (`adb install -r`) that keeps app data; a preflight compares the APK's signing certificate with the copy already on the device and blocks a mismatched build — with both fingerprints and its Google Play update impact — before any command runs, instead of wiping data for you
-- Pair and connect wireless debugging (Android 11+ pairing code, or the legacy `adb tcpip` step for Android 10 and older)
+- Pair wireless debugging three ways: the Android 11+ pairing code, a QR code the phone scans (Developer options → Wireless debugging → **Pair device with QR code**), or the legacy `adb tcpip` step for Android 10 and older
 - Browse the device's public folders (Downloads, Pictures, DCIM, Documents, Movies, Music), delete files with a confirmation, drag files from the computer into the open folder, and save device files back to the computer
 - Detect real iPhone and iPad targets with `xcrun devicectl` (macOS, Xcode 15+) and install, launch, or stop a signed build on one
 - Uninstall, launch, or close the app through `adb`: **Close app** stops every process *and* removes the app from Recents (the app switcher), so the app is really gone instead of only stopped. The installed app and its data are always kept
 - Discover available Android emulators and launch the one you want
+- Keep the device list live instead of refreshing by hand: while the Platform, Deploy, or Device Files section is open, a phone that is plugged in, authorized, or unplugged, and an emulator you start, appear and get selected automatically — and starting an emulator reports when it comes online
 - Capture the app window to clipboard or disk with a visible countdown
 - Hear a short alert when a task finishes — publish, deploy actions, device file transfers, and clipboard copies — and mute it from the speaker button in the header
 - Publish Android App Bundles to Google Play from a dedicated Google Play workspace

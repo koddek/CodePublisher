@@ -474,11 +474,18 @@ public sealed class PublisherService
     public Task<string> DownloadFromAndroidDeviceAsync(string? deviceSerial, string remotePath, string localDirectory, CancellationToken cancellationToken) =>
         _androidDeploymentService.Files.DownloadAsync(deviceSerial ?? string.Empty, remotePath, localDirectory, cancellationToken);
 
+    /// <summary>`adb devices -l` alone: cheap enough to poll while the app watches for targets.</summary>
+    public Task<IReadOnlyList<AndroidDeviceListEntry>> ProbeAndroidDevicesAsync(CancellationToken cancellationToken) =>
+        _androidDeploymentService.ProbeAndroidDevicesAsync(cancellationToken);
+
     public Task<IReadOnlyList<AndroidWirelessService>> DiscoverAndroidWirelessServicesAsync(CancellationToken cancellationToken) =>
         _androidDeploymentService.DiscoverWirelessServicesAsync(cancellationToken);
 
     public Task<string> PairAndroidWirelessAsync(string address, string pairingCode, CancellationToken cancellationToken) =>
         _androidDeploymentService.PairWirelessDeviceAsync(address, pairingCode, cancellationToken);
+
+    public Task<string> PairAndroidWirelessSecretAsync(string address, string secret, CancellationToken cancellationToken) =>
+        _androidDeploymentService.PairWirelessSecretAsync(address, secret, cancellationToken);
 
     public Task<string> ConnectAndroidWirelessAsync(string address, CancellationToken cancellationToken) =>
         _androidDeploymentService.ConnectWirelessDeviceAsync(address, cancellationToken);

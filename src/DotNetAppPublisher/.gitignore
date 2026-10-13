@@ -61,6 +61,8 @@ BenchmarkDotNet.Artifacts/
 project.lock.json
 project.fragment.lock.json
 artifacts/
+# The Publishing/Artifacts feature slice holds artifact-ranking source, not build output.
+!DotNetAppPublisher/Features/Publishing/Artifacts/
 
 # Tye
 .tye/

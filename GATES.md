@@ -115,6 +115,35 @@ Scope: Deliver an isolated Google Play detail page with secure in-memory account
   EXPECT: setup definitions contain acquisition guidance and source URLs; all tests pass.
   EVIDENCE: setup definitions now cover Google Cloud OAuth credentials, Temurin JDK, and Android Studio SDK locations; `GooglePlayView.axaml` renders the guidance and source action inline; 46 TUnit tests passed.
 
+## AAB companion package increment
+
+Scope: Checking AAB builds both APK and AAB in one publish; unchecking AAB builds the APK only. The uncommitted MainView.axaml edit left malformed XAML (AVLN1001, WrapPanel/StackPanel mismatch at line 522) and a duplicate `IncludeApk` checkbox; `ShowAndroidPackageFormatsTogether` is never raised, so its UI never refreshes.
+
+- [x] P1: The solution builds again with the repaired Android package-format UI.
+  CHECK: dotnet build DotNetAppPublisher.slnx --no-restore
+  EXPECT: Build succeeded with zero errors.
+  EVIDENCE: `Build succeeded. 0 Warning(s) 0 Error(s)` on macOS osx-arm64, .NET 10.0.12 (final run after all edits). Before the fix the same command failed with AVLN1001 (`WrapPanel`/`StackPanel` mismatch at MainView.axaml line 522) and, once the XAML parsed, 100 CS errors from the duplicated `IsPaired` and five orphan method-body fragments in MainViewModel.cs — both repaired.
+- [x] P2: Policy pins the APK on for Android and treats AAB as the opt-in companion.
+  CHECK: dotnet run --project tests/DotNetAppPublisher.Tests/DotNetAppPublisher.Tests.csproj -- --disable-logo --progress off
+  EXPECT: all tests pass, including the updated and new package-format policy tests.
+  EVIDENCE: 226/226 passed. `Normalize_AlwaysIncludesApk_WhenNoPackageFormatIsSelected` (both unchecked → APK on, AAB off) and `Normalize_SelectingAab_AlsoBuildsApk` (AAB checked → both on) in `PublishSettingsStateTests`; `PublishSettingsPolicy.Normalize` now forces `IncludeApk = true`.
+- [x] P3: The desktop app still launches with the new Build-tab controls.
+  CHECK: launch DotNetAppPublisher.Desktop briefly and confirm the process stays up without a startup exception.
+  EXPECT: process alive after several seconds; no crash output.
+  EVIDENCE: `bin/Debug/DotNetAppPublisher.app/Contents/MacOS/DotNetAppPublisher.Desktop` stayed alive for 9 s (pid reported ALIVE) with empty stdout/stderr, then terminated cleanly.
+- [x] P4: Open publish folder opens the single folder that holds the published APK/AAB.
+  CHECK: dotnet run --project tests/DotNetAppPublisher.Tests/DotNetAppPublisher.Tests.csproj -- --disable-logo --progress off
+  EXPECT: FindBestPackageFolder tests pass (package folder is returned for nested artifacts, null when none).
+  EVIDENCE: 226/226 passed, including `FindBestPackageFolder_ReturnsTheSingleFolderHoldingThePackages` and `FindBestPackageFolder_ReturnsNull_WhenNoPackagesExist`. `OpenPublishFolderAsync` resolves the folder through `ArtifactLocator.FindBestPackageFolder` for Android and opens that one folder.
+- [x] P5: All NuGet packages are on the latest compatible versions and the solution builds on them.
+  CHECK: dotnet restore DotNetAppPublisher.slnx && dotnet list DotNetAppPublisher.slnx package --outdated && dotnet build DotNetAppPublisher.slnx --no-restore
+  EXPECT: only the Avalonia-pinned SkiaSharp/HarfBuzzSharp lines report as behind; build succeeds with zero errors.
+  EVIDENCE: Avalonia family bumped 12.1.2 → 12.1.4, Avalonia.Diagnostics 11.3.21 → 11.3.22, TUnit 1.68.17 → 1.75.0; after restore+build (0 warnings/0 errors), `--outdated` reports only SkiaSharp 3.119.4 → 4.153.1 and SkiaSharp.NativeAssets.Linux.NoDependencies. Those stay pinned because the Avalonia.Skia 12.1.4 nuspec depends on SkiaSharp 3.119.4 / HarfBuzzSharp 8.3.1.3, and the props file records why. No breaking-change adaptations were needed — zero compile errors on first build after the bump.
+- [x] P6: The full TUnit suite passes on the updated packages.
+  CHECK: dotnet run --project tests/DotNetAppPublisher.Tests/DotNetAppPublisher.Tests.csproj -- --disable-logo --progress off
+  EXPECT: all tests pass.
+  EVIDENCE: 226/226 succeeded on TUnit 1.75.0, duration ~1 s; zero failed/skipped.
+
 ## SDK and publishing compatibility increment
 
 - [x] S1: Publish option combinations are normalized and validated before command construction.

@@ -177,6 +177,15 @@ public partial class MainView : UserControl
         {
             UpdateThemeIcon();
         }
+        else if (string.Equals(e.PropertyName, nameof(MainViewModel.IsWirelessQrVisible), StringComparison.Ordinal)
+                 && _viewModel?.IsWirelessQrVisible == true)
+        {
+            // The pairing code is longer than the card it lives in, so it lands below the fold: scroll it
+            // up once layout has run, so the phone can be pointed at it straight after the button press.
+            Dispatcher.UIThread.Post(
+                () => this.FindControl<StackPanel>("WirelessQrPanel")?.BringIntoView(),
+                DispatcherPriority.Loaded);
+        }
     }
 
     private void UpdateThemeIcon()

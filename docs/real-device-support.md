@@ -117,8 +117,24 @@ Sources: Apple's
   and a plain-language reason for targets that cannot be used yet. The selected target also gets a detail
   row — model, `Android <version> (API <level>)`, CPU ABI, transport, and readiness — read from one
   `getprop` call, so the ABI needed for the Runtime Identifier is visible before publishing.
-- Wireless debugging: `adb mdns services` scanning, pair with code, connect, disconnect, and the legacy
-  `adb tcpip` step with the Wi-Fi address read from `ip route` (fallback: `dhcp.wlan0.ipaddress`).
+- Wireless debugging: `adb mdns services` scanning, pair with code, pair by QR code, connect, disconnect,
+  and the legacy `adb tcpip` step with the Wi-Fi address read from `ip route` (fallback:
+  `dhcp.wlan0.ipaddress`).
+- Pair by QR code works the way Android Studio's does, and the direction is the opposite of what the
+  scanner suggests: the QR carries the pairing name and password the **computer** invents —
+  `WIFI:T:ADB;S:<mDNS instance name>;P:<pairing secret>;;` (`packages/apps/Settings` `WifiQrCode`) — the
+  phone that scans it starts its own pairing server and advertises it under that name, and this computer
+  finds that `_adb-tls-pairing._tcp` service through the adb server's mDNS discovery and runs
+  `adb pair <address> <secret>`. The host is the pairing client, so no host-side pairing server is needed
+  and the password never crosses the network outside the pairing handshake. After pairing, the device's
+  `_adb-tls-connect._tcp` port is picked up on the same host and connected, so the target lands in the
+  device list selected rather than as instructions (AOSP `docs/dev/adb_wifi.md`).
+- The Android target list keeps itself current: while a section that shows targets is open, a cheap
+  `adb devices -l` probe runs every three seconds and a full discovery only when the probe disagrees with
+  what is on screen, so plugging in a phone, approving its debugging prompt, or unplugging it shows up and
+  is selected without pressing Refresh. A launch starts a one-second wait that keeps the list live while
+  the emulator boots and then selects the AVD that was started, which is the case that used to need a
+  manual refresh.
 - Install is update-in-place and never uninstalls. One automatic retry with `--no-streaming`; every other
   failure is mapped to a concrete next action. A certificate preflight runs before install: the APK and
   the copy already installed are compared with apksigner, and a mismatched build is blocked with both
@@ -140,6 +156,17 @@ Sources: Apple's
   behaviour is covered by parsers, unit tests, and documented sources rather than a live deployment.
   The device-specific behaviours listed above (mDNS on a guest network, `Android/data` access, OEM
   `monkey` restrictions, `--no-streaming` retries) need a real-device pass.
+- The phone half of QR pairing is Android's own handler (`Developer options > Wireless debugging > Pair
+  device with QR code`), which needs a camera, so it could not be driven here: the Android 17 emulator's
+  DPP QR activity needs a scan, and enabling its wireless debugging produced no mDNS advertisement. What
+  was verified with the production code is the half this app owns: an `_adb-tls-pairing._tcp` service
+  published under a generated instance name was found through `adb mdns services` and matched by name, the
+  pairing command was aimed at that endpoint with the generated password (the endpoint recorded the
+  connection), the failure named both, and the match disappeared when the advertisement stopped. The code
+  the phone reads was decoded by an independent decoder (Apple Vision) from the rendered window, and it
+  decoded to the exact payload the view model generated. A real-phone pass is still the first thing to do
+  on hardware; the pairing password, the generated name, and a phone that prefixes the requested name with
+  its own serial are all covered by unit tests.
 - Close was exercised end-to-end against the same Android 17 emulator (API 37) with the production service code:
   an app in the foreground and an app in the background were both stopped **and** removed from Recents,
   a stopped app with no card reported the no-card no-op, and a second app's card plus the launcher stayed

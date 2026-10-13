@@ -11,6 +11,7 @@ using CommunityToolkit.Mvvm.Input;
 using DotNetAppPublisher.Features.Deployment.Android;
 using DotNetAppPublisher.Features.GooglePlay;
 using DotNetAppPublisher.Features.GooglePlay.Models;
+using DotNetAppPublisher.Features.Publishing.Artifacts;
 using DotNetAppPublisher.Features.Publishing.Configure;
 using DotNetAppPublisher.Models;
 using DotNetAppPublisher.Services;
@@ -30,6 +31,7 @@ public partial class MainViewModel : ViewModelBase
         nameof(OutputDirectory),
         nameof(IncludeApk),
         nameof(IncludeAab),
+        nameof(IsAndroidPublishOptionsVisible),
         nameof(SelfContained),
         nameof(PublishTrimmed),
         nameof(PublishAot),
@@ -234,6 +236,11 @@ public partial class MainViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(PublishSingleFileDisabledReason))]
     [NotifyPropertyChangedFor(nameof(IsUseAppHostEnabled))]
     [NotifyPropertyChangedFor(nameof(IsIosDeviceRuntime))]
+    [NotifyPropertyChangedFor(nameof(ShowAndroidPackageFormatsTogether))]
+    [NotifyPropertyChangedFor(nameof(IsPaired))]
+    [NotifyPropertyChangedFor(nameof(IsWirelesslyConnected))]
+    [NotifyPropertyChangedFor(nameof(IsWirelessConnected))]
+    [NotifyPropertyChangedFor(nameof(IsDeviceWatchStatusVisible))]
     private string _publishPlatform = PublisherService.AndroidPlatform;
 
 [ObservableProperty]
@@ -302,6 +309,7 @@ private string _projectDirectory = string.Empty;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(PublishCommand))]
+    [NotifyPropertyChangedFor(nameof(ShowAndroidPackageFormatsTogether))]
     private bool _includeAab;
 
     [ObservableProperty]
@@ -547,6 +555,37 @@ private string _projectDirectory = string.Empty;
             ? $"v{version}"
             : "v0.0.0";
 
+    /// <summary>Whether the currently selected device is already paired over Wi-Fi.</summary>
+    public bool IsPaired
+    {
+        get
+        {
+            if (!IsAndroidPlatform || _publisherService.AdbPath is null)
+            {
+                return false;
+            }
+
+            var address = WirelessAddress;
+            if (!string.IsNullOrWhiteSpace(address))
+            {
+                return AndroidWirelessDebug.TryParseEndpoint(address, out _, out _) && address.Split(':')[^1].Length > 0;
+            }
+
+            // Fall back to the summary text because the QR path writes "Paired." into WirelessSummary
+            // before the connect port is known.
+            var summary = WirelessSummary;
+            if (!string.IsNullOrWhiteSpace(summary) && summary.StartsWith("Paired", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            return false;
+        }
+    }
+
+    /// <summary>Whether the wireless path is paired and currently connected to a debugging port.</summary>
+    public bool IsWirelesslyConnected => IsPaired && !string.IsNullOrWhiteSpace(WirelessAddress);
+
     public bool IsAndroidPlatform => string.Equals(PublishPlatform, PublisherService.AndroidPlatform, StringComparison.Ordinal);
 
     public bool IsMacOsPlatform => string.Equals(PublishPlatform, PublisherService.MacOsPlatform, StringComparison.Ordinal);
@@ -573,6 +612,8 @@ private string _projectDirectory = string.Empty;
 
     public bool IsPackageIdVisible => true;
 
+    public bool ShowAndroidPackageFormatsTogether => IsAndroidPlatform && IncludeAab;
+
     public bool IsIosDeviceRuntime => string.Equals(PublishPlatform, PublisherService.IosPlatform, StringComparison.Ordinal)
         && !RuntimeIdentifier.StartsWith("iossimulator-", StringComparison.OrdinalIgnoreCase);
 
@@ -597,9 +638,26 @@ private string _projectDirectory = string.Empty;
     public string RunAotDisabledReason => PublishOptionPolicy.AndroidAotDisabledReason(AndroidLinkMode);
 
     public bool IsPublishSingleFileEnabled => PublishOptionPolicy.IsPublishSingleFileEnabled(PublishAot, PublishPlatform);
+
     public string PublishSingleFileDisabledReason => PublishAot
         ? "Native AOT already produces a native executable; single-file bundling is not needed."
         : IsPublishSingleFileEnabled ? string.Empty : "SingleFile not applicable for this platform.";
+
+    partial void OnWirelessSummaryChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsPaired));
+        OnPropertyChanged(nameof(IsWirelesslyConnected));
+        OnPropertyChanged(nameof(IsWirelessConnected));
+        OnPropertyChanged(nameof(PairedWirelessSummary));
+    }
+
+    partial void OnWirelessAddressChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsPaired));
+        OnPropertyChanged(nameof(IsWirelesslyConnected));
+        OnPropertyChanged(nameof(IsWirelessConnected));
+        OnPropertyChanged(nameof(PairedWirelessSummary));
+    }
 
     public bool IsUseAppHostEnabled => PublishOptionPolicy.IsUseAppHostEnabled(PublishPlatform);
 
@@ -636,6 +694,17 @@ private string _projectDirectory = string.Empty;
 
     private void OnSectionEntered(PublishSection section)
     {
+        // The Android target list keeps itself current while a section that shows targets is open, and
+        // stops polling as soon as the user moves somewhere that cannot use a device.
+        if (section is PublishSection.Platform or PublishSection.Deploy or PublishSection.DeviceFiles)
+        {
+            StartDeviceWatch();
+        }
+        else
+        {
+            StopDeviceWatch();
+        }
+
         // Keep device/simulator lists fresh when entering the sections that use them.
         // Only auto-discover when idle and the backing tool exists so section entry never throws.
         if (section is PublishSection.Platform or PublishSection.Deploy or PublishSection.DeviceFiles && !IsBusy)
@@ -693,6 +762,9 @@ private string _projectDirectory = string.Empty;
     partial void OnPublishPlatformChanged(string value)
     {
         IsProjectInternalVersionSupported = GetDefaultInternalVersionSupport(value);
+
+        // Platforms other than Android have nothing to watch, so this stops the poll as well.
+        StartDeviceWatch();
 
         ApplyPlatformProfiles(value);
 
@@ -924,35 +996,16 @@ private string _projectDirectory = string.Empty;
         {
             IsBusy = true;
             var devices = await _publisherService.DiscoverAndroidDevicesAsync(CancellationToken.None);
-            var previousSelection = SelectedDevice;
-            AvailableAndroidDevices.Clear();
-            foreach (var device in devices)
-            {
-                AvailableAndroidDevices.Add(device);
-            }
+            var change = ApplyDiscoveredDevices(devices);
 
-            if (previousSelection is not null)
-            {
-                SelectedDevice = AvailableAndroidDevices.FirstOrDefault(candidate => IsSameAndroidTarget(candidate, previousSelection));
-            }
-
-            if (AvailableAndroidDevices.Count == 0)
-            {
-                SelectedDevice = null;
-                StatusMessage = "No Android devices discovered. Connect a device or launch an emulator, then refresh.";
-            }
-            else if (SelectedDevice is null)
-            {
-                SelectedDevice = AvailableAndroidDevices.FirstOrDefault(device => device.IsRunning)
-                    ?? AvailableAndroidDevices[0];
-                StatusMessage = SelectedDevice.IsRunning
-                    ? $"Discovered {AvailableAndroidDevices.Count} Android target(s). Selected {SelectedDevice.DisplayName}."
-                    : $"Discovered {AvailableAndroidDevices.Count} Android target(s). Select a device to use platform actions.";
-            }
-            else
-            {
-                StatusMessage = $"Discovered {AvailableAndroidDevices.Count} Android target(s).";
-            }
+            var changeText = AndroidDeviceWatch.DescribeChange(change);
+            StatusMessage = AvailableAndroidDevices.Count == 0
+                ? "No Android devices discovered. Connect a device or launch an emulator, then refresh."
+                : changeText is not null
+                    ? changeText
+                    : SelectedDevice is null
+                        ? $"Discovered {AvailableAndroidDevices.Count} Android target(s). Select a device to use platform actions."
+                        : $"Discovered {AvailableAndroidDevices.Count} Android target(s). Selected {SelectedDevice.DisplayName}.";
         }
         catch (Exception ex)
         {
@@ -1033,12 +1086,19 @@ private string _projectDirectory = string.Empty;
             await RunQuickActionAsync(
                 async () => await _publisherService.LaunchAsync(PackageId, SelectedDevice.Serial, CancellationToken.None),
                 "Launch app");
+            return;
         }
-        else
+
+        var emulatorName = SelectedDevice.Name;
+        var knownSerials = CaptureKnownSerials();
+        var launched = await RunQuickActionAsync(
+            async () => await _publisherService.LaunchEmulatorAsync(emulatorName, CancellationToken.None),
+            "Launch emulator");
+        if (launched)
         {
-            await RunQuickActionAsync(
-                async () => await _publisherService.LaunchEmulatorAsync(SelectedDevice.Name, CancellationToken.None),
-                "Launch emulator");
+            // The list updates and selects the emulator on its own once it is up, so starting one never
+            // needs a manual refresh.
+            BeginWaitingForLaunchedTarget(emulatorName, emulatorName, knownSerials: knownSerials);
         }
     }
 
@@ -1352,12 +1412,34 @@ private string _projectDirectory = string.Empty;
     {
         try
         {
-            _publisherService.OpenPublishFolder(OutputDirectory);
+            _publisherService.OpenPublishFolder(ResolvePublishArtifactFolder());
         }
         catch (Exception ex)
         {
             await _desktopInteractionService.ShowErrorAsync("Open publish folder", ex.Message);
         }
+    }
+
+    /// <summary>
+    /// For Android, open the single folder that actually holds the published APK/AAB rather than a
+    /// parent folder the user would have to dig through. Falls back to the configured output folder
+    /// when no package has been published yet or the platform is not Android.
+    /// </summary>
+    private string ResolvePublishArtifactFolder()
+    {
+        var outputDirectory = OutputDirectory;
+        if (!IsAndroidPlatform || string.IsNullOrWhiteSpace(outputDirectory) || !Directory.Exists(outputDirectory))
+        {
+            return outputDirectory;
+        }
+
+        var configuration = CreateConfiguration();
+        var packageFolder = ArtifactLocator.FindBestPackageFolder(
+            outputDirectory,
+            configuration.ProjectName,
+            configuration.PackageId);
+
+        return packageFolder?.FullName ?? outputDirectory;
     }
 
     private bool CanOpenPublishFolder()
@@ -1521,9 +1603,15 @@ private string _projectDirectory = string.Empty;
     [RelayCommand(CanExecute = nameof(CanLaunchEmulator))]
     private async Task LaunchEmulatorAsync()
     {
-        await RunQuickActionAsync(
-            async () => await _publisherService.LaunchEmulatorAsync(SelectedEmulator, CancellationToken.None),
+        var emulatorName = SelectedEmulator;
+        var knownSerials = CaptureKnownSerials();
+        var launched = await RunQuickActionAsync(
+            async () => await _publisherService.LaunchEmulatorAsync(emulatorName, CancellationToken.None),
             "Launch emulator");
+        if (launched)
+        {
+            BeginWaitingForLaunchedTarget(emulatorName, emulatorName, knownSerials: knownSerials);
+        }
     }
 
     private bool CanCopyWindowScreenshot()
@@ -1580,12 +1668,13 @@ private string _projectDirectory = string.Empty;
         return !OperatingSystem.IsBrowser() && IsAndroidPlatform && !IsBusy && !string.IsNullOrWhiteSpace(SelectedEmulator);
     }
 
-    private async Task RunQuickActionAsync(Func<Task<string>> action, string actionName)
+    /// <summary>Runs one device action. Returns true when it finished without a failure message.</summary>
+    private async Task<bool> RunQuickActionAsync(Func<Task<string>> action, string actionName)
     {
         if (OperatingSystem.IsBrowser())
         {
             StatusMessage = $"{actionName} is available in the desktop app.";
-            return;
+            return false;
         }
 
         try
@@ -1598,12 +1687,14 @@ private string _projectDirectory = string.Empty;
                 ? $"{actionName} failed. Check Live Output for details."
                 : $"{actionName} finished.";
             PlayCompletionAlert(failed);
+            return !failed;
         }
         catch (Exception ex)
         {
             StatusMessage = $"{actionName} failed.";
             PlayCompletionAlert(failed: true);
             await _desktopInteractionService.ShowErrorAsync(actionName, ex.Message);
+            return false;
         }
         finally
         {

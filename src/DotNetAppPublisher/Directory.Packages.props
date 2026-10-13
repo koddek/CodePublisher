@@ -6,18 +6,24 @@
   <ItemGroup>
     <!-- Avalonia packages -->
     <!-- Important: keep version in sync! -->
-    <PackageVersion Include="Avalonia" Version="12.1.2" />
-    <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.2" />
-    <PackageVersion Include="Avalonia.Fonts.Inter" Version="12.1.2" />
-    <!-- Avalonia.Diagnostics has no 12.x release; 11.3.21 is the latest published line. -->
-    <PackageVersion Include="Avalonia.Diagnostics" Version="11.3.21" />
-    <PackageVersion Include="Avalonia.Desktop" Version="12.1.2" />
-    <PackageVersion Include="Avalonia.iOS" Version="12.1.2" />
-    <PackageVersion Include="Avalonia.Browser" Version="12.1.2" />
-    <PackageVersion Include="Avalonia.Android" Version="12.1.2" />
-    <PackageVersion Include="Avalonia.Skia" Version="12.1.2" />
+    <PackageVersion Include="Avalonia" Version="12.1.4" />
+    <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.4" />
+    <PackageVersion Include="Avalonia.Fonts.Inter" Version="12.1.4" />
+    <!-- Avalonia.Diagnostics has no 12.x release; 11.3.22 is the latest published line. -->
+    <PackageVersion Include="Avalonia.Diagnostics" Version="11.3.22" />
+    <PackageVersion Include="Avalonia.Desktop" Version="12.1.4" />
+    <PackageVersion Include="Avalonia.iOS" Version="12.1.4" />
+    <PackageVersion Include="Avalonia.Browser" Version="12.1.4" />
+    <PackageVersion Include="Avalonia.Android" Version="12.1.4" />
+    <PackageVersion Include="Avalonia.Skia" Version="12.1.4" />
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <!-- QR encoding for Wireless debugging "Pair with QR code". The PngByteQRCode renderer used here is
+         pure managed (no System.Drawing), so it also works in the browser build. -->
+    <PackageVersion Include="QRCoder" Version="1.8.1" />
     <PackageVersion Include="Xamarin.AndroidX.Core.SplashScreen" Version="1.0.1.15" />
+    <!-- SkiaSharp and HarfBuzzSharp must stay on the versions Avalonia.Skia pins (3.119.4 / 8.3.1.3
+         for Avalonia 12.1.4), not the latest published SkiaSharp major: Avalonia's renderers and
+         native assets are compiled against that SkiaSharp line, and a major bump breaks the pairing. -->
     <PackageVersion Include="SkiaSharp" Version="3.119.4" />
     <PackageVersion Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.119.4" />
     <PackageVersion Include="SkiaSharp.NativeAssets.WebAssembly" Version="3.119.4" />

@@ -191,6 +191,10 @@
                                         </Border>
                                     </WrapPanel>
                                     <Button Content="Launch device or emulator" Command="{Binding LaunchDeviceCommand}" MinWidth="180"/>
+                                    <!-- The list keeps itself current while this section is open; the line reports
+                                         either that, or the target a launch is waiting for. -->
+                                    <TextBlock Text="{Binding DeviceWatchStatus}" Classes="section-copy" Margin="0" TextWrapping="Wrap"
+                                               IsVisible="{Binding IsDeviceWatchStatusVisible}"/>
                                 </StackPanel>
                             </Border>
 
@@ -199,10 +203,40 @@
                                     <TextBlock Text="Wireless debugging (Wi-Fi)" Classes="section-title"/>
                                     <TextBlock Text="Android 11 and newer: turn on Developer options &gt; Wireless debugging, scan, then pair with the code shown on the device. Android 10 and older: connect USB once and switch on Wi-Fi debugging, then unplug." Classes="section-copy" TextWrapping="Wrap"/>
                                     <WrapPanel ItemSpacing="8" LineSpacing="8">
-                                        <Button Content="Scan for devices" Command="{Binding RefreshWirelessPeersCommand}" MinWidth="150"/>
+                                        <Button x:Name="ScanForDevicesButton" Content="Scan for devices" Command="{Binding RefreshWirelessPeersCommand}" MinWidth="150"
+                                                IsEnabled="{Binding !IsPaired}"/>
+                                        <Button Content="Pair with QR code" Command="{Binding StartWirelessQrPairingCommand}" MinWidth="170"
+                                                ToolTip.Tip="Shows a code to scan on the phone: Developer options > Wireless debugging > Pair device with QR code. The code carries the pairing name and password, so nothing is typed on either side."
+                                                IsEnabled="{Binding !IsPaired}"/>
+                                        <Button Content="Cancel" Command="{Binding CancelWirelessQrPairingCommand}" MinWidth="90"
+                                                IsVisible="{Binding IsWirelessQrWaiting}"/>
                                         <Button Content="Wi-Fi debugging over USB" Command="{Binding EnableWirelessDebuggingCommand}" MinWidth="190"
-                                                ToolTip.Tip="Sends `adb tcpip 5555` to the selected USB device and reports the Wi-Fi address to connect to"/>
+                                                ToolTip.Tip="Sends `adb tcpip 5555` to the selected USB device and reports the Wi-Fi address to connect to"
+                                                IsEnabled="{Binding !IsPaired}"/>
                                     </WrapPanel>
+                                    <!-- Pair with QR code: this computer invents a pairing name and password, shows them
+                                         as a code, then pairs with the phone that scanned it. Kept directly under the
+                                         button that opens it so the code appears where the click happened. -->
+                                    <StackPanel x:Name="WirelessQrPanel" Spacing="10" IsVisible="{Binding IsWirelessQrVisible}" Margin="0,4,0,0">
+                                        <TextBlock Text="Scan this code on the phone" Classes="section-title"/>
+                                        <TextBlock Text="Open Developer options &gt; Wireless debugging &gt; Pair device with QR code. The code tells the phone which pairing name to use and which password to expect, so neither side has to type anything." Classes="section-copy" Margin="0" TextWrapping="Wrap"/>
+                                        <StackPanel Orientation="Horizontal" Spacing="16">
+                                            <Border Background="White" Padding="8" CornerRadius="6" VerticalAlignment="Top" HorizontalAlignment="Left">
+                                                <Image Source="{Binding WirelessQrImage}" Width="216" Height="216" Stretch="Uniform"
+                                                       AutomationProperties.Name="Wireless debugging pairing QR code"/>
+                                            </Border>
+                                            <StackPanel Spacing="6" MinWidth="240" MaxWidth="380">
+                                                <TextBlock Text="{Binding WirelessQrStatus}" Classes="section-copy" Margin="0" TextWrapping="Wrap"/>
+                                                <TextBlock Text="Pairing name" FontSize="12" FontWeight="SemiBold"/>
+                                                <TextBox Text="{Binding WirelessQrServiceName}" IsReadOnly="True"/>
+                                                <TextBlock Text="Pairing password" FontSize="12" FontWeight="SemiBold"/>
+                                                <TextBox Text="{Binding WirelessQrPassword}" IsReadOnly="True"/>
+                                                <TextBlock Text="Code text (for another scanner or clipboard)" FontSize="12" FontWeight="SemiBold"/>
+                                                <TextBox Text="{Binding WirelessQrPayload}" IsReadOnly="True" TextWrapping="Wrap"/>
+                                                <Button Content="Copy code text" Command="{Binding CopyWirelessQrPayloadCommand}" MinWidth="140"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </StackPanel>
                                     <ItemsControl ItemsSource="{Binding WirelessPeers}" IsVisible="{Binding HasWirelessPeers}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate x:DataType="vm:WirelessPeerRowViewModel">
@@ -226,12 +260,15 @@
                                             <TextBox Text="{Binding WirelessPairingCode}" PlaceholderText="6 digits"/>
                                         </StackPanel>
                                         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom" Margin="0,0,0,1">
-                                            <Button Content="Pair" Command="{Binding PairWirelessDeviceCommand}" MinWidth="90"/>
-                                            <Button Content="Connect" Command="{Binding ConnectWirelessDeviceCommand}" MinWidth="100"/>
-                                            <Button Content="Disconnect" Command="{Binding DisconnectWirelessDeviceCommand}" MinWidth="110"/>
+                                            <Button Content="Pair" Command="{Binding PairWirelessDeviceCommand}" MinWidth="90"
+                                                IsEnabled="{Binding !IsPaired}"/>
+                                            <Button Content="Connect" Command="{Binding ConnectWirelessDeviceCommand}" MinWidth="100"
+                                                IsEnabled="{Binding !IsWirelesslyConnected}"/>
+                                            <Button Content="Disconnect" Command="{Binding DisconnectWirelessDeviceCommand}" MinWidth="110"
+                                                IsEnabled="{Binding IsWirelesslyConnected}"/>
                                         </StackPanel>
                                     </WrapPanel>
-                                    <TextBlock Text="{Binding WirelessSummary}" Classes="section-copy" Margin="0" TextWrapping="Wrap"/>
+
                                 </StackPanel>
                             </Border>
 
@@ -456,22 +493,24 @@
                             <Border Classes="card" IsVisible="{Binding IsAndroidPublishOptionsVisible}">
                                 <StackPanel Spacing="16">
                                     <TextBlock Text="Android Options" Classes="section-title"/>
-                                    <TextBlock Text="Package formats require at least one of APK/AAB. Link settings affect size vs. runtime safety." Classes="section-copy"/>
+                                    <TextBlock Text="The APK always builds — it is the package you test and deploy with. Check AAB to add the Google Play bundle to the same publish." Classes="section-copy"/>
                                     <WrapPanel ItemSpacing="12" LineSpacing="12">
                                         <StackPanel Orientation="Horizontal" Spacing="4"
-                                                    ToolTip.Tip="APK: the installable Android package you can sideload or share directly. Needed for manual installs and for stores other than Google Play.">
-                                            <CheckBox Content="Generate APK" IsChecked="{Binding IncludeApk}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
+                                                    ToolTip.Tip="APK: the installable Android package you can sideload or share directly. Always built on every publish — it is the fast artifact for testing on a device or emulator. Checking AAB adds the store bundle to the same publish.">
+                                            <CheckBox Content="Generate APK" IsChecked="{Binding IncludeApk}" IsEnabled="False" Margin="0,4"/>
                                             <Border Classes="option-info">
                                                 <TextBlock Text="i"/>
                                             </Border>
                                         </StackPanel>
                                         <StackPanel Orientation="Horizontal" Spacing="4"
-                                                    ToolTip.Tip="AAB (Android App Bundle): the upload format Google Play expects; Play builds and delivers the store APKs from it. Required for new Play apps.">
+                                                    ToolTip.Tip="AAB (Android App Bundle): the upload format Google Play expects; Play builds and delivers the store APKs from it. Required for new Play apps. Checked: one publish builds both APK and AAB — test the APK, then upload the AAB. Unchecked: builds the APK only.">
                                             <CheckBox Content="Generate AAB" IsChecked="{Binding IncludeAab}" IsEnabled="{Binding IsEditorEnabled}" Margin="0,4"/>
                                             <Border Classes="option-info">
                                                 <TextBlock Text="i"/>
                                             </Border>
                                         </StackPanel>
+                                        <TextBlock Text="One publish, both packages: test the APK, upload the AAB" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource TextSecondaryColor}"
+                                                   IsVisible="{Binding ShowAndroidPackageFormatsTogether}"/>
                                         <StackPanel Orientation="Horizontal" Spacing="4"
                                                     ToolTip.Tip="{Binding RunAotDisabledReason, Converter={StaticResource OptionHelp}, ConverterParameter='RunAOT (Ahead-Of-Time): compiles native code before installing on Android. Speeds up app startup on device. Requires Link mode (SdkOnly or Full) to strip unused code; increases app size.'}">
                                             <CheckBox Content="RunAOT" IsChecked="{Binding RunAotCompilation}" IsEnabled="{Binding IsRunAotEnabled}" Margin="0,4"/>

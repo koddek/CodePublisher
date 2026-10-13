@@ -50,9 +50,18 @@ public partial class MainViewModel
     [NotifyCanExecuteChangedFor(nameof(ConnectWirelessDeviceCommand))]
     [NotifyCanExecuteChangedFor(nameof(DisconnectWirelessDeviceCommand))]
     [NotifyCanExecuteChangedFor(nameof(RefreshWirelessPeersCommand))]
+    [NotifyCanExecuteChangedFor(nameof(StartWirelessQrPairingCommand))]
     private bool _isWirelessBusy;
 
     public bool IsDeviceFilesAvailable => !OperatingSystem.IsBrowser() && IsAndroidPlatform;
+
+    /// <summary>The wireless debugging path is currently paired and connected.</summary>
+    public bool IsWirelessConnected => IsPaired && !string.IsNullOrWhiteSpace(WirelessAddress);
+
+    /// <summary>Plain-language line shown instead of the pair/connect instructions once paired.</summary>
+    public string PairedWirelessSummary => IsWirelessConnected
+        ? $"Paired and connected to {WirelessAddress}."
+        : "Paired over Wi-Fi. Connect to the debugging port to use the device.";
 
     public string DeviceFilesHint => SelectedDevice switch
     {
