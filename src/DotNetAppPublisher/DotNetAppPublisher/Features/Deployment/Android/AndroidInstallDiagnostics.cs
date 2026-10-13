@@ -18,9 +18,13 @@ public static class AndroidInstallDiagnostics
         {
             return "The app already installed on this device is signed with a different key than this APK, " +
                 "so Android will not update it in place. Install never uninstalls for you: press Uninstall " +
-                "(this deletes the app and its data), then Install to do a clean install, or publish with the " +
-                "same signing key that was used before.";
+                "(this deletes the app and its data), then Install to do a clean install. If that copy came " +
+                "from Google Play, do not uninstall it: a replacement signed with a different key can never " +
+                "be updated by Google Play again, so the next Play Store update fails. Publish with the " +
+                "signing key Play uses (its SHA-256 fingerprint is shown in Play Console > Release > App " +
+                "integrity) and install that build instead.";
         }
+
 
         if (Contains(adbOutput, "INSTALL_FAILED_VERSION_DOWNGRADE"))
         {
@@ -84,6 +88,47 @@ public static class AndroidInstallDiagnostics
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Guidance for a signature clash found by the install preflight, before anything is written to
+    /// the device. The Google Play installer case must never steer toward uninstall: replacing the
+    /// Play copy with a differently-signed build destroys its data and permanently breaks Play
+    /// Store updates for that package.
+    /// </summary>
+    public static string DescribeSignatureClash(
+        IReadOnlyList<string> apkDigests,
+        IReadOnlyList<string> installedDigests,
+        string? installerPackage)
+    {
+        var apkFingerprint = string.Join(", ", apkDigests);
+        var installedFingerprint = string.Join(", ", installedDigests);
+        var fromGooglePlay = AndroidSigningInspector.IsGooglePlayInstaller(installerPackage);
+
+        var guidance = "This APK is signed with a different key than the app already installed on the device, " +
+            "so Android refuses to update it (INSTALL_FAILED_UPDATE_INCOMPATIBLE). " +
+            "Install never uninstalls for you.";
+
+        if (fromGooglePlay)
+        {
+            guidance += " The installed copy came from Google Play, which signs downloads with the app's Play " +
+                "signing key. Uninstalling it would delete its data and leave a build Google Play can never " +
+                "update: every future Play Store update fails with \"App not installed\".";
+        }
+
+        guidance += " To keep Play Store updates working, install an APK signed with the same certificate Play " +
+            "delivers: publish with Signing mode Sign and the keystore registered in Play Console, and compare " +
+            "its fingerprint with Play Console > Release > App integrity." +
+            $" APK certificate SHA-256: {apkFingerprint}." +
+            $" Installed app certificate SHA-256: {installedFingerprint}.";
+
+        if (!fromGooglePlay)
+        {
+            guidance += " If the installed copy is an old local build you do not need, press Uninstall " +
+                "(this deletes the app and its data), then Install.";
+        }
+
+        return guidance;
     }
 
     /// <summary>

@@ -56,6 +56,15 @@ Source: [adb](https://developer.android.com/tools/adb),
   with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`; a lower version code fails with
   `INSTALL_FAILED_VERSION_DOWNGRADE`; other common failures are `INSTALL_FAILED_NO_MATCHING_ABIS`,
   `INSTALL_FAILED_INSUFFICIENT_STORAGE`, `INSTALL_FAILED_USER_RESTRICTED`, `INSTALL_FAILED_VERIFICATION_FAILURE`.
+- **Google Play compatibility**: a sideloaded build can only be updated later by Google Play when its
+  signing certificate matches the certificate Play delivers (Play App Signing signs downloads with the
+  app-signing key, not the upload key) and each Play release carries a higher version code. Install
+  therefore runs a preflight first: `apksigner verify --print-certs` on the APK, `adb shell pm path`
+  plus a pull of the installed `base.apk` for the same fingerprint, and `pm list packages -i` for the
+  installer of record (`installer=com.android.vending` is Google Play). A certificate mismatch stops
+  the install with both fingerprints and the Play impact spelled out before any command touches the
+  device; a Play-installed copy is never steered toward uninstall, because a differently-signed
+  replacement can never be updated by Play again.
 - **Stop**: `adb -s SERIAL shell am force-stop PACKAGE` kills every process of the package but keeps
   the installed app and its data. It succeeds whether or not the app is running, so the UI action is
   safe to press repeatedly.
@@ -98,8 +107,10 @@ Sources: Apple's
 - Wireless debugging: `adb mdns services` scanning, pair with code, connect, disconnect, and the legacy
   `adb tcpip` step with the Wi-Fi address read from `ip route` (fallback: `dhcp.wlan0.ipaddress`).
 - Install is update-in-place and never uninstalls. One automatic retry with `--no-streaming`; every other
-  failure is mapped to a concrete next action. Launch resolves the launcher activity first and only falls
-  back to `monkey`.
+  failure is mapped to a concrete next action. A certificate preflight runs before install: the APK and
+  the copy already installed are compared with apksigner, and a mismatched build is blocked with both
+  fingerprints and its Google Play update consequences instead of being steered toward an uninstall.
+  Launch resolves the launcher activity first and only falls back to `monkey`.
 - A Device Files workspace: public folder shortcuts, path bar, folder navigation, drag-and-drop upload
   from the host, per-row delete with confirmation, and pull to this computer.
 - Real iOS device discovery plus install/launch through `devicectl`, with the missing prerequisite named
@@ -111,10 +122,16 @@ Sources: Apple's
 
 ## Not verified in this environment
 
-- No Android device or emulator and no iOS device was attached while building this, so the adb/devicectl
-  command lines are covered by parsers, unit tests, and documented behaviour rather than a live deployment.
+- No physical Android device or iOS device was attached while building this, so hardware-specific
+  behaviour is covered by parsers, unit tests, and documented sources rather than a live deployment.
   The device-specific behaviours listed above (mDNS on a guest network, `Android/data` access, OEM
   `monkey` restrictions, `--no-streaming` retries) need a real-device pass.
+- The Android install preflight was exercised end-to-end against an Android 16 emulator (API 37): fresh
+  install, same-key update, and a differently-signed build blocked with both fingerprints and guidance.
+  The Google Play-installed branch (`installer=com.android.vending`) could not be produced live — adb
+  installs record `installer=null` — so it is covered by unit tests on the captured output shape only,
+  and the sideloaded build's version code still has to stay below the next Play release for Play to
+  offer its update.
 - `devicectl`'s JSON schema is versioned per Xcode release and is parsed defensively; a schema change
   would need a re-check against the Xcode version in use. The real-device Stop path depends on that
   schema most (apps/processes field names, `--signal SIGKILL` spelling); its parsers accept the known

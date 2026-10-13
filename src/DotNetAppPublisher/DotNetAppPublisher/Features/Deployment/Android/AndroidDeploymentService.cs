@@ -36,7 +36,9 @@ public sealed class AndroidDeploymentService
     /// <summary>
     /// Installs the newest APK from the publish folder. The default install keeps the existing app and
     /// its data (`adb install -r`): the app is never uninstalled automatically, so a signature clash
-    /// fails with an explanation instead of silently wiping app data.
+    /// fails with an explanation instead of silently wiping app data. Before anything runs, the APK's
+    /// signing certificate is compared with the copy already on the device, so a build that could
+    /// break Google Play updates is stopped with guidance instead of being installed.
     /// </summary>
     public async Task<string> InstallLatestApkAsync(
         PublishConfiguration configuration,
@@ -74,7 +76,27 @@ public sealed class AndroidDeploymentService
 
         var apk = _findApk(outputDirectory, projectNameHint, configuration.PackageId)
             ?? throw new InvalidOperationException($"No APK found in {outputDirectory}.");
-        await EnsureApkHasValidSignatureAsync(apk.FullName, cancellationToken);
+        var apkDigests = await ReadApkCertificateDigestsAsync(apk.FullName, cancellationToken);
+
+        // Install preflight: compare certificates with the copy already on the device, so a signature
+        // clash is explained (with its Google Play impact) before any command touches the phone.
+        AndroidInstalledPackageInfo? installedPackage = null;
+        var packageId = configuration.PackageId.Trim();
+        if (apkDigests is not null && packageId.Length > 0)
+        {
+            installedPackage = await ReadInstalledPackageAsync(adbPath, targetDevice, packageId, cancellationToken);
+            if (installedPackage is { CertificateDigests.Count: > 0 }
+                && !AndroidSigningInspector.CertificatesMatch(apkDigests, installedPackage.CertificateDigests))
+            {
+                throw new InvalidOperationException(
+                    $"Not installing {apk.Name} on {targetDevice}: it is signed with a different key than " +
+                    $"{packageId} already installed there.{Environment.NewLine}" +
+                    AndroidInstallDiagnostics.DescribeSignatureClash(
+                        apkDigests,
+                        installedPackage.CertificateDigests,
+                        installedPackage.InstallerPackage));
+            }
+        }
 
         var log = new StringBuilder();
         var wroteHeader = false;
@@ -102,7 +124,10 @@ public sealed class AndroidDeploymentService
 
         if (exitCode == 0)
         {
-            return $"Installed {apk.Name} on {targetDevice}.{Environment.NewLine}{log}";
+            var signatureNote = BuildInstallSignatureNote(apkDigests, installedPackage);
+            return $"Installed {apk.Name} on {targetDevice}.{Environment.NewLine}" +
+                (signatureNote is null ? string.Empty : signatureNote + Environment.NewLine) +
+                log;
         }
 
         var guidance = AndroidInstallDiagnostics.DescribeFailure(log.ToString());
@@ -582,12 +607,16 @@ public sealed class AndroidDeploymentService
         return null;
     }
 
-    private async Task EnsureApkHasValidSignatureAsync(string apkPath, CancellationToken cancellationToken)
+    /// <summary>
+    /// Verifies the APK signature and returns its certificate SHA-256 digests. Returns null when
+    /// apksigner is unavailable (install then relies on Android's own checks, as before).
+    /// </summary>
+    private async Task<IReadOnlyList<string>?> ReadApkCertificateDigestsAsync(string apkPath, CancellationToken cancellationToken)
     {
         var apkSignerPath = _apkSignerPath();
         if (string.IsNullOrWhiteSpace(apkSignerPath))
         {
-            return;
+            return null;
         }
 
         var output = new StringBuilder();
@@ -595,15 +624,114 @@ public sealed class AndroidDeploymentService
             [apkSignerPath, "verify", "--print-certs", apkPath],
             text => output.Append(text),
             cancellationToken);
-        if (exitCode == 0)
+        if (exitCode != 0)
         {
-            return;
+            throw new InvalidOperationException(
+                $"APK signature verification failed for `{Path.GetFileName(apkPath)}`. " +
+                "The APK appears unsigned or signed incorrectly. " +
+                "Publish with proper signing (or use a debug-signed APK) and retry." +
+                $"{Environment.NewLine}{output}");
         }
 
-        throw new InvalidOperationException(
-            $"APK signature verification failed for `{Path.GetFileName(apkPath)}`. " +
-            "The APK appears unsigned or signed incorrectly. " +
-            "Publish with proper signing (or use a debug-signed APK) and retry." +
-            $"{Environment.NewLine}{output}");
+        var digests = AndroidSigningInspector.ParseApkSignerDigests(output.ToString());
+        return digests.Count > 0 ? digests : null;
+    }
+
+    /// <summary>
+    /// Reads what the device says about an already-installed package: the installer of record
+    /// (Play Store is `com.android.vending`) and the signing certificates of its installed base APK.
+    /// Returns null when the package is not installed; certificate digests stay empty when the
+    /// installed APK cannot be pulled or inspected, in which case the caller falls back to adb's own
+    /// signature check during install.
+    /// </summary>
+    private async Task<AndroidInstalledPackageInfo?> ReadInstalledPackageAsync(
+        string adbPath,
+        string targetDevice,
+        string packageId,
+        CancellationToken cancellationToken)
+    {
+        var pathOutput = new StringBuilder();
+        await ProcessRunner.RunAsync(
+            [adbPath, "-s", targetDevice, "shell", "pm", "path", packageId],
+            text => pathOutput.Append(text),
+            cancellationToken);
+        var installedApkPath = AndroidSigningInspector.ParseBaseApkPath(pathOutput.ToString());
+        if (installedApkPath is null)
+        {
+            return null;
+        }
+
+        var installerOutput = new StringBuilder();
+        await ProcessRunner.RunAsync(
+            [adbPath, "-s", targetDevice, "shell", "pm", "list", "packages", "-i", packageId],
+            text => installerOutput.Append(text),
+            cancellationToken);
+        var installerPackage = AndroidSigningInspector.ParseInstallerPackage(installerOutput.ToString(), packageId);
+
+        IReadOnlyList<string> certificateDigests = [];
+        var apkSignerPath = _apkSignerPath();
+        var temporaryCopy = Path.Combine(Path.GetTempPath(), $"dnap-installed-{Guid.NewGuid():N}.apk");
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(apkSignerPath))
+            {
+                var pullOutput = new StringBuilder();
+                var pullExitCode = await ProcessRunner.RunAsync(
+                    [adbPath, "-s", targetDevice, "pull", installedApkPath, temporaryCopy],
+                    text => pullOutput.Append(text),
+                    cancellationToken);
+                if (pullExitCode == 0 && File.Exists(temporaryCopy))
+                {
+                    var certOutput = new StringBuilder();
+                    var certExitCode = await ProcessRunner.RunAsync(
+                        [apkSignerPath, "verify", "--print-certs", temporaryCopy],
+                        text => certOutput.Append(text),
+                        cancellationToken);
+                    if (certExitCode == 0)
+                    {
+                        certificateDigests = AndroidSigningInspector.ParseApkSignerDigests(certOutput.ToString());
+                    }
+                }
+            }
+        }
+        finally
+        {
+            try
+            {
+                File.Delete(temporaryCopy);
+            }
+            catch
+            {
+                // Temporary copy cleanup must never fail an install.
+            }
+        }
+
+        return new AndroidInstalledPackageInfo(installerPackage, certificateDigests);
+    }
+
+    /// <summary>
+    /// Success-message note stating the APK's signing fingerprint and what it means for future
+    /// Google Play updates.
+    /// </summary>
+    private static string? BuildInstallSignatureNote(
+        IReadOnlyList<string>? apkDigests,
+        AndroidInstalledPackageInfo? installedPackage)
+    {
+        if (apkDigests is not { Count: > 0 })
+        {
+            return null;
+        }
+
+        var fingerprint = $"Signing certificate SHA-256: {string.Join(", ", apkDigests)}.";
+        if (installedPackage is { CertificateDigests.Count: > 0 }
+            && AndroidSigningInspector.IsGooglePlayInstaller(installedPackage.InstallerPackage))
+        {
+            return $"{fingerprint} It matches the copy installed by Google Play, so Play Store updates keep " +
+                "working; keep every future version code higher than the last.";
+        }
+
+        return $"{fingerprint} Google Play can update this app later only when its app-signing certificate " +
+            "matches this fingerprint (Play Console > Release > App integrity) and each Play release has a " +
+            "higher version code.";
     }
 }

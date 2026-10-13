@@ -19,7 +19,7 @@ It is built with Avalonia and currently supports Android, macOS, Windows, and iO
 - Stream live publish output in the app
 - Open the publish folder
 - Detect and deploy to real Android phones and tablets over USB or Wi-Fi, alongside emulators
-- Install as an in-place update (`adb install -r`) that keeps app data; a signature clash tells you to Uninstall then Install instead of wiping data for you
+- Install as an in-place update (`adb install -r`) that keeps app data; a preflight compares the APK's signing certificate with the copy already on the device and blocks a mismatched build — with both fingerprints and its Google Play update impact — before any command runs, instead of wiping data for you
 - Pair and connect wireless debugging (Android 11+ pairing code, or the legacy `adb tcpip` step for Android 10 and older)
 - Browse the device's public folders (Downloads, Pictures, DCIM, Documents, Movies, Music), delete files with a confirmation, drag files from the computer into the open folder, and save device files back to the computer
 - Detect real iPhone and iPad targets with `xcrun devicectl` (macOS, Xcode 15+) and install, launch, or stop a signed build on one

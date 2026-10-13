@@ -16,6 +16,46 @@ public sealed class AndroidInstallDiagnosticsTests
             await Assert.That(guidance).IsNotNull();
             await Assert.That(guidance!).Contains("Uninstall");
             await Assert.That(guidance!).Contains("Install never uninstalls for you");
+            await Assert.That(guidance!).Contains("Google Play");
+        }
+    }
+
+    [Test]
+    public async Task DescribeSignatureClash_WarnsThatThePlayCopyMustNotBeUninstalled()
+    {
+        const string apkDigest = "a32a43cd459f7ce6b82c552f5d876989d53e6af1c0b2d35fb677b51a1dc4f0e5";
+        const string installedDigest = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
+
+        var guidance = AndroidInstallDiagnostics.DescribeSignatureClash(
+            [apkDigest],
+            [installedDigest],
+            "com.android.vending");
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(guidance).Contains("Google Play");
+            await Assert.That(guidance).Contains("App not installed");
+            await Assert.That(guidance).Contains(apkDigest);
+            await Assert.That(guidance).Contains(installedDigest);
+            await Assert.That(guidance).Contains("App integrity");
+
+            // The Play-installed copy must never be steered toward a wipe.
+            await Assert.That(guidance).DoesNotContain("press Uninstall");
+        }
+    }
+
+    [Test]
+    public async Task DescribeSignatureClash_KeepsManualUninstallPathForLocalCopies()
+    {
+        var guidance = AndroidInstallDiagnostics.DescribeSignatureClash(
+            ["a32a43cd459f7ce6b82c552f5d876989d53e6af1c0b2d35fb677b51a1dc4f0e5"],
+            ["00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"],
+            null);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(guidance).Contains("press Uninstall");
+            await Assert.That(guidance).Contains("Install never uninstalls for you");
         }
     }
 
