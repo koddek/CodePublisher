@@ -115,6 +115,40 @@ Scope: Deliver an isolated Google Play detail page with secure in-memory account
   EXPECT: setup definitions contain acquisition guidance and source URLs; all tests pass.
   EVIDENCE: setup definitions now cover Google Cloud OAuth credentials, Temurin JDK, and Android Studio SDK locations; `GooglePlayView.axaml` renders the guidance and source action inline; 46 TUnit tests passed.
 
+## Project version detection increment
+
+Scope: `ProjectInspector.ReadVersion` scans only the csproj XML, so projects whose version lives in `Directory.Build.props`, `Directory.Version.props`, or any imported props show a blank version. Detect the effective version with MSBuild evaluation (`dotnet msbuild -getProperty:`), keeping the XML scan as fallback for hosts without dotnet; platform property precedence stays unchanged.
+
+- [x] D1: Opening a project whose version lives in an imported props chain yields the effective version.
+  CHECK: dotnet run --project tests/DotNetAppPublisher.Tests/DotNetAppPublisher.Tests.csproj --no-restore -- --disable-logo --progress off
+  EXPECT: ProjectVersionResolver tests pass (evaluated props value wins, per-platform precedence, XML fallback when evaluation fails or the value is empty).
+  EVIDENCE: 6 new tests pass in `ProjectVersionResolverTests`, including `ReadVersion_UsesEvaluatedValue_WhenVersionLivesInImportedProps` (no Version element in the csproj, evaluated map supplies 2.3.4) and Android precedence (ApplicationDisplayVersion/ApplicationVersion win over Version/FileVersion).
+- [x] D2: The solution builds and the full suite passes with the resolver wired into metadata loading.
+  CHECK: dotnet build DotNetAppPublisher.slnx --no-restore && dotnet run --project tests/DotNetAppPublisher.Tests/DotNetAppPublisher.Tests.csproj --no-restore -- --disable-logo --progress off
+  EXPECT: zero warnings/errors; all tests pass.
+  EVIDENCE: `Build succeeded. 0 Warning(s) 0 Error(s)`; TUnit 232/232 passed (226 prior + 6 new).
+- [x] D3: The desktop app launches from a clean build tree (the duplicate AppStyles.axaml crash is gone).
+  CHECK: launch DotNetAppPublisher.Desktop from the rebuilt Debug bundle and confirm the process stays up without output.
+  EXPECT: process alive after several seconds; no ArgumentException about /Styles/AppStyles.axaml.
+  EVIDENCE: crash reproduced before the cleanup on the stale Debug bundle, then all bin/obj trees removed and rebuilt: zero errors, process alive 9 s with empty log (twice). Root cause was stale incremental build state from the props-file relocation, not source. Bonus end-to-end proof of the user's exact case: the Desktop csproj declares no `<Version>` element, and the resolver's mechanism reports 0.6.0 from the imported `Directory.Version.props`.
+
+## Central management increment
+
+Scope: One repo-root `Directory.Packages.props` holds every package version (src + tests) and one repo-root `Directory.Build.props` imports `Directory.Version.props`. The four scattered copies are deleted. No version number changes.
+
+- [x] C1: Restore resolves the identical package set from the single central file.
+  CHECK: dotnet restore DotNetAppPublisher.slnx && dotnet list DotNetAppPublisher.slnx package --outdated
+  EXPECT: the only updates offered are SkiaSharp 3.119.4 to 4.153.1; TUnit 1.75.0 and Avalonia 12.1.4 are resolved and absent from the update list.
+  EVIDENCE: after `dotnet restore --force` against the root `Directory.Packages.props`, `--outdated` lists only SkiaSharp 3.119.4 → 4.153.1 and SkiaSharp.NativeAssets.Linux.NoDependencies — the same trailing pair as before the move. TUnit 1.75.0, Avalonia 12.1.4, Diagnostics 11.3.22 resolved with no updates offered.
+- [x] C2: Every project reports the central version.
+  CHECK: for p in src/DotNetAppPublisher/DotNetAppPublisher/DotNetAppPublisher.csproj src/DotNetAppPublisher/DotNetAppPublisher.Desktop/DotNetAppPublisher.Desktop.csproj src/DotNetAppPublisher/DotNetAppPublisher.Browser/DotNetAppPublisher.Browser.csproj tests/DotNetAppPublisher.Tests/DotNetAppPublisher.Tests.csproj; do dotnet msbuild "$p" -nologo -v:q -getProperty:Version 2>/dev/null; done | grep -c "^0.6.0$"
+  EXPECT: 4
+  EVIDENCE: count is 4; the Desktop `obj/Debug` AssemblyInfo stamps `AssemblyVersion 0.6.0.0` / informational `0.6.0+4a142ee`.
+- [x] C3: The solution builds and the full suite passes on the centralized layout.
+  CHECK: dotnet build DotNetAppPublisher.slnx --no-restore && dotnet run --project tests/DotNetAppPublisher.Tests/DotNetAppPublisher.Tests.csproj --no-restore -- --disable-logo --progress off
+  EXPECT: build has zero warnings/errors and all tests pass.
+  EVIDENCE: `Build succeeded. 0 Warning(s) 0 Error(s)`; TUnit 226/226 passed. (One transient incremental-build failure with 3 errors appeared immediately after the props move; a rebuild from the same tree is clean — stale incremental state referencing the deleted imports.)
+
 ## AAB companion package increment
 
 Scope: Checking AAB builds both APK and AAB in one publish; unchecking AAB builds the APK only. The uncommitted MainView.axaml edit left malformed XAML (AVLN1001, WrapPanel/StackPanel mismatch at line 522) and a duplicate `IncludeApk` checkbox; `ShowAndroidPackageFormatsTogether` is never raised, so its UI never refreshes.

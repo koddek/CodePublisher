@@ -139,25 +139,54 @@ public static class ProjectInspector
         }
     }
 
-    public static string? ReadVersion(FileInfo projectFile, string publishPlatform, bool isDisplay)
+    public static string? ReadVersion(FileInfo projectFile, string publishPlatform, bool isDisplay) =>
+        ReadVersion(projectFile, publishPlatform, isDisplay, evaluated: null);
+
+    /// <summary>
+    /// Reads the project version for the platform. When <paramref name="evaluated"/> is provided
+    /// (from <see cref="ProjectVersionResolver"/>), the effective MSBuild value wins — that map
+    /// already includes values set in the csproj itself, plus any imported props file. The scanned
+    /// csproj stays as the fallback for each missing candidate.
+    /// </summary>
+    public static string? ReadVersion(
+        FileInfo projectFile,
+        string publishPlatform,
+        bool isDisplay,
+        IReadOnlyDictionary<string, string>? evaluated)
     {
+        string? Choose(params string[] names)
+        {
+            if (evaluated is not null)
+            {
+                foreach (var name in names)
+                {
+                    if (evaluated.TryGetValue(name, out var value) && !string.IsNullOrWhiteSpace(value))
+                    {
+                        return value;
+                    }
+                }
+            }
+
+            return ReadProperty(projectFile, names);
+        }
+
         if (isDisplay)
         {
             return string.Equals(publishPlatform, PublishPlatforms.Android, StringComparison.Ordinal)
                 || string.Equals(publishPlatform, PublishPlatforms.Ios, StringComparison.Ordinal)
-                ? ReadProperty(projectFile, "ApplicationDisplayVersion", "Version", "InformationalVersion")
-                : ReadProperty(projectFile, "Version", "InformationalVersion");
+                ? Choose("ApplicationDisplayVersion", "Version", "InformationalVersion")
+                : Choose("Version", "InformationalVersion");
         }
 
         if (string.Equals(publishPlatform, PublishPlatforms.Android, StringComparison.Ordinal)
             || string.Equals(publishPlatform, PublishPlatforms.Ios, StringComparison.Ordinal))
         {
-            return ReadProperty(projectFile, "ApplicationVersion", "FileVersion");
+            return Choose("ApplicationVersion", "FileVersion");
         }
 
         if (string.Equals(publishPlatform, PublishPlatforms.MacOs, StringComparison.Ordinal))
         {
-            return ReadProperty(projectFile, "FileVersion", "Version");
+            return Choose("FileVersion", "Version");
         }
 
         if (string.Equals(publishPlatform, PublishPlatforms.Windows, StringComparison.Ordinal)
@@ -166,7 +195,7 @@ public static class ProjectInspector
             return null;
         }
 
-        return ReadProperty(projectFile, "FileVersion", "Version");
+        return Choose("FileVersion", "Version");
     }
 
     public static bool SupportsInternalVersion(string publishPlatform) =>

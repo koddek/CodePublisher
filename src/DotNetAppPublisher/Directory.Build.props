@@ -1,7 +1,0 @@
-<Project>
-  <!--
-    Applies to every project under src/DotNetAppPublisher.
-    Versions come from the central manager at the repository root.
-  -->
-  <Import Project="../../Directory.Version.props" />
-</Project>

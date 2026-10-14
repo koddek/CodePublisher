@@ -1,0 +1,8 @@
+<Project>
+  <!--
+    Applies to every project in this repository. Without this file, projects
+    silently fall back to the default 1.0.0 assembly version and drift.
+    The app version lives in exactly one place: Directory.Version.props.
+  -->
+  <Import Project="Directory.Version.props" />
+</Project>

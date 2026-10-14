@@ -124,14 +124,22 @@ public sealed class PublisherService
             effectiveTargetFramework,
             runtimeIdentifier,
             CancellationToken.None);
+        // Effective version: MSBuild sees csproj, Directory.Build.props, and any imported props;
+        // the csproj XML scan stays as the fallback when dotnet evaluation is unavailable.
+        var evaluatedVersions = await ResolveProjectVersionsAsync(
+            projectFile,
+            configuration,
+            effectiveTargetFramework,
+            runtimeIdentifier,
+            CancellationToken.None);
 
         return new ProjectMetadata(
             projectFile.FullName,
             outputLayout.DefaultOutputDirectory,
             GetProjectIdentifier(projectFile, projectName, publishPlatform),
             detectedTargetFramework,
-            ProjectInspector.ReadVersion(projectFile, publishPlatform, isDisplay: true),
-            ProjectInspector.ReadVersion(projectFile, publishPlatform, isDisplay: false),
+            ProjectInspector.ReadVersion(projectFile, publishPlatform, isDisplay: true, evaluatedVersions),
+            ProjectInspector.ReadVersion(projectFile, publishPlatform, isDisplay: false, evaluatedVersions),
             ProjectInspector.SupportsInternalVersion(publishPlatform),
             outputLayout);
     }
@@ -731,17 +739,49 @@ public sealed class PublisherService
             configuration,
             targetFramework,
             runtimeIdentifier,
-            async (arguments, token) =>
-            {
-                var output = new StringBuilder();
-                var exitCode = await ProcessRunner.RunAsync(
-                    arguments,
-                    text => output.Append(text),
-                    token,
-                    projectFile.DirectoryName);
-                return (exitCode, output.ToString());
-            },
+            (arguments, token) => EvaluateMsBuildAsync(projectFile, arguments, token),
             cancellationToken);
+    }
+
+    /// <summary>
+    /// Evaluated version properties for the opened project, or null when dotnet is unavailable —
+    /// the caller then relies on the csproj XML scan inside <see cref="ProjectInspector.ReadVersion"/>.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<string, string>?> ResolveProjectVersionsAsync(
+        FileInfo projectFile,
+        string configuration,
+        string targetFramework,
+        string runtimeIdentifier,
+        CancellationToken cancellationToken)
+    {
+        var dotnetPath = DotnetPath;
+        if (dotnetPath is null)
+        {
+            return null;
+        }
+
+        return await ProjectVersionResolver.ResolveAsync(
+            dotnetPath,
+            projectFile,
+            configuration,
+            targetFramework,
+            runtimeIdentifier,
+            (arguments, token) => EvaluateMsBuildAsync(projectFile, arguments, token),
+            cancellationToken);
+    }
+
+    private static async Task<(int ExitCode, string Output)> EvaluateMsBuildAsync(
+        FileInfo projectFile,
+        IReadOnlyList<string> arguments,
+        CancellationToken cancellationToken)
+    {
+        var output = new StringBuilder();
+        var exitCode = await ProcessRunner.RunAsync(
+            arguments,
+            text => output.Append(text),
+            cancellationToken,
+            projectFile.DirectoryName);
+        return (exitCode, output.ToString());
     }
 
     private static bool IsAndroidPlatform(string publishPlatform)

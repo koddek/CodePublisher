@@ -10,6 +10,7 @@ It is built with Avalonia and currently supports Android, macOS, Windows, and iO
 
 - Select a .NET project folder and auto-detect the `.csproj`
 - Read project metadata and pick platform-appropriate target framework/runtime combinations
+- Detect the project's effective version wherever it is declared — the csproj, `Directory.Build.props`, a central `Directory.Version.props`, or any imported props file (via MSBuild evaluation, falling back to the project file when `dotnet` is unavailable)
 - Generate the Android APK on every publish, and check AAB once to add the Google Play bundle to the same build
 - Generate macOS outputs with optional `.app` bundle creation
 - Generate Windows publish outputs with `.exe` launcher support
@@ -85,8 +86,10 @@ DotNetAppPublisher/
 │   └── workflows/
 ├── docs/
 │   └── dotnet-app-publisher-icon.png
+├── Directory.Build.props
+├── Directory.Packages.props
+├── Directory.Version.props
 ├── tests/
-│   ├── Directory.Packages.props
 │   └── DotNetAppPublisher.Tests/
 ├── DotNetAppPublisher.slnx
 └── src/
