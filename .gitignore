@@ -161,6 +161,7 @@ Temporary Items
 
 # Local tooling and one-off workspace artifacts
 .kilo/
+.freebuff/
 icon.png
 \!AvaloniaResources
 .idea/
