@@ -582,19 +582,34 @@ public sealed class AndroidDeploymentService
             throw new InvalidOperationException(addressError);
         }
 
-        var output = new StringBuilder();
-        var exitCode = await ProcessRunner.RunAsync([adbPath, "connect", endpoint], text => output.Append(text), cancellationToken);
-        var text = output.ToString();
-        if (exitCode == 0 && !text.Contains("failed", StringComparison.OrdinalIgnoreCase))
+        // Right after pairing, the phone's debugging service can take a moment before it accepts
+        // connections. Retry a few times with a short wait before giving up.
+        const int attempts = 3;
+        for (var attempt = 1; attempt <= attempts; attempt++)
         {
-            return $"Connected to {endpoint}.{Environment.NewLine}{text}";
+            var output = new StringBuilder();
+            var exitCode = await ProcessRunner.RunAsync([adbPath, "connect", endpoint], text => output.Append(text), cancellationToken);
+            var text = output.ToString();
+            if (exitCode == 0 && !text.Contains("failed", StringComparison.OrdinalIgnoreCase))
+            {
+                return $"Connected to {endpoint}.{Environment.NewLine}{text}";
+            }
+
+            if (attempt < attempts)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    $"Could not connect to {endpoint}.{Environment.NewLine}" +
+                    "Use the debugging port from Wireless debugging (it differs from the pairing port), keep the device " +
+                    "awake on the same network, and pair first for a new computer." +
+                    $"{Environment.NewLine}{text}");
+            }
         }
 
-        throw new InvalidOperationException(
-            $"Could not connect to {endpoint}.{Environment.NewLine}" +
-            "Use the debugging port from Wireless debugging (it differs from the pairing port), keep the device " +
-            "awake on the same network, and pair first for a new computer." +
-            $"{Environment.NewLine}{text}");
+        throw new InvalidOperationException("Unexpected exit from the connect retry loop.");
     }
 
     public async Task<string> DisconnectWirelessDeviceAsync(string address, CancellationToken cancellationToken)

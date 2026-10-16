@@ -201,24 +201,69 @@
                             <Border Classes="card" IsVisible="{Binding IsAndroidPlatform}">
                                 <StackPanel Spacing="12">
                                     <TextBlock Text="Wireless debugging (Wi-Fi)" Classes="section-title"/>
-                                    <TextBlock Text="Android 11 and newer: turn on Developer options &gt; Wireless debugging, scan, then pair with the code shown on the device. Android 10 and older: connect USB once and switch on Wi-Fi debugging, then unplug." Classes="section-copy" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding WirelessStatusLine}" Classes="section-copy" TextWrapping="Wrap"/>
+
+                                    <TextBlock Text="Android 11 and newer: turn on Developer options > Wireless debugging on the phone, then use one of the options below. Android 10 and older: use Wi-Fi debugging over USB. Pairing is the one-time trust step (you type the code shown on the phone); Connect is the live ADB session over the phone's debugging port. Pair once per computer and phone, then Connect whenever you want to use it." Classes="section-copy" TextWrapping="Wrap"/>
+
+                                    <TextBlock Text="Connected devices" FontSize="13" FontWeight="SemiBold"/>
+                                    <ItemsControl ItemsSource="{Binding ConnectedWirelessDevices}" IsVisible="{Binding HasConnectedWirelessDevices}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:WirelessConnectedDeviceRowViewModel">
+                                                <Border Classes="file-row">
+                                                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                                                        <StackPanel Spacing="2" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold"/>
+                                                            <TextBlock Text="{Binding Subtitle}" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}"/>
+                                                        </StackPanel>
+                                                        <Button Grid.Column="1" Content="Disconnect" Command="{Binding DisconnectCommand}" MinWidth="110" VerticalAlignment="Center"/>
+                                                        <Button Grid.Column="2" Content="Unpair" Command="{Binding UnpairCommand}" MinWidth="90" VerticalAlignment="Center"/>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <TextBlock Text="No devices connected over Wi-Fi. Add one below." Classes="section-copy" TextWrapping="Wrap"
+                                               IsVisible="{Binding !HasConnectedWirelessDevices}"/>
+
+                                    <StackPanel IsVisible="{Binding HasPairedWirelessDevices}" Spacing="6">
+                                        <TextBlock Text="Paired devices (not connected)" FontSize="13" FontWeight="SemiBold"/>
+                                        <TextBlock Text="These hosts are paired with this computer but are not connected right now. Each shows only what it can do next." Classes="section-copy" Margin="0" TextWrapping="Wrap"/>
+                                        <ItemsControl ItemsSource="{Binding PairedWirelessDevices}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:WirelessPairedDeviceRowViewModel">
+                                                    <Border Classes="file-row">
+                                                        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                                                            <StackPanel Spacing="2" VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold"/>
+                                                                <TextBlock Text="{Binding Subtitle}" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}"/>
+                                                            </StackPanel>
+                                                            <Button Grid.Column="1" Content="Connect" Command="{Binding ConnectCommand}" MinWidth="110" VerticalAlignment="Center"/>
+                                                            <Button Grid.Column="2" Content="Unpair" Command="{Binding UnpairCommand}" MinWidth="90" VerticalAlignment="Center"/>
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+
+                                    <Border Height="1" Background="{DynamicResource TextTertiaryColor}" Opacity="0.35" Margin="12,0"/>
+
+                                    <TextBlock Text="Add a device" FontSize="13" FontWeight="SemiBold"/>
                                     <WrapPanel ItemSpacing="8" LineSpacing="8">
-                                        <Button x:Name="ScanForDevicesButton" Content="Scan for devices" Command="{Binding RefreshWirelessPeersCommand}" MinWidth="150"
-                                                IsEnabled="{Binding !IsPaired}"/>
-                                        <Button Content="Pair with QR code" Command="{Binding StartWirelessQrPairingCommand}" MinWidth="170"
-                                                ToolTip.Tip="Shows a code to scan on the phone: Developer options > Wireless debugging > Pair device with QR code. The code carries the pairing name and password, so nothing is typed on either side."
-                                                IsEnabled="{Binding !IsPaired}"/>
-                                        <Button Content="Cancel" Command="{Binding CancelWirelessQrPairingCommand}" MinWidth="90"
-                                                IsVisible="{Binding IsWirelessQrWaiting}"/>
+                                        <Button Classes="primary" Content="Connect with QR code" Command="{Binding StartWirelessQrPairingCommand}" MinWidth="190"
+                                                ToolTip.Tip="Shows a code to scan on the phone: Developer options > Wireless debugging > Pair device with QR code. Scanning pairs the phone, connects it, and closes this panel; the phone appears under Connected devices."/>
+                                        <Button x:Name="ScanForDevicesButton" Content="Scan nearby devices" Command="{Binding RefreshWirelessPeersCommand}" MinWidth="160"
+                                                ToolTip.Tip="Finds wireless debugging services on this network: pairing ports before pairing, debugging ports to connect to after."/>
                                         <Button Content="Wi-Fi debugging over USB" Command="{Binding EnableWirelessDebuggingCommand}" MinWidth="190"
-                                                ToolTip.Tip="Sends `adb tcpip 5555` to the selected USB device and reports the Wi-Fi address to connect to"
-                                                IsEnabled="{Binding !IsPaired}"/>
+                                                ToolTip.Tip="Sends `adb tcpip 5555` to the selected USB device and reports the Wi-Fi address to connect to"/>
+                                        <ToggleButton Content="Manual pairing" IsChecked="{Binding IsWirelessManualVisible, Mode=TwoWay}" MinWidth="130"/>
                                     </WrapPanel>
+
                                     <!-- Pair with QR code: this computer invents a pairing name and password, shows them
-                                         as a code, then pairs with the phone that scanned it. Kept directly under the
-                                         button that opens it so the code appears where the click happened. -->
+                                         as a code, then pairs with the phone that scanned it. The panel closes when the
+                                         phone connects; Close dismisses it before that. -->
                                     <StackPanel x:Name="WirelessQrPanel" Spacing="10" IsVisible="{Binding IsWirelessQrVisible}" Margin="0,4,0,0">
-                                        <TextBlock Text="Scan this code on the phone" Classes="section-title"/>
+                                        <TextBlock Text="Pair with QR code" Classes="section-title"/>
                                         <TextBlock Text="Open Developer options &gt; Wireless debugging &gt; Pair device with QR code. The code tells the phone which pairing name to use and which password to expect, so neither side has to type anything." Classes="section-copy" Margin="0" TextWrapping="Wrap"/>
                                         <StackPanel Orientation="Horizontal" Spacing="16">
                                             <Border Background="White" Padding="8" CornerRadius="6" VerticalAlignment="Top" HorizontalAlignment="Left">
@@ -233,42 +278,68 @@
                                                 <TextBox Text="{Binding WirelessQrPassword}" IsReadOnly="True"/>
                                                 <TextBlock Text="Code text (for another scanner or clipboard)" FontSize="12" FontWeight="SemiBold"/>
                                                 <TextBox Text="{Binding WirelessQrPayload}" IsReadOnly="True" TextWrapping="Wrap"/>
-                                                <Button Content="Copy code text" Command="{Binding CopyWirelessQrPayloadCommand}" MinWidth="140"/>
+                                                <WrapPanel ItemSpacing="8" LineSpacing="8" Margin="0,4,0,0">
+                                                    <Button Content="Copy code text" Command="{Binding CopyWirelessQrPayloadCommand}" MinWidth="140"/>
+                                                    <Button Content="Close" Command="{Binding CancelWirelessQrPairingCommand}" MinWidth="90"/>
+                                                </WrapPanel>
                                             </StackPanel>
                                         </StackPanel>
                                     </StackPanel>
-                                    <ItemsControl ItemsSource="{Binding WirelessPeers}" IsVisible="{Binding HasWirelessPeers}">
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate x:DataType="vm:WirelessPeerRowViewModel">
-                                                <Grid ColumnDefinitions="*,Auto" Margin="0,4" ColumnSpacing="8">
-                                                    <StackPanel Spacing="2" VerticalAlignment="Center">
-                                                        <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold"/>
-                                                        <TextBlock Text="{Binding KindText}" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}"/>
-                                                    </StackPanel>
-                                                    <Button Grid.Column="1" Content="{Binding ActionLabel}" Command="{Binding UseCommand}" MinWidth="110"/>
-                                                </Grid>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                    <WrapPanel ItemSpacing="8" LineSpacing="8">
-                                        <StackPanel MinWidth="190" MaxWidth="300" Spacing="5">
-                                            <TextBlock Text="Address (IP:PORT)" FontSize="12" FontWeight="SemiBold"/>
-                                            <TextBox Text="{Binding WirelessAddress}" PlaceholderText="192.168.1.42:37123"/>
-                                        </StackPanel>
-                                        <StackPanel MinWidth="130" MaxWidth="200" Spacing="5">
-                                            <TextBlock Text="Pairing code" FontSize="12" FontWeight="SemiBold"/>
-                                            <TextBox Text="{Binding WirelessPairingCode}" PlaceholderText="6 digits"/>
-                                        </StackPanel>
-                                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom" Margin="0,0,0,1">
-                                            <Button Content="Pair" Command="{Binding PairWirelessDeviceCommand}" MinWidth="90"
-                                                IsEnabled="{Binding !IsPaired}"/>
-                                            <Button Content="Connect" Command="{Binding ConnectWirelessDeviceCommand}" MinWidth="100"
-                                                IsEnabled="{Binding !IsWirelesslyConnected}"/>
-                                            <Button Content="Disconnect" Command="{Binding DisconnectWirelessDeviceCommand}" MinWidth="110"
-                                                IsEnabled="{Binding IsWirelesslyConnected}"/>
-                                        </StackPanel>
-                                    </WrapPanel>
 
+                                    <StackPanel IsVisible="{Binding HasWirelessPeers}" Spacing="6">
+                                        <TextBlock Text="Nearby wireless debugging services" FontSize="13" FontWeight="SemiBold"/>
+                                        <ItemsControl ItemsSource="{Binding WirelessPeers}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:WirelessPeerRowViewModel">
+                                                    <Grid ColumnDefinitions="*,Auto" Margin="0,4" ColumnSpacing="8">
+                                                        <StackPanel Spacing="2" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold"/>
+                                                            <TextBlock Text="{Binding KindText}" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}"/>
+                                                        </StackPanel>
+                                                        <Button Grid.Column="1" Content="{Binding ActionLabel}" Command="{Binding UseCommand}" MinWidth="110"/>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+
+                                    <StackPanel Spacing="10" IsVisible="{Binding IsWirelessManualVisible}">
+                                        <TextBlock Text="Manual pairing" FontSize="12" FontWeight="SemiBold"/>
+                                        <TextBlock Text="Type the IP and port shown under Wireless debugging on the phone. Use Scan nearby devices to fill them in, or the QR code above." Classes="section-copy" Margin="0" TextWrapping="Wrap"/>
+                                        <WrapPanel ItemSpacing="8" LineSpacing="8">
+                                            <StackPanel MinWidth="190" MaxWidth="300" Spacing="5">
+                                                <TextBlock Text="Address (IP:PORT)" FontSize="12" FontWeight="SemiBold"/>
+                                                <TextBox Text="{Binding WirelessAddress}" PlaceholderText="192.168.1.42:37123"/>
+                                            </StackPanel>
+                                            <StackPanel MinWidth="130" MaxWidth="200" Spacing="5">
+                                                <TextBlock Text="Pairing code" FontSize="12" FontWeight="SemiBold"/>
+                                                <TextBox Text="{Binding WirelessPairingCode}" PlaceholderText="6 digits"/>
+                                            </StackPanel>
+                                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom" Margin="0,0,0,1">
+                                                <Button Content="Pair" Command="{Binding PairWirelessDeviceCommand}" MinWidth="90"
+                                                        IsVisible="{Binding !IsWirelessAddressPaired}"/>
+                                                <Button Content="Connect" Command="{Binding ConnectWirelessDeviceCommand}" MinWidth="110"/>
+                                            </StackPanel>
+                                        </WrapPanel>
+                                    </StackPanel>
+
+                                    <StackPanel IsVisible="{Binding HasRecentWirelessDevices}" Spacing="6">
+                                        <TextBlock Text="Recent devices" FontSize="13" FontWeight="SemiBold"/>
+                                        <TextBlock Text="Connected before, not connected now. Reconnect to the same address, or forget them." Classes="section-copy" Margin="0" TextWrapping="Wrap"/>
+                                        <ItemsControl ItemsSource="{Binding RecentWirelessDevices}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:WirelessRecentDeviceRowViewModel">
+                                                    <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,4" ColumnSpacing="8">
+                                                        <StackPanel Spacing="2" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding Address}" FontSize="13" FontWeight="SemiBold"/>
+                                                        </StackPanel>
+                                                        <Button Grid.Column="1" Content="Reconnect" Command="{Binding ReconnectCommand}" MinWidth="110" VerticalAlignment="Center"/>
+                                                        <Button Grid.Column="2" Content="Forget" Command="{Binding ForgetCommand}" MinWidth="90" VerticalAlignment="Center"/>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
                                 </StackPanel>
                             </Border>
 

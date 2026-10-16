@@ -14,6 +14,15 @@ public partial class MainViewModel
 
     public ObservableCollection<WirelessPeerRowViewModel> WirelessPeers { get; } = [];
 
+    /// <summary>Wi-Fi targets adb actually lists right now, with one Disconnect action each.</summary>
+    public ObservableCollection<WirelessConnectedDeviceRowViewModel> ConnectedWirelessDevices { get; } = [];
+
+    /// <summary>Devices that have been paired with this computer but are not currently connected.</summary>
+    public ObservableCollection<WirelessPairedDeviceRowViewModel> PairedWirelessDevices { get; } = [];
+
+    /// <summary>Devices connected earlier this session and since disconnected, clearly labeled as recent.</summary>
+    public ObservableCollection<WirelessRecentDeviceRowViewModel> RecentWirelessDevices { get; } = [];
+
     public IReadOnlyList<AndroidStorageLocation> DeviceFileLocations => AndroidStorageLocations.QuickLocations;
 
     [ObservableProperty]
@@ -37,6 +46,7 @@ public partial class MainViewModel
     private string _deviceFilesSummary = "Select a device, then open a folder.";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsWirelessAddressPaired))]
     private string _wirelessAddress = string.Empty;
 
     [ObservableProperty]
@@ -44,6 +54,15 @@ public partial class MainViewModel
 
     [ObservableProperty]
     private string _wirelessSummary = "Wireless debugging (Android 11+) pairs over Wi-Fi. USB debugging on Android 10 or older needs the USB step first.";
+
+    /// <summary>Whether the collapsed Manual pairing panel is open. Pairing rows from the nearby list
+    /// open it automatically, because those ports need the code typed on the phone.</summary>
+    [ObservableProperty]
+    private bool _isWirelessManualVisible;
+
+    private readonly Dictionary<string, string?> _pairedWirelessHosts = new(StringComparer.OrdinalIgnoreCase);
+
+    private readonly HashSet<string> _recentWirelessAddresses = new(StringComparer.OrdinalIgnoreCase);
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(PairWirelessDeviceCommand))]
@@ -55,13 +74,31 @@ public partial class MainViewModel
 
     public bool IsDeviceFilesAvailable => !OperatingSystem.IsBrowser() && IsAndroidPlatform;
 
-    /// <summary>The wireless debugging path is currently paired and connected.</summary>
-    public bool IsWirelessConnected => IsPaired && !string.IsNullOrWhiteSpace(WirelessAddress);
+    /// <summary>True while at least one wireless (host:port) target is present in the adb device list.
+    /// The list is what adb reports, so a failed connect never reports connected and a real disconnect
+    /// clears it automatically when the refresh removes the target.</summary>
+    public bool IsWirelessConnected => ConnectedWirelessDevices.Count > 0;
 
-    /// <summary>Plain-language line shown instead of the pair/connect instructions once paired.</summary>
-    public string PairedWirelessSummary => IsWirelessConnected
-        ? $"Paired and connected to {WirelessAddress}."
-        : "Paired over Wi-Fi. Connect to the debugging port to use the device.";
+    /// <summary>True when the machine has already paired with the host in the address box this session.
+    /// Pairing is a one-time trust step; once paired, only Connect is offered for that host.</summary>
+    public bool IsWirelessAddressPaired => !string.IsNullOrWhiteSpace(WirelessAddress)
+        && AndroidWirelessDebug.TryParseEndpoint(WirelessAddress, out var host, out _)
+        && !string.IsNullOrWhiteSpace(host)
+        && _pairedWirelessHosts.ContainsKey(host);
+
+    public bool HasConnectedWirelessDevices => ConnectedWirelessDevices.Count > 0;
+
+    public bool HasPairedWirelessDevices => PairedWirelessDevices.Count > 0;
+
+    public bool HasRecentWirelessDevices => RecentWirelessDevices.Count > 0;
+
+    /// <summary>One-line state shown at the top of the wireless card.</summary>
+    public string WirelessStatusLine => ConnectedWirelessDevices.Count switch
+    {
+        0 => "No devices connected over Wi-Fi.",
+        1 => "1 device connected over Wi-Fi. It can be disconnected from the list below.",
+        _ => $"{ConnectedWirelessDevices.Count} devices connected over Wi-Fi. Each can be disconnected from the list below."
+    };
 
     public string DeviceFilesHint => SelectedDevice switch
     {
@@ -332,6 +369,7 @@ public partial class MainViewModel
         WirelessAddress = peer.Address;
         if (peer.IsPairingService)
         {
+            IsWirelessManualVisible = true;
             WirelessSummary = $"{peer.Address} is the pairing port. Type the code shown on the device, then press Pair, " +
                 "then connect using the debugging port.";
             StatusMessage = "Pairing address filled in. Enter the code shown on the device.";
@@ -349,6 +387,12 @@ public partial class MainViewModel
             IsWirelessBusy = true;
             var message = await _publisherService.PairAndroidWirelessAsync(WirelessAddress, WirelessPairingCode, CancellationToken.None);
             AppendLog(Environment.NewLine + $"[Pair over Wi-Fi] {message}" + Environment.NewLine);
+            if (AndroidWirelessDebug.TryParseEndpoint(WirelessAddress, out var host, out _) && !string.IsNullOrWhiteSpace(host))
+            {
+                _pairedWirelessHosts[host] = null;
+            }
+
+            OnPropertyChanged(nameof(IsWirelessAddressPaired));
             WirelessSummary = "Paired. Scan again, then connect using the debugging port shown on the device.";
             StatusMessage = "Paired over Wi-Fi. Now connect to the debugging port.";
             PlayCompletionAlert(failed: false);
@@ -375,7 +419,13 @@ public partial class MainViewModel
             IsWirelessBusy = true;
             var message = await _publisherService.ConnectAndroidWirelessAsync(address, CancellationToken.None);
             AppendLog(Environment.NewLine + $"[Connect over Wi-Fi] {message}" + Environment.NewLine);
-            WirelessSummary = $"Connected to {address}. It now appears in the device list.";
+            if (AndroidWirelessDebug.TryParseEndpoint(address, out var connectHost, out _) && !string.IsNullOrWhiteSpace(connectHost))
+            {
+                _pairedWirelessHosts[connectHost] = address;
+            }
+
+            OnPropertyChanged(nameof(IsWirelessAddressPaired));
+            WirelessSummary = $"Connected to {address}. It appears under Connected devices.";
             StatusMessage = $"Connected to {address}.";
             PlayCompletionAlert(failed: false);
         }
@@ -395,15 +445,26 @@ public partial class MainViewModel
     }
 
     [RelayCommand(CanExecute = nameof(CanUseWirelessDebugging))]
-    private async Task DisconnectWirelessDeviceAsync()
+    private async Task DisconnectWirelessDeviceAsync(string address)
     {
+        if (IsWirelessBusy || string.IsNullOrWhiteSpace(address))
+        {
+            return;
+        }
+
         try
         {
             IsWirelessBusy = true;
-            var message = await _publisherService.DisconnectAndroidWirelessAsync(WirelessAddress, CancellationToken.None);
+            var message = await _publisherService.DisconnectAndroidWirelessAsync(address, CancellationToken.None);
             AppendLog(Environment.NewLine + $"[Disconnect over Wi-Fi] {message}" + Environment.NewLine);
-            WirelessSummary = $"Disconnected from {WirelessAddress}.";
+            if (string.Equals(WirelessAddress, address, StringComparison.OrdinalIgnoreCase))
+            {
+                WirelessAddress = string.Empty;
+            }
+
+            WirelessSummary = $"Disconnected from {address}.";
             StatusMessage = WirelessSummary;
+            AddToRecentWireless(address);
             PlayCompletionAlert(failed: false);
         }
         catch (Exception ex)
@@ -418,6 +479,160 @@ public partial class MainViewModel
         }
 
         await RefreshDevicesAsync();
+    }
+
+    /// <summary>
+    /// Rebuilds the Connected devices list from the live adb target list and drops recent entries that
+    /// are connected again (a connected target is not "recent"). Runs after every device-list
+    /// replacement, so the panel always reflects what adb actually reports.
+    /// </summary>
+    private void RebuildWirelessLists()
+    {
+        ConnectedWirelessDevices.Clear();
+        foreach (var device in AvailableAndroidDevices.Where(item => item.IsWireless))
+        {
+            var deviceHost = AndroidWirelessDebug.TryParseEndpoint(device.Serial, out var parsedHost, out _) ? parsedHost : device.Serial;
+            ConnectedWirelessDevices.Add(
+                new WirelessConnectedDeviceRowViewModel(
+                    device,
+                    async () => await DisconnectWirelessDeviceAsync(device.Serial),
+                    async () => await UnpairWirelessHostAsync(deviceHost)));
+        }
+
+        if (_recentWirelessAddresses.Count > 0)
+        {
+            var connected = ConnectedWirelessDevices
+                .Select(row => row.Address)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var recent in RecentWirelessDevices.Where(row => connected.Contains(row.Address)).ToList())
+            {
+                ForgetRecentWirelessDevice(recent.Address);
+            }
+        }
+
+        // Paired hosts that are not currently connected are shown as a separate list so each gets its
+        // own Connect / Unpair actions rather than the generic Add-a-device buttons.
+        var connectedHosts = ConnectedWirelessDevices
+            .Select(row => AndroidWirelessDebug.TryParseEndpoint(row.Address, out var parsedHost, out _) ? parsedHost : row.Address)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        PairedWirelessDevices.Clear();
+        foreach (var host in _pairedWirelessHosts.Keys.Where(host => !connectedHosts.Contains(host)).ToList())
+        {
+            var debugAddress = _pairedWirelessHosts[host];
+            PairedWirelessDevices.Add(
+                new WirelessPairedDeviceRowViewModel(
+                    host,
+                    async () => await ConnectPairedWirelessHostAsync(host),
+                    async () => await UnpairWirelessHostAsync(host)));
+        }
+
+        OnPropertyChanged(nameof(IsWirelessConnected));
+        OnPropertyChanged(nameof(HasConnectedWirelessDevices));
+        OnPropertyChanged(nameof(HasRecentWirelessDevices));
+        OnPropertyChanged(nameof(HasPairedWirelessDevices));
+        OnPropertyChanged(nameof(WirelessStatusLine));
+    }
+
+    private async Task ConnectPairedWirelessHostAsync(string host)
+    {
+        string? address = null;
+        if (_pairedWirelessHosts.TryGetValue(host, out var stored) && !string.IsNullOrWhiteSpace(stored))
+        {
+            address = stored;
+        }
+        else
+        {
+            var peer = WirelessPeers.FirstOrDefault(service =>
+                !service.IsPairingService
+                && AndroidWirelessDebug.TryParseEndpoint(service.Service.Address, out var peerHost, out _)
+                && string.Equals(peerHost, host, StringComparison.OrdinalIgnoreCase));
+            address = peer?.Service.Address;
+        }
+
+        if (string.IsNullOrWhiteSpace(address))
+        {
+            StatusMessage = "No debugging port found for this device. Run Scan nearby devices, then its Connect button will appear.";
+            return;
+        }
+
+        await ConnectWirelessToAsync(address!);
+    }
+
+    private async Task UnpairWirelessHostAsync(string host)
+    {
+        if (IsWirelessBusy)
+        {
+            return;
+        }
+
+        IsWirelessBusy = true;
+        try
+        {
+            var debugAddress = _pairedWirelessHosts.TryGetValue(host, out var stored) ? stored : null;
+            var connectedRow = ConnectedWirelessDevices.FirstOrDefault(row =>
+                (AndroidWirelessDebug.TryParseEndpoint(row.Address, out var rowHost, out _) && string.Equals(rowHost, host, StringComparison.OrdinalIgnoreCase))
+                || string.Equals(row.Address, debugAddress, StringComparison.OrdinalIgnoreCase));
+            if (connectedRow is not null)
+            {
+                await _publisherService.DisconnectAndroidWirelessAsync(connectedRow.Address, CancellationToken.None);
+                await RefreshDevicesAsync();
+            }
+
+            _pairedWirelessHosts.Remove(host);
+            var staleRecent = RecentWirelessDevices.Where(row =>
+                (AndroidWirelessDebug.TryParseEndpoint(row.Address, out var recentHost, out _) && string.Equals(recentHost, host, StringComparison.OrdinalIgnoreCase))
+                || string.Equals(row.Address, debugAddress, StringComparison.OrdinalIgnoreCase)).ToList();
+            foreach (var recent in staleRecent)
+            {
+                _recentWirelessAddresses.Remove(recent.Address);
+                RecentWirelessDevices.Remove(recent);
+            }
+
+            WirelessSummary = $"Unpaired {host}.";
+            StatusMessage = WirelessSummary;
+            PlayCompletionAlert(failed: false);
+            RebuildWirelessLists();
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = "Unpair failed.";
+            PlayCompletionAlert(failed: true);
+            await _desktopInteractionService.ShowErrorAsync("Unpair over Wi-Fi", ex.Message);
+        }
+        finally
+        {
+            IsWirelessBusy = false;
+        }
+
+        RebuildWirelessLists();
+    }
+
+    private void AddToRecentWireless(string address)
+    {
+        if (string.IsNullOrWhiteSpace(address) || !_recentWirelessAddresses.Add(address))
+        {
+            return;
+        }
+
+        RecentWirelessDevices.Add(
+            new WirelessRecentDeviceRowViewModel(
+                address,
+                () => ConnectWirelessToAsync(address),
+                () => ForgetRecentWirelessDevice(address)));
+        OnPropertyChanged(nameof(HasRecentWirelessDevices));
+    }
+
+    private void ForgetRecentWirelessDevice(string address)
+    {
+        _recentWirelessAddresses.Remove(address);
+        var row = RecentWirelessDevices.FirstOrDefault(
+            candidate => string.Equals(candidate.Address, address, StringComparison.OrdinalIgnoreCase));
+        if (row is not null)
+        {
+            RecentWirelessDevices.Remove(row);
+        }
+
+        OnPropertyChanged(nameof(HasRecentWirelessDevices));
     }
 
     [RelayCommand(CanExecute = nameof(CanUseWirelessDebugging))]
@@ -440,6 +655,7 @@ public partial class MainViewModel
             if (!string.IsNullOrWhiteSpace(result.Address))
             {
                 WirelessAddress = result.Address;
+                IsWirelessManualVisible = true;
             }
 
             WirelessSummary = result.Message;

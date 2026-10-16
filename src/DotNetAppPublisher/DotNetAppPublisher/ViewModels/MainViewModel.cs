@@ -237,9 +237,6 @@ public partial class MainViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsUseAppHostEnabled))]
     [NotifyPropertyChangedFor(nameof(IsIosDeviceRuntime))]
     [NotifyPropertyChangedFor(nameof(ShowAndroidPackageFormatsTogether))]
-    [NotifyPropertyChangedFor(nameof(IsPaired))]
-    [NotifyPropertyChangedFor(nameof(IsWirelesslyConnected))]
-    [NotifyPropertyChangedFor(nameof(IsWirelessConnected))]
     [NotifyPropertyChangedFor(nameof(IsDeviceWatchStatusVisible))]
     private string _publishPlatform = PublisherService.AndroidPlatform;
 
@@ -555,37 +552,6 @@ private string _projectDirectory = string.Empty;
             ? $"v{version}"
             : "v0.0.0";
 
-    /// <summary>Whether the currently selected device is already paired over Wi-Fi.</summary>
-    public bool IsPaired
-    {
-        get
-        {
-            if (!IsAndroidPlatform || _publisherService.AdbPath is null)
-            {
-                return false;
-            }
-
-            var address = WirelessAddress;
-            if (!string.IsNullOrWhiteSpace(address))
-            {
-                return AndroidWirelessDebug.TryParseEndpoint(address, out _, out _) && address.Split(':')[^1].Length > 0;
-            }
-
-            // Fall back to the summary text because the QR path writes "Paired." into WirelessSummary
-            // before the connect port is known.
-            var summary = WirelessSummary;
-            if (!string.IsNullOrWhiteSpace(summary) && summary.StartsWith("Paired", StringComparison.Ordinal))
-            {
-                return true;
-            }
-
-            return false;
-        }
-    }
-
-    /// <summary>Whether the wireless path is paired and currently connected to a debugging port.</summary>
-    public bool IsWirelesslyConnected => IsPaired && !string.IsNullOrWhiteSpace(WirelessAddress);
-
     public bool IsAndroidPlatform => string.Equals(PublishPlatform, PublisherService.AndroidPlatform, StringComparison.Ordinal);
 
     public bool IsMacOsPlatform => string.Equals(PublishPlatform, PublisherService.MacOsPlatform, StringComparison.Ordinal);
@@ -642,22 +608,6 @@ private string _projectDirectory = string.Empty;
     public string PublishSingleFileDisabledReason => PublishAot
         ? "Native AOT already produces a native executable; single-file bundling is not needed."
         : IsPublishSingleFileEnabled ? string.Empty : "SingleFile not applicable for this platform.";
-
-    partial void OnWirelessSummaryChanged(string value)
-    {
-        OnPropertyChanged(nameof(IsPaired));
-        OnPropertyChanged(nameof(IsWirelesslyConnected));
-        OnPropertyChanged(nameof(IsWirelessConnected));
-        OnPropertyChanged(nameof(PairedWirelessSummary));
-    }
-
-    partial void OnWirelessAddressChanged(string value)
-    {
-        OnPropertyChanged(nameof(IsPaired));
-        OnPropertyChanged(nameof(IsWirelesslyConnected));
-        OnPropertyChanged(nameof(IsWirelessConnected));
-        OnPropertyChanged(nameof(PairedWirelessSummary));
-    }
 
     public bool IsUseAppHostEnabled => PublishOptionPolicy.IsUseAppHostEnabled(PublishPlatform);
 

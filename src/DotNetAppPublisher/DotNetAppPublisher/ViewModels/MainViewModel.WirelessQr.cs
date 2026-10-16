@@ -22,6 +22,7 @@ public partial class MainViewModel
     private CancellationTokenSource? _wirelessQrCancellation;
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(CancelWirelessQrPairingCommand))]
     private bool _isWirelessQrVisible;
 
     [ObservableProperty]
@@ -46,7 +47,7 @@ public partial class MainViewModel
 
     public bool CanStartWirelessQrPairing => CanUseWirelessDebugging() && !IsWirelessQrWaiting;
 
-    public bool CanCancelWirelessQrPairing => IsWirelessQrWaiting;
+    public bool CanCancelWirelessQrPairing => IsWirelessQrVisible;
 
     [RelayCommand(CanExecute = nameof(CanStartWirelessQrPairing))]
     private async Task StartWirelessQrPairingAsync()
@@ -122,6 +123,11 @@ public partial class MainViewModel
                         request.Password,
                         cancellationToken);
                     AppendLog($"{Environment.NewLine}[Pair with QR code] {message}{Environment.NewLine}");
+                    if (AndroidWirelessDebug.TryParseEndpoint(pairingService.Address, out var qrHost, out _) && !string.IsNullOrWhiteSpace(qrHost))
+                    {
+                        _pairedWirelessHosts[qrHost] = null;
+                        OnPropertyChanged(nameof(IsWirelessAddressPaired));
+                    }
                     WirelessQrStatus = "Paired. Looking for the debugging port…";
                     await ConnectPairedTargetAsync(pairingService, cancellationToken);
                     return;
@@ -177,7 +183,12 @@ public partial class MainViewModel
                 var message = await _publisherService.ConnectAndroidWirelessAsync(debuggingPort.Address, cancellationToken);
                 AppendLog($"{Environment.NewLine}[Connect over Wi-Fi] {message}{Environment.NewLine}");
                 WirelessAddress = debuggingPort.Address;
-                WirelessSummary = $"Paired and connected to {debuggingPort.Address}. It is in the device list now.";
+                if (AndroidWirelessDebug.TryParseEndpoint(debuggingPort.Address, out var connectedHost, out _) && !string.IsNullOrWhiteSpace(connectedHost))
+                {
+                    _pairedWirelessHosts[connectedHost] = debuggingPort.Address;
+                }
+
+                WirelessSummary = $"Paired and connected to {debuggingPort.Address}. It appears under Connected devices.";
 
                 // The silent refresh puts the device in the list and selects it, so pairing ends with the
                 // target ready to use rather than with instructions to go and look for it.

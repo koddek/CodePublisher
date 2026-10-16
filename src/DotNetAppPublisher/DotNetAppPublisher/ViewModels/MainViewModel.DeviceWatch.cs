@@ -100,6 +100,10 @@ public partial class MainViewModel
             ?? AvailableAndroidDevices.FirstOrDefault(candidate => appeared is not null && IsSameAndroidTarget(candidate, appeared))
             ?? AvailableAndroidDevices.FirstOrDefault(device => device.IsRunning)
             ?? AvailableAndroidDevices.FirstOrDefault();
+
+        // The Connected devices list and the wireless status line follow what adb actually lists, so
+        // every list replacement rebuilds them.
+        RebuildWirelessLists();
         return change;
     }
 
