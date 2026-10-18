@@ -27,6 +27,24 @@ public static class ArtifactLocator
         return best?.Directory;
     }
 
+    /// <summary>
+    /// The SDK-built universal APK for an AAB+APK publish: when the AAB is the primary format the SDK
+    /// derives a universal APK from the bundle and leaves it in the build output rather than the
+    /// publish folder. Searches the given roots for the best <c>*-Signed.apk</c> without throwing for
+    /// missing directories. Null when no signed APK exists.
+    /// </summary>
+    public static FileInfo? FindBestUniversalApk(
+        IEnumerable<string> searchRoots,
+        string? projectName = null,
+        string? packageId = null) =>
+        searchRoots
+            .Where(root => !string.IsNullOrWhiteSpace(root) && Directory.Exists(root))
+            .SelectMany(root => new DirectoryInfo(root).EnumerateFiles("*-Signed.apk", SearchOption.AllDirectories))
+            .OrderByDescending(file => GetScore(file, projectName, packageId))
+            .ThenByDescending(file => file.LastWriteTimeUtc)
+            .ThenBy(file => file.FullName, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+
     private static FileInfo? FindBest(
         string outputDirectory,
         string searchPattern,

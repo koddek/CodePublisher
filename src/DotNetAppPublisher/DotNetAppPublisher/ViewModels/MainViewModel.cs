@@ -1281,7 +1281,7 @@ private string _projectDirectory = string.Empty;
             }, token);
 
             StatusMessage = success
-                ? "Publish completed successfully."
+                ? "Publish completed successfully." + BuildAndroidArtifactSummary()
                 : BuildPublishFailureMessage();
             RefreshCommandPreview();
         }
@@ -1318,6 +1318,25 @@ private string _projectDirectory = string.Empty;
             () => _desktopInteractionService.ConfirmAsync("Install missing workloads", question));
     }
 
+    private string BuildAndroidArtifactSummary()
+    {
+        if (!IsAndroidPlatform)
+        {
+            return string.Empty;
+        }
+
+        var outputDirectory = OutputDirectory;
+        if (string.IsNullOrWhiteSpace(outputDirectory) || !Directory.Exists(outputDirectory))
+        {
+            return string.Empty;
+        }
+
+        var apkCount = new DirectoryInfo(outputDirectory)
+            .EnumerateFiles("*.apk", SearchOption.AllDirectories).Count();
+        var aabCount = new DirectoryInfo(outputDirectory)
+            .EnumerateFiles("*.aab", SearchOption.AllDirectories).Count();
+        return $" Found {apkCount} APK and {aabCount} AAB in the output folder; check Open publish folder for each.";
+    }
     private string BuildPublishFailureMessage()
     {
         var output = LiveOutput;
@@ -1362,7 +1381,11 @@ private string _projectDirectory = string.Empty;
     {
         try
         {
-            _publisherService.OpenPublishFolder(ResolvePublishArtifactFolder());
+            var folders = ResolvePublishArtifactFolders();
+            foreach (var folder in folders.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                _publisherService.OpenPublishFolder(folder);
+            }
         }
         catch (Exception ex)
         {
@@ -1375,6 +1398,34 @@ private string _projectDirectory = string.Empty;
     /// parent folder the user would have to dig through. Falls back to the configured output folder
     /// when no package has been published yet or the platform is not Android.
     /// </summary>
+    private IReadOnlyList<string> ResolvePublishArtifactFolders()
+    {
+        var outputDirectory = OutputDirectory;
+        if (IsAndroidPlatform && !string.IsNullOrWhiteSpace(outputDirectory) && Directory.Exists(outputDirectory))
+        {
+            var configuration = CreateConfiguration();
+            var apk = ArtifactLocator.FindBestApk(outputDirectory, configuration.ProjectName, configuration.PackageId);
+            var aab = ArtifactLocator.FindBestAab(outputDirectory, configuration.ProjectName, configuration.PackageId);
+
+            var distinct = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var artifact in new[] { apk, aab })
+            {
+                if (artifact?.Directory?.FullName is { Length: > 0 } dir && seen.Add(dir))
+                {
+                    distinct.Add(dir);
+                }
+            }
+
+            if (distinct.Count > 0)
+            {
+                return distinct;
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(outputDirectory) ? [] : new[] { outputDirectory .Trim() };
+    }
+
     private string ResolvePublishArtifactFolder()
     {
         var outputDirectory = OutputDirectory;

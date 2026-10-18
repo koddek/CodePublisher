@@ -226,6 +226,11 @@ public sealed class PublisherService
 
         if (exitCode == 0)
         {
+            if (IsAndroidPlatform(configuration.PublishPlatform) && configuration.IncludeAab)
+            {
+                CopyUniversalApkNextToAab(configuration, projectDirectory, bundle.OutputDirectory, writeOutput);
+            }
+
             if (IsMacOsPlatform(configuration.PublishPlatform) && configuration.CreateMacAppBundle)
             {
                 var createdBundlePath = await EnsureMacAppBundleAsync(
@@ -249,6 +254,58 @@ public sealed class PublisherService
         writeOutput(Environment.NewLine + $"=== Publish failed (exit code {exitCode}) ===" + Environment.NewLine);
         AlertSounds.Play(AlertTone.Failure);
         return false;
+    }
+
+    /// <summary>
+    /// When the AAB is selected the Android SDK builds the store bundle as the primary artifact and
+    /// derives the universal APK from it, but leaves that APK in the build output instead of copying
+    /// it to the publish folder. Copy the best built universal APK next to the published AAB so one
+    /// publish yields both packages side by side, as the Generate AAB toggle promises.
+    /// </summary>
+    private static void CopyUniversalApkNextToAab(
+        PublishConfiguration configuration,
+        DirectoryInfo projectDirectory,
+        string publishDirectory,
+        Action<string> writeOutput)
+    {
+        var aab = ArtifactLocator.FindBestAab(publishDirectory, configuration.ProjectName, configuration.PackageId);
+        if (aab?.Directory is null)
+        {
+            return;
+        }
+
+        if (ArtifactLocator.FindBestApk(publishDirectory, configuration.ProjectName, configuration.PackageId) is not null)
+        {
+            return;
+        }
+
+        var usesCentralizedArtifacts = configuration.OutputLayout?.UsesCentralizedArtifacts == true;
+        var buildOutputDirectory = usesCentralizedArtifacts
+            ? configuration.OutputLayout!.BuildOutputDirectory
+            : Path.Combine(projectDirectory.FullName, "bin");
+        if (string.IsNullOrWhiteSpace(buildOutputDirectory))
+        {
+            return;
+        }
+
+        var universalApk = ArtifactLocator.FindBestUniversalApk(
+            [buildOutputDirectory],
+            configuration.ProjectName,
+            configuration.PackageId);
+        if (universalApk is null)
+        {
+            writeOutput($"No universal APK was built from the AAB; only the store bundle is in {aab.Directory.FullName}{Environment.NewLine}");
+            return;
+        }
+
+        if (string.Equals(universalApk.Directory?.FullName, aab.Directory.FullName, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var destination = Path.Combine(aab.Directory.FullName, universalApk.Name);
+        File.Copy(universalApk.FullName, destination, overwrite: true);
+        writeOutput($"Copied universal APK next to the store bundle: {universalApk.Name}{Environment.NewLine}");
     }
 
     private async Task PrepareOutputFoldersAsync(

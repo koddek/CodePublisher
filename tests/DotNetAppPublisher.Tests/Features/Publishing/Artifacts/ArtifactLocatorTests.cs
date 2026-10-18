@@ -68,12 +68,39 @@ public sealed class ArtifactLocatorTests
     }
 
     [Test]
-    public async Task FindBestPackageFolder_ReturnsNull_WhenNoPackagesExist()
+    public async Task FindBestUniversalApk_PrefersSignedApkAcrossRoots()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), $"dnap-artifacts-{Guid.NewGuid():N}"));
         try
         {
-            var result = ArtifactLocator.FindBestPackageFolder(root.FullName, "App", "com.example.app");
+            var build = Directory.CreateDirectory(Path.Combine(root.FullName, "bin", "Release"));
+            var other = Directory.CreateDirectory(Path.Combine(root.FullName, "other"));
+            await File.WriteAllTextAsync(Path.Combine(other.FullName, "App-debug.apk"), "unsigned");
+            var signed = new FileInfo(Path.Combine(build.FullName, "com.example.App-Signed.apk"));
+            await File.WriteAllTextAsync(signed.FullName, "signed");
+
+            var result = ArtifactLocator.FindBestUniversalApk(
+                [build.FullName, other.FullName, Path.Combine(root.FullName, "missing")],
+                "App",
+                "com.example");
+
+            await Assert.That(result?.FullName).IsEqualTo(signed.FullName);
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Test]
+    public async Task FindBestUniversalApk_ReturnsNull_WhenNoSignedApkExists()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), $"dnap-artifacts-{Guid.NewGuid():N}"));
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(root.FullName, "App-debug.apk"), "unsigned");
+
+            var result = ArtifactLocator.FindBestUniversalApk([root.FullName], "App");
 
             await Assert.That(result).IsNull();
         }
