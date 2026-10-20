@@ -51,7 +51,7 @@ public sealed class PublishOptionPolicyTests
             publishPlatform: PublisherService.LinuxPlatform,
             targetFramework: "net10.0",
             runtimeIdentifier: "linux-x64",
-            androidLinkMode: "None")).IsEqualTo("Trimming is implied by Native AOT.");
+            androidLinkMode: "None")).Contains("always trims");
     }
 
     [Test]
@@ -107,6 +107,23 @@ public sealed class PublishOptionPolicyTests
             targetFramework: "net10.0",
             runtimeIdentifier: "linux-x64",
             androidLinkMode: "None")).IsEqualTo("Trimming requires a self-contained publish.");
+    }
+
+    [Test]
+    public async Task PublishTrimmedDisabledReason_ExplainsThatAotAlwaysTrims()
+    {
+        // Native AOT implies trimming, and the SDK refuses an explicit PublishTrimmed=false with
+        // "PublishTrimmed is implied by native compilation and cannot be disabled." The switch is
+        // therefore on and locked, not off.
+        var result = PublishOptionPolicy.PublishTrimmedDisabledReason(
+            publishAot: true,
+            selfContained: true,
+            publishPlatform: PublisherService.LinuxPlatform,
+            targetFramework: "net10.0",
+            runtimeIdentifier: "linux-x64",
+            androidLinkMode: "None");
+
+        await Assert.That(result).Contains("always trims");
     }
 
     [Test]

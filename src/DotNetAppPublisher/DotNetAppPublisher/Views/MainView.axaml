@@ -557,6 +557,13 @@
                                             <TextBlock Text="{Binding PublishTrimmedDisabledReason}" FontSize="12" Foreground="{DynamicResource InfoBannerTextColor}" TextWrapping="Wrap"/>
                                         </StackPanel>
                                     </Border>
+                                    <Border Background="{DynamicResource InfoBannerBackgroundColor}" BorderBrush="{DynamicResource InfoBannerBorderColor}" BorderThickness="1" CornerRadius="6" Padding="12"
+                                            IsVisible="{Binding HasPublishOptionSuggestion}">
+                                        <StackPanel Spacing="6" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding PublishOptionSuggestionText}" FontSize="12" Foreground="{DynamicResource InfoBannerTextColor}" TextWrapping="Wrap"/>
+                                            <Button Content="Turn it on" Command="{Binding ApplyPublishOptionSuggestionCommand}" HorizontalAlignment="Left"/>
+                                        </StackPanel>
+                                    </Border>
                                 </StackPanel>
                             </Border>
 

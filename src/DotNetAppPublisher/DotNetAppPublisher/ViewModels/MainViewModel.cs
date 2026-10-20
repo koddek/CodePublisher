@@ -176,6 +176,7 @@ public partial class MainViewModel : ViewModelBase
         _ = RefreshIosDevicesCommand;
         _ = InstallIosDeviceAppCommand;
         _ = LaunchIosDeviceAppCommand;
+        _ = ApplyPublishOptionSuggestionCommand;
         _ = IsPublishing;
         _ = GooglePlay;
     }
@@ -489,6 +490,25 @@ private string _projectDirectory = string.Empty;
     [ObservableProperty]
     private string _screenshotDialogMessage = string.Empty;
 
+    /// <summary>
+    /// The optional companion the publish option graph offered. The user turns it on with
+    /// <see cref="ApplyPublishOptionSuggestionCommand"/> when they want it.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPublishOptionSuggestion))]
+    [NotifyPropertyChangedFor(nameof(PublishOptionSuggestionText))]
+    private PublishOptionId? _pendingPublishOptionSuggestion;
+
+    /// <summary>True when the option graph offered an optional companion the user can take.</summary>
+    public bool HasPublishOptionSuggestion => PendingPublishOptionSuggestion is not null;
+
+    /// <summary>Explains what the option graph offered and why it is worth turning on.</summary>
+    public string PublishOptionSuggestionText => PendingPublishOptionSuggestion is { } option
+        ? $"{DescribePublishOption(option)} can be turned on as well. {_pendingPublishOptionSuggestionReason}"
+        : string.Empty;
+
+    private string _pendingPublishOptionSuggestionReason = string.Empty;
+
     public ObservableCollection<string> AvailableEmulators { get; } = [];
     public ObservableCollection<AndroidDeviceInfo> AvailableAndroidDevices { get; } = [];
     public ObservableCollection<string> AvailableIosSimulators { get; } = [];
@@ -767,49 +787,169 @@ private string _projectDirectory = string.Empty;
         NormalizePublishSettings();
     }
 
-    private void NormalizePublishSettings()
+    /// <summary>
+    /// Applies the publish option graph. The graph decides which options follow each other: a
+    /// required companion is switched on with the option that needs it, an option whose
+    /// prerequisite was switched off goes with it, and two mutually exclusive options never stay
+    /// on together. The applied changes are reported so the user sees what the graph did.
+    /// </summary>
+    private void NormalizePublishSettings(PublishOptionId? changedOption = null, bool changedValue = true)
     {
         if (_isNormalizingPublishSettings)
         {
             return;
         }
 
-        var normalized = PublishSettingsPolicy.Normalize(new PublishSettingsState(
-            PublishPlatform,
-            TargetFramework,
-            RuntimeIdentifier,
-            SelfContained,
-            PublishAot,
-            PublishReadyToRun,
-            PublishSingleFile,
-            PublishTrimmed,
-            AndroidLinkMode,
-            AndroidLinkTool,
-            AndroidDexTool,
-            RunAotCompilation,
-            EnableProfiledAot,
-            IncludeApk,
-            IncludeAab));
+        var resolution = PublishOptionResolver.Resolve(
+            BuildPublishSettingsState(),
+            changedOption,
+            changedValue);
 
         _isNormalizingPublishSettings = true;
         try
         {
-            SelfContained = normalized.SelfContained;
-            PublishAot = normalized.PublishAot;
-            PublishReadyToRun = normalized.PublishReadyToRun;
-            PublishSingleFile = normalized.PublishSingleFile;
-            PublishTrimmed = normalized.PublishTrimmed;
-            AndroidLinkTool = normalized.AndroidLinkTool;
-            AndroidDexTool = normalized.AndroidDexTool;
-            RunAotCompilation = normalized.RunAotCompilation;
-            EnableProfiledAot = normalized.EnableProfiledAot;
-            IncludeApk = normalized.IncludeApk;
-            IncludeAab = normalized.IncludeAab;
+            SelfContained = resolution.State.SelfContained;
+            PublishAot = resolution.State.PublishAot;
+            PublishReadyToRun = resolution.State.PublishReadyToRun;
+            PublishSingleFile = resolution.State.PublishSingleFile;
+            PublishTrimmed = resolution.State.PublishTrimmed;
+            AndroidLinkMode = resolution.State.AndroidLinkMode;
+            AndroidLinkTool = resolution.State.AndroidLinkTool;
+            AndroidDexTool = resolution.State.AndroidDexTool;
+            RunAotCompilation = resolution.State.RunAotCompilation;
+            EnableProfiledAot = resolution.State.EnableProfiledAot;
+            IncludeApk = resolution.State.IncludeApk;
+            IncludeAab = resolution.State.IncludeAab;
+            UseAppHost = resolution.State.UseAppHost;
+            CreateMacAppBundle = resolution.State.CreateMacAppBundle;
+            CreateWindowsExecutable = resolution.State.CreateWindowsExecutable;
+            BuildIpa = resolution.State.BuildIpa;
+            ArchiveOnBuild = resolution.State.ArchiveOnBuild;
+            CreateMappingFile = resolution.State.CreateMappingFile;
+            EnableMultiDex = resolution.State.EnableMultiDex;
+            UseAapt2 = resolution.State.UseAapt2;
+            EnableDesugar = resolution.State.EnableDesugar;
         }
         finally
         {
             _isNormalizingPublishSettings = false;
         }
+
+        ReportPublishOptionChanges(resolution);
+    }
+
+    private PublishSettingsState BuildPublishSettingsState() => new(
+        PublishPlatform,
+        TargetFramework,
+        RuntimeIdentifier,
+        SelfContained,
+        PublishAot,
+        PublishReadyToRun,
+        PublishSingleFile,
+        PublishTrimmed,
+        AndroidLinkMode,
+        AndroidLinkTool,
+        AndroidDexTool,
+        RunAotCompilation,
+        EnableProfiledAot,
+        IncludeApk,
+        IncludeAab,
+        UseAppHost,
+        CreateMacAppBundle,
+        CreateWindowsExecutable,
+        BuildIpa,
+        ArchiveOnBuild,
+        CreateMappingFile,
+        EnableMultiDex,
+        UseAapt2,
+        EnableDesugar);
+
+    /// <summary>Tells the user what the option graph changed and what it can still offer.</summary>
+    private void ReportPublishOptionChanges(PublishOptionResolution resolution)
+    {
+        if (resolution.Changes.Count > 0)
+        {
+            var applied = string.Join(
+                " ",
+                resolution.Changes.Select(change =>
+                    $"{DescribePublishOption(change.Option)} {(change.Value ? "on" : "off")}"));
+
+            StatusMessage = $"Adjusted the publish options: {applied}.";
+        }
+
+        if (resolution.Suggestions.Count > 0)
+        {
+            var suggestion = resolution.Suggestions[0];
+            StatusMessage =
+                $"{DescribePublishOption(suggestion.Option)} can be turned on as well. {suggestion.Reason}";
+            _pendingPublishOptionSuggestionReason = suggestion.Reason;
+            PendingPublishOptionSuggestion = suggestion.Option;
+        }
+        else
+        {
+            PendingPublishOptionSuggestion = null;
+            _pendingPublishOptionSuggestionReason = string.Empty;
+        }
+    }
+
+    private static string DescribePublishOption(PublishOptionId option) => option switch
+    {
+        PublishOptionId.SelfContained => "Self-contained",
+        PublishOptionId.PublishTrimmed => "Publish trimmed",
+        PublishOptionId.PublishAot => "Native AOT",
+        PublishOptionId.PublishReadyToRun => "ReadyToRun",
+        PublishOptionId.PublishSingleFile => "Single-file",
+        PublishOptionId.UseAppHost => "Use app host",
+        PublishOptionId.CreateMacAppBundle => "Create .app bundle",
+        PublishOptionId.CreateWindowsExecutable => "Create .exe",
+        PublishOptionId.BuildIpa => "Build IPA",
+        PublishOptionId.ArchiveOnBuild => "Archive on build",
+        PublishOptionId.RunAotCompilation => "RunAOT",
+        PublishOptionId.EnableProfiledAot => "Profiled AOT",
+        PublishOptionId.CreateMappingFile => "Create mapping file",
+        PublishOptionId.EnableMultiDex => "Enable MultiDex",
+        PublishOptionId.UseAapt2 => "Use AAPT2",
+        PublishOptionId.EnableDesugar => "Enable Desugar",
+        PublishOptionId.IncludeApk => "Generate APK",
+        PublishOptionId.IncludeAab => "Generate AAB",
+        PublishOptionId.AndroidLinkMode => "Link Mode",
+        PublishOptionId.AndroidLinkTool => "Link Tool",
+        PublishOptionId.AndroidDexTool => "Dex Tool",
+        _ => option.ToString(),
+    };
+
+    /// <summary>Turns on the optional companion the option graph offered.</summary>
+    [RelayCommand]
+    private void ApplyPublishOptionSuggestion()
+    {
+        if (PendingPublishOptionSuggestion is not { } option)
+        {
+            return;
+        }
+
+        switch (option)
+        {
+            case PublishOptionId.SelfContained: SelfContained = true; break;
+            case PublishOptionId.PublishTrimmed: PublishTrimmed = true; break;
+            case PublishOptionId.PublishAot: PublishAot = true; break;
+            case PublishOptionId.PublishReadyToRun: PublishReadyToRun = true; break;
+            case PublishOptionId.PublishSingleFile: PublishSingleFile = true; break;
+            case PublishOptionId.UseAppHost: UseAppHost = true; break;
+            case PublishOptionId.CreateMacAppBundle: CreateMacAppBundle = true; break;
+            case PublishOptionId.CreateWindowsExecutable: CreateWindowsExecutable = true; break;
+            case PublishOptionId.BuildIpa: BuildIpa = true; break;
+            case PublishOptionId.ArchiveOnBuild: ArchiveOnBuild = true; break;
+            case PublishOptionId.RunAotCompilation: RunAotCompilation = true; break;
+            case PublishOptionId.EnableProfiledAot: EnableProfiledAot = true; break;
+            case PublishOptionId.CreateMappingFile: CreateMappingFile = true; break;
+            case PublishOptionId.EnableMultiDex: EnableMultiDex = true; break;
+            case PublishOptionId.UseAapt2: UseAapt2 = true; break;
+            case PublishOptionId.EnableDesugar: EnableDesugar = true; break;
+            case PublishOptionId.IncludeApk: IncludeApk = true; break;
+            case PublishOptionId.IncludeAab: IncludeAab = true; break;
+        }
+
+        PendingPublishOptionSuggestion = null;
     }
 
     [RelayCommand]
@@ -2028,7 +2168,7 @@ private string _projectDirectory = string.Empty;
 
     partial void OnSelfContainedChanged(bool value)
     {
-        NormalizePublishSettings();
+        NormalizePublishSettings(PublishOptionId.SelfContained, value);
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsPublishTrimmedEnabled)));
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(PublishTrimmedDisabledReason)));
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsPublishAotEnabled)));
@@ -2039,17 +2179,17 @@ private string _projectDirectory = string.Empty;
 
     partial void OnPublishTrimmedChanged(bool value)
     {
-        NormalizePublishSettings();
+        NormalizePublishSettings(PublishOptionId.PublishTrimmed, value);
     }
 
     partial void OnPublishSingleFileChanged(bool value)
     {
-        NormalizePublishSettings();
+        NormalizePublishSettings(PublishOptionId.PublishSingleFile, value);
     }
 
     partial void OnPublishAotChanged(bool value)
     {
-        NormalizePublishSettings();
+        NormalizePublishSettings(PublishOptionId.PublishAot, value);
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsReadyToRunEnabled)));
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsReadyToRunCheckBoxEnabled)));
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsPublishAotEnabled)));
@@ -2063,20 +2203,20 @@ private string _projectDirectory = string.Empty;
 
     partial void OnPublishReadyToRunChanged(bool value)
     {
-        NormalizePublishSettings();
+        NormalizePublishSettings(PublishOptionId.PublishReadyToRun, value);
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(ReadyToRunDisabledReason)));
     }
 
     partial void OnRunAotCompilationChanged(bool value)
     {
-        NormalizePublishSettings();
+        NormalizePublishSettings(PublishOptionId.RunAotCompilation, value);
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsProfiledAotEnabled)));
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(ProfiledAotDisabledReason)));
     }
 
     partial void OnAndroidLinkModeChanged(string value)
     {
-        NormalizePublishSettings();
+        NormalizePublishSettings(PublishOptionId.AndroidLinkMode, !string.Equals(value, "None", StringComparison.Ordinal));
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsShrinkerSettingsEnabled)));
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsRunAotEnabled)));
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(RunAotDisabledReason)));
@@ -2086,19 +2226,64 @@ private string _projectDirectory = string.Empty;
 
     partial void OnIncludeApkChanged(bool value)
     {
-        NormalizePublishSettings();
+        NormalizePublishSettings(PublishOptionId.IncludeApk, value);
     }
 
     partial void OnIncludeAabChanged(bool value)
     {
-        NormalizePublishSettings();
+        NormalizePublishSettings(PublishOptionId.IncludeAab, value);
     }
 
     partial void OnEnableProfiledAotChanged(bool value)
     {
-        NormalizePublishSettings();
+        NormalizePublishSettings(PublishOptionId.EnableProfiledAot, value);
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsProfiledAotEnabled)));
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(ProfiledAotDisabledReason)));
+    }
+
+    partial void OnUseAppHostChanged(bool value)
+    {
+        NormalizePublishSettings(PublishOptionId.UseAppHost, value);
+    }
+
+    partial void OnCreateMacAppBundleChanged(bool value)
+    {
+        NormalizePublishSettings(PublishOptionId.CreateMacAppBundle, value);
+    }
+
+    partial void OnCreateWindowsExecutableChanged(bool value)
+    {
+        NormalizePublishSettings(PublishOptionId.CreateWindowsExecutable, value);
+    }
+
+    partial void OnBuildIpaChanged(bool value)
+    {
+        NormalizePublishSettings(PublishOptionId.BuildIpa, value);
+    }
+
+    partial void OnArchiveOnBuildChanged(bool value)
+    {
+        NormalizePublishSettings(PublishOptionId.ArchiveOnBuild, value);
+    }
+
+    partial void OnCreateMappingFileChanged(bool value)
+    {
+        NormalizePublishSettings(PublishOptionId.CreateMappingFile, value);
+    }
+
+    partial void OnEnableMultiDexChanged(bool value)
+    {
+        NormalizePublishSettings(PublishOptionId.EnableMultiDex, value);
+    }
+
+    partial void OnUseAapt2Changed(bool value)
+    {
+        NormalizePublishSettings(PublishOptionId.UseAapt2, value);
+    }
+
+    partial void OnEnableDesugarChanged(bool value)
+    {
+        NormalizePublishSettings(PublishOptionId.EnableDesugar, value);
     }
 
     public bool IsReadyToRunEnabled => PublishOptionPolicy.IsReadyToRunEnabled(PublishAot, PublishPlatform, TargetFramework, RuntimeIdentifier);

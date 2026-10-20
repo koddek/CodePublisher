@@ -105,7 +105,7 @@ public static class PublishOptionPolicy
         string androidLinkMode)
     {
         if (publishAot)
-            return "Trimming is implied by Native AOT.";
+            return "Native AOT always trims, so this switch is on and cannot be turned off.";
         if (string.Equals(publishPlatform, PublishPlatforms.Android, StringComparison.Ordinal))
             return IsAndroidAotEnabled(androidLinkMode)
                 ? string.Empty
