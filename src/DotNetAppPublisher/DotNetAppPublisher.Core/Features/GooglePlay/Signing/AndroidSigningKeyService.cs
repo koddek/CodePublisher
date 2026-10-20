@@ -7,7 +7,7 @@ using DotNetAppPublisher.Features.GooglePlay.Models;
 
 namespace DotNetAppPublisher.Features.GooglePlay.Signing;
 
-internal sealed partial class AndroidSigningKeyService
+public sealed partial class AndroidSigningKeyService
 {
     public async Task<GooglePlaySigningKeyInfo> CreateAsync(
         string path,

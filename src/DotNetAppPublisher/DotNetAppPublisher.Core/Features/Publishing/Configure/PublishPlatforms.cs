@@ -1,6 +1,6 @@
 namespace DotNetAppPublisher.Features.Publishing.Configure;
 
-internal static class PublishPlatforms
+public static class PublishPlatforms
 {
     internal const string Android = "Android";
     internal const string MacOs = "macOS";

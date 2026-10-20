@@ -1,4 +1,17 @@
 <linker>
+  <!-- The core library holds the domain layer. Its types are preserved where the UI binds
+       to them or a serializer reflects over them. -->
+  <assembly fullname="DotNetAppPublisher.Core">
+    <!-- Services: AndroidDeviceInfo.DisplayName is bound in DataTemplate -->
+    <type fullname="DotNetAppPublisher.Features.Deployment.Android.AndroidDeviceInfo" preserve="all" />
+    <type fullname="DotNetAppPublisher.Services.PublisherService" preserve="all" />
+
+    <!-- Models: may be reflected by serializers or debug displays -->
+    <type fullname="DotNetAppPublisher.Models.PublishConfiguration" preserve="all" />
+    <type fullname="DotNetAppPublisher.Models.PublishCommandBundle" preserve="all" />
+    <type fullname="DotNetAppPublisher.Models.ProjectMetadata" preserve="all" />
+  </assembly>
+
   <!-- ViewModels: preserve all members because XAML binds to generated properties/commands -->
   <assembly fullname="DotNetAppPublisher">
     <type fullname="DotNetAppPublisher.ViewModels.MainViewModel" preserve="all" />
@@ -11,17 +24,9 @@
     <type fullname="DotNetAppPublisher.Views.MainWindow" preserve="all" />
     <type fullname="DotNetAppPublisher.Views.ScreenshotDialog" preserve="all" />
 
-    <!-- Services: AndroidDeviceInfo.DisplayName is bound in DataTemplate -->
-    <type fullname="DotNetAppPublisher.Features.Deployment.Android.AndroidDeviceInfo" preserve="all" />
-    <type fullname="DotNetAppPublisher.Services.PublisherService" preserve="all" />
+    <!-- Services -->
     <type fullname="DotNetAppPublisher.Services.DesktopInteractionService" preserve="all" />
     <type fullname="DotNetAppPublisher.ViewModels.NavItem" preserve="all" />
     <type fullname="DotNetAppPublisher.ViewModels.PublishSection" preserve="all" />
-
-    <!-- Models: may be reflected by serializers or debug displays -->
-    <type fullname="DotNetAppPublisher.Models.PublishConfiguration" preserve="all" />
-    <type fullname="DotNetAppPublisher.Models.PublishCommandBundle" preserve="all" />
-    <type fullname="DotNetAppPublisher.Models.ProjectMetadata" preserve="all" />
-
   </assembly>
 </linker>

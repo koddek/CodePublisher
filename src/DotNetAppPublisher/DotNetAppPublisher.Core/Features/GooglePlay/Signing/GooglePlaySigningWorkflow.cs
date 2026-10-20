@@ -2,7 +2,7 @@ using DotNetAppPublisher.Features.GooglePlay.Models;
 
 namespace DotNetAppPublisher.Features.GooglePlay.Signing;
 
-internal sealed class GooglePlaySigningWorkflow
+public sealed class GooglePlaySigningWorkflow
 {
     private readonly AndroidSigningKeyService _keyService;
     private readonly GooglePlayArtifactValidator _artifactValidator;

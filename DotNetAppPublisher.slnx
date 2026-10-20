@@ -1,5 +1,6 @@
 <Solution>
   <Project Path="src/DotNetAppPublisher/DotNetAppPublisher.Browser/DotNetAppPublisher.Browser.csproj" />
+  <Project Path="src/DotNetAppPublisher/DotNetAppPublisher.Core/DotNetAppPublisher.Core.csproj" />
   <Project Path="src/DotNetAppPublisher/DotNetAppPublisher.Desktop/DotNetAppPublisher.Desktop.csproj" />
   <Project Path="src/DotNetAppPublisher/DotNetAppPublisher/DotNetAppPublisher.csproj" />
   <Project Path="tests/DotNetAppPublisher.Tests/DotNetAppPublisher.Tests.csproj" />

@@ -3,7 +3,7 @@ using DotNetAppPublisher.Features.GooglePlay.Models;
 
 namespace DotNetAppPublisher.Features.GooglePlay.Setup;
 
-internal sealed class EnvironmentVariableService
+public sealed class EnvironmentVariableService
 {
     private const string GoogleClientIdVariableName = "DOTNET_APP_PUBLISHER_GOOGLE_CLIENT_ID";
 
@@ -212,7 +212,7 @@ internal sealed class EnvironmentVariableService
         }
     }
 
-    internal static void OpenUrl(string url)
+    public static void OpenUrl(string url)
     {
         if (OperatingSystem.IsBrowser())
         {
@@ -228,7 +228,7 @@ internal sealed class EnvironmentVariableService
     }
 }
 
-internal sealed record GooglePlayEnvironmentVariableState(
+public sealed record GooglePlayEnvironmentVariableState(
     string Name,
     string? Value,
     string Status,

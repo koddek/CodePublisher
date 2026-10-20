@@ -3,7 +3,7 @@ using DotNetAppPublisher.Features.GooglePlay.Models;
 
 namespace DotNetAppPublisher.Features.GooglePlay.Signing;
 
-internal sealed class GooglePlayArtifactValidator
+public sealed class GooglePlayArtifactValidator
 {
     private static readonly string[] RequiredEntries =
     [

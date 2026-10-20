@@ -77,3 +77,17 @@ public sealed record GooglePlayPublishResult(
     string? ReleaseName = null,
     string? TrackId = null,
     int? VersionCode = null);
+
+/// <summary>
+/// One environment variable the Google Play workspace reads, with the guidance a user needs to
+/// supply it. Lives in the core library because both the setup service and the view model need it.
+/// </summary>
+public sealed record GooglePlayEnvironmentVariableDefinition(
+    string Name,
+    string Description,
+    bool IsRequired,
+    bool IsSecret,
+    string DisplayName = "",
+    string Example = "",
+    string SetupInstructions = "",
+    string HelpUrl = "");

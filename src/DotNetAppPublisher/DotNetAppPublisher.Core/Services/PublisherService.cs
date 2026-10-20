@@ -3,13 +3,9 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
-using Avalonia.Controls;
-using Avalonia.Platform;
-using Avalonia.Threading;
 using DotNetAppPublisher.Features.Deployment.Android;
 using DotNetAppPublisher.Features.Deployment.Ios;
 using DotNetAppPublisher.Features.Publishing.Artifacts;
-using DotNetAppPublisher.Features.Publishing.Capture;
 using DotNetAppPublisher.Features.Publishing.Build;
 using DotNetAppPublisher.Features.Publishing.Configure;
 using DotNetAppPublisher.Features.Publishing.Inspect;
@@ -27,7 +23,6 @@ public sealed class PublisherService
     public const string LinuxPlatform = PublishPlatforms.Linux;
 
     private const string MacAppIconFileName = "dotnet-app-publisher";
-    private const string MacAppIconAssetPath = "avares://DotNetAppPublisher/Assets/dotnet-app-publisher.icns";
 
     private static readonly string[] DotnetCandidates =
     [
@@ -39,9 +34,11 @@ public sealed class PublisherService
     private readonly AndroidDeploymentService _androidDeploymentService;
     private readonly IosSimulatorService _iosSimulatorService;
     private readonly IosDeviceService _iosDeviceService;
+    private readonly IAppIconProvider? _appIconProvider;
 
-    public PublisherService()
+    public PublisherService(IAppIconProvider? appIconProvider = null)
     {
+        _appIconProvider = appIconProvider;
         DotnetPath = ResolveExecutable("dotnet", DotnetCandidates);
 
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -237,6 +234,7 @@ public sealed class PublisherService
                     bundle.OutputDirectory,
                     bundle.ProjectFilePath,
                     configuration.PackageId,
+                    _appIconProvider?.GetIconBytes(),
                     writeOutput,
                     cancellationToken);
 
@@ -583,38 +581,6 @@ public sealed class PublisherService
 
         appBundle.Delete(recursive: true);
         return Task.FromResult($"Deleted desktop app bundle {appBundle.FullName}.");
-    }
-
-    private readonly AvaloniaScreenshotService _screenshotService = new();
-
-    public async Task<string> CopyWindowScreenshotToClipboardAsync(Window window, CancellationToken cancellationToken)
-    {
-        return await _screenshotService.CaptureWindowToClipboardAsync(window, cancellationToken);
-    }
-
-    public async Task<string> SaveWindowScreenshotToDiskAsync(Window window, string outputDirectory, CancellationToken cancellationToken)
-    {
-        return await _screenshotService.CaptureWindowToDiskAsync(window, outputDirectory, cancellationToken);
-    }
-
-    public async Task<string> CopyElementScreenshotToClipboardAsync(Window window, Control element, CancellationToken cancellationToken)
-    {
-        return await _screenshotService.CaptureElementToClipboardAsync(window, element, cancellationToken);
-    }
-
-    public async Task<string> SaveElementScreenshotToDiskAsync(Window window, Control element, string outputDirectory, CancellationToken cancellationToken)
-    {
-        return await _screenshotService.CaptureElementToDiskAsync(window, element, outputDirectory, cancellationToken);
-    }
-
-    public async Task<string> CopyDetailScreenshotToClipboardAsync(Window window, ScrollViewer detailScrollViewer, CancellationToken cancellationToken)
-    {
-        return await _screenshotService.CaptureDetailToClipboardAsync(window, detailScrollViewer, cancellationToken);
-    }
-
-    public async Task<string> SaveDetailScreenshotToDiskAsync(Window window, ScrollViewer detailScrollViewer, string outputDirectory, CancellationToken cancellationToken)
-    {
-        return await _screenshotService.CaptureDetailToDiskAsync(window, detailScrollViewer, outputDirectory, cancellationToken);
     }
 
     public Task<IReadOnlyList<string>> DiscoverEmulatorsAsync(CancellationToken cancellationToken) =>
@@ -1172,6 +1138,7 @@ public sealed class PublisherService
         string outputDirectory,
         string projectFilePath,
         string packageId,
+        byte[]? iconBytes,
         Action<string> writeOutput)
     {
         if (!OperatingSystem.IsMacOS())
@@ -1205,7 +1172,7 @@ public sealed class PublisherService
         var resourcesPath = Path.Combine(contentsPath, "Resources");
         Directory.CreateDirectory(macOsPath);
         Directory.CreateDirectory(resourcesPath);
-        CopyMacAppIcon(resourcesPath);
+        CopyMacAppIcon(resourcesPath, iconBytes);
 
         foreach (var sourceFilePath in Directory.EnumerateFiles(outputDirectory, "*", SearchOption.TopDirectoryOnly))
         {
@@ -1240,6 +1207,7 @@ public sealed class PublisherService
         string outputDirectory,
         string projectFilePath,
         string packageId,
+        byte[]? iconBytes,
         Action<string> writeOutput,
         CancellationToken cancellationToken)
     {
@@ -1276,7 +1244,7 @@ public sealed class PublisherService
             var resourcesPath = Path.Combine(contentsPath, "Resources");
             Directory.CreateDirectory(macOsPath);
             Directory.CreateDirectory(resourcesPath);
-            CopyMacAppIcon(resourcesPath);
+            CopyMacAppIcon(resourcesPath, iconBytes);
 
             foreach (var sourceFilePath in Directory.EnumerateFiles(outputDirectory, "*", SearchOption.TopDirectoryOnly))
             {
@@ -1309,12 +1277,15 @@ public sealed class PublisherService
         }, cancellationToken);
     }
 
-    private static void CopyMacAppIcon(string resourcesPath)
+    private static void CopyMacAppIcon(string resourcesPath, byte[]? iconBytes)
     {
+        if (iconBytes is null || iconBytes.Length == 0)
+        {
+            return;
+        }
+
         var iconPath = Path.Combine(resourcesPath, $"{MacAppIconFileName}.icns");
-        using var source = AssetLoader.Open(new Uri(MacAppIconAssetPath));
-        using var destination = File.Create(iconPath);
-        source.CopyTo(destination);
+        File.WriteAllBytes(iconPath, iconBytes);
     }
 
     private static DirectoryInfo? FindNewestAppBundle(string outputDirectory)

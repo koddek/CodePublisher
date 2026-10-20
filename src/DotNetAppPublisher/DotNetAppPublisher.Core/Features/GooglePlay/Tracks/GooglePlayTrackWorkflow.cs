@@ -3,7 +3,7 @@ using DotNetAppPublisher.Features.GooglePlay.Services;
 
 namespace DotNetAppPublisher.Features.GooglePlay.Tracks;
 
-internal sealed class GooglePlayTrackWorkflow
+public sealed class GooglePlayTrackWorkflow
 {
     private readonly GooglePlayApiService _apiService;
 

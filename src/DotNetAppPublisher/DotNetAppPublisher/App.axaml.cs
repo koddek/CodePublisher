@@ -8,6 +8,7 @@ using System.Linq;
 using Avalonia.Markup.Xaml;
 using DotNetAppPublisher.Features.Deployment.Android;
 using DotNetAppPublisher.Features.GooglePlay;
+using DotNetAppPublisher.Features.Publishing.Capture;
 using DotNetAppPublisher.Services;
 using DotNetAppPublisher.ViewModels;
 using DotNetAppPublisher.Views;
@@ -38,9 +39,13 @@ public partial class App : Application
         try
         {
             var desktopInteractionService = new DesktopInteractionService();
-            var publisherService = new PublisherService();
+            var publisherService = new PublisherService(new AvaloniaAppIconProvider());
             var googlePlayViewModel = GooglePlayFeatureFactory.Create(publisherService, desktopInteractionService);
-            var mainViewModel = new MainViewModel(publisherService, desktopInteractionService, googlePlayViewModel);
+            var mainViewModel = new MainViewModel(
+                publisherService,
+                desktopInteractionService,
+                new AvaloniaScreenshotService(),
+                googlePlayViewModel);
 
             // File-system diagnostics are not supported by the browser runtime.
             if (!OperatingSystem.IsBrowser())

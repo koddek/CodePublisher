@@ -2,7 +2,7 @@ using DotNetAppPublisher.Features.GooglePlay.Models;
 
 namespace DotNetAppPublisher.Features.GooglePlay.Authentication;
 
-internal sealed class GoogleAuthenticationWorkflow
+public sealed class GoogleAuthenticationWorkflow
 {
     private readonly GoogleOAuthService _oauthService;
     private readonly IGoogleCredentialStore _credentialStore;

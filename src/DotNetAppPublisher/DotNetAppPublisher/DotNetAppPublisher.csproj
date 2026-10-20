@@ -29,4 +29,10 @@
  <PackageReference Include="SkiaSharp"/>
  <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies"/>
  </ItemGroup>
+
+ <ItemGroup>
+   <!-- The domain layer: publish policy, deployment, and the Google Play API client.
+        It carries no Avalonia dependency, so it stays testable without a UI. -->
+   <ProjectReference Include="..\DotNetAppPublisher.Core\DotNetAppPublisher.Core.csproj" />
+ </ItemGroup>
 </Project>

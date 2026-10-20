@@ -136,13 +136,3 @@ public sealed partial class GooglePlayEnvironmentVariableViewModel : ObservableO
         Status = exception.Message;
     }
 }
-
-public sealed record GooglePlayEnvironmentVariableDefinition(
-    string Name,
-    string Description,
-    bool IsRequired,
-    bool IsSecret,
-    string DisplayName = "",
-    string Example = "",
-    string SetupInstructions = "",
-    string HelpUrl = "");

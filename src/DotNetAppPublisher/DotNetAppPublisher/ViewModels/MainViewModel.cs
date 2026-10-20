@@ -12,6 +12,7 @@ using DotNetAppPublisher.Features.Deployment.Android;
 using DotNetAppPublisher.Features.GooglePlay;
 using DotNetAppPublisher.Features.GooglePlay.Models;
 using DotNetAppPublisher.Features.Publishing.Artifacts;
+using DotNetAppPublisher.Features.Publishing.Capture;
 using DotNetAppPublisher.Features.Publishing.Configure;
 using DotNetAppPublisher.Models;
 using DotNetAppPublisher.Services;
@@ -65,6 +66,7 @@ public partial class MainViewModel : ViewModelBase
     private const int LogFlushIntervalMs = 150;
     private readonly DesktopInteractionService _desktopInteractionService;
     private readonly PublisherService _publisherService;
+    private readonly IScreenshotService _screenshotService;
     private readonly GooglePlayViewModel _googlePlayViewModel;
     private CancellationTokenSource? _publishCts;
     private ProjectOutputLayout? _projectOutputLayout;
@@ -100,10 +102,12 @@ public partial class MainViewModel : ViewModelBase
     public MainViewModel(
         PublisherService publisherService,
         DesktopInteractionService desktopInteractionService,
+        IScreenshotService? screenshotService = null,
         GooglePlayViewModel? googlePlayViewModel = null)
     {
         _publisherService = publisherService;
         _desktopInteractionService = desktopInteractionService;
+        _screenshotService = screenshotService ?? new AvaloniaScreenshotService();
         _googlePlayViewModel = googlePlayViewModel ?? GooglePlayFeatureFactory.Create(
             publisherService,
             desktopInteractionService,
@@ -1552,7 +1556,7 @@ private string _projectDirectory = string.Empty;
     private async Task CopyWindowScreenshotAsync()
     {
         await RunScreenshotActionAsync(
-            async () => await _publisherService.CopyWindowScreenshotToClipboardAsync(_desktopInteractionService.Window, CancellationToken.None),
+            async () => await _screenshotService.CaptureWindowToClipboardAsync(_desktopInteractionService.Window, CancellationToken.None),
             "Screenshot to clipboard");
     }
 
@@ -1560,7 +1564,7 @@ private string _projectDirectory = string.Empty;
     private async Task SaveWindowScreenshotToDiskAsync()
     {
         await RunScreenshotActionAsync(
-            async () => await _publisherService.SaveWindowScreenshotToDiskAsync(_desktopInteractionService.Window, OutputDirectory, CancellationToken.None),
+            async () => await _screenshotService.CaptureWindowToDiskAsync(_desktopInteractionService.Window, OutputDirectory, CancellationToken.None),
             "Screenshot to disk");
     }
 

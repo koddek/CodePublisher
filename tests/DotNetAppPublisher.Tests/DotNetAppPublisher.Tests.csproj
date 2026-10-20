@@ -9,6 +9,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The domain layer is tested directly; the app project is referenced for the
+         view-layer helpers that have no domain equivalent. -->
+    <ProjectReference Include="..\..\src\DotNetAppPublisher\DotNetAppPublisher.Core\DotNetAppPublisher.Core.csproj" />
     <ProjectReference Include="..\..\src\DotNetAppPublisher\DotNetAppPublisher\DotNetAppPublisher.csproj" />
   </ItemGroup>
 

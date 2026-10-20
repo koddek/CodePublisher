@@ -57,6 +57,7 @@
     <ItemGroup>
         <TrimmerRootDescriptor Include="..\DotNetAppPublisher\Trimming\LinkerDescriptor.xml" />
         <TrimmerRootAssembly Include="DotNetAppPublisher" />
+        <TrimmerRootAssembly Include="DotNetAppPublisher.Core" />
     </ItemGroup>
 
     <Target Name="PrepareMacBundle" AfterTargets="Build" Condition="$([MSBuild]::IsOSPlatform('OSX'))">
