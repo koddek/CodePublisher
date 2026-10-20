@@ -215,6 +215,27 @@
                         </WrapPanel>
                         <TextBlock Classes="section-copy" Margin="0"
                                    Text="A tester on a testing line keeps receiving that line's build until the line stops serving it. After that, the next update is the production build, provided the production version code is at least as high as the one on the device."/>
+                        <Border Background="{DynamicResource InfoBannerBackgroundColor}" BorderBrush="{DynamicResource InfoBannerBorderColor}" BorderThickness="1" CornerRadius="6" Padding="12"
+                                IsVisible="{Binding HasConnectedDevice}">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="This device" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource InfoBannerTextColor}"/>
+                                <TextBlock Text="{Binding DeviceLineSummary}" FontSize="12" Foreground="{DynamicResource InfoBannerTextColor}" TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding DeviceLineSteps}" FontSize="12" Foreground="{DynamicResource InfoBannerTextColor}" TextWrapping="Wrap"
+                                           IsVisible="{Binding HasDeviceLineSteps}"/>
+                                <TextBlock FontSize="12" Foreground="{DynamicResource InfoBannerTextColor}" TextWrapping="Wrap"
+                                           IsVisible="{Binding HasPlaySigningCertificate}">
+                                    <TextBlock.Text>
+                                        <MultiBinding StringFormat="Google Play signs its downloads with the app signing key{0}.">
+                                            <Binding Path="PlaySigningCertificate" />
+                                        </MultiBinding>
+                                    </TextBlock.Text>
+                                </TextBlock>
+                                <TextBlock FontSize="12" TextWrapping="Wrap"
+                                           Foreground="{DynamicResource StatusSuccessTextColor}"
+                                           Text="This device carries the same certificate Google Play signs with, so a Play Store update can replace it."
+                                           IsVisible="{Binding IsDevicePlayUpdatable}"/>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </StackPanel>
             </Border>

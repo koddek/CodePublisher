@@ -7,6 +7,7 @@ using DotNetAppPublisher.Features.GooglePlay.Releases;
 using DotNetAppPublisher.Features.GooglePlay.Services;
 using DotNetAppPublisher.Features.GooglePlay.Setup;
 using DotNetAppPublisher.Features.GooglePlay.Signing;
+using DotNetAppPublisher.Features.Deployment.Android;
 using DotNetAppPublisher.Features.GooglePlay.State;
 using DotNetAppPublisher.Features.GooglePlay.Tracks;
 using DotNetAppPublisher.Models;
@@ -134,6 +135,114 @@ public sealed partial class GooglePlayViewModel : ObservableObject
 
     public ObservableCollection<GooglePlayAccountInfo> Accounts { get; } = [];
     public ObservableCollection<GooglePlayTrackInfo> Tracks { get; } = [];
+
+    /// <summary>
+    /// What the connected device has installed. The deploy section fills this in, so the release
+    /// line check can compare the version code the device runs with the version codes each line
+    /// serves.
+    /// </summary>
+    public GooglePlayDeviceLineState? ConnectedDevice { get; private set; }
+
+    /// <summary>Sets the device the release line check reasons about.</summary>
+    public void SetConnectedDevice(GooglePlayDeviceLineState? device)
+    {
+        ConnectedDevice = device;
+        OnPropertyChanged(nameof(ConnectedDevice));
+        OnPropertyChanged(nameof(HasConnectedDevice));
+        OnPropertyChanged(nameof(DeviceLineSummary));
+        OnPropertyChanged(nameof(DeviceLineSteps));
+        OnPropertyChanged(nameof(HasDeviceLineSteps));
+    }
+
+    /// <summary>
+    /// Plain words on which line the device is on, and what it takes to move it to the selected
+    /// line.
+    /// </summary>
+    public string DeviceLineSummary
+    {
+        get
+        {
+            if (ConnectedDevice is null)
+            {
+                return "No device is connected, so the release line check cannot run.";
+            }
+
+            if (SelectedTrack is null)
+            {
+                return "Select a release line to check the device against.";
+            }
+
+            var plan = BuildReleaseLinePlan();
+            var effective = GooglePlayReleaseLinePolicy.EffectiveLine(ConnectedDevice, BuildTrackLineStates());
+            var onLine = effective is null
+                ? "a line that cannot be identified"
+                : effective.DisplayName;
+
+            var head = $"The device runs version code {ConnectedDevice.InstalledVersionCode?.ToString() ?? "unknown"} " +
+                $"and is on {onLine}.";
+
+            return plan.CanReachTarget
+                ? $"{head} It can reach the {SelectedTrack.DisplayName} line."
+                : $"{head} {plan.BlockingReason}";
+        }
+    }
+
+    /// <summary>
+    /// The certificate Google Play signs releases with, as the API reports it. A local build
+    /// has to carry this certificate for a Play Store update to be able to replace it.
+    /// </summary>
+    public string PlaySigningCertificate { get; private set; } = string.Empty;
+
+    /// <summary>True when the Play signing certificate is known.</summary>
+    public bool HasPlaySigningCertificate => PlaySigningCertificate.Length > 0;
+
+    /// <summary>
+    /// True when the connected device's certificate matches the one Google Play signs with, so a
+    /// Play Store update can replace the install.
+    /// </summary>
+    public bool IsDevicePlayUpdatable =>
+        ConnectedDevice is { InstalledCertificateDigests.Count: > 0 } device &&
+        AndroidPlayUpdateCheck.Compare(device.InstalledCertificateDigests, [PlaySigningCertificate]) ==
+        AndroidPlayUpdateCompatibility.PlayUpdatable;
+
+    /// <summary>True when a device is connected, so the release line check can say something.</summary>
+    public bool HasConnectedDevice => ConnectedDevice is not null;
+
+    /// <summary>True when the release line check has steps the user has to take.</summary>
+    public bool HasDeviceLineSteps => DeviceLineSteps.Length > 0;
+
+    /// <summary>What the user has to do to move the device onto the selected line, in order.</summary>
+    public string DeviceLineSteps
+    {
+        get
+        {
+            if (ConnectedDevice is null || SelectedTrack is null)
+            {
+                return string.Empty;
+            }
+
+            var plan = BuildReleaseLinePlan();
+            return plan.Steps.Count == 0
+                ? string.Empty
+                : string.Join(" ", plan.Steps);
+        }
+    }
+
+    private GooglePlayReleaseLinePlan BuildReleaseLinePlan()
+    {
+        var device = ConnectedDevice ?? new GooglePlayDeviceLineState(null, false, []);
+        var target = SelectedTrack?.Id ?? string.Empty;
+        return GooglePlayReleaseLinePolicy.Plan(device, BuildTrackLineStates(), target);
+    }
+
+    private IReadOnlyList<GooglePlayTrackLineState> BuildTrackLineStates() =>
+        Tracks
+            .Select(track => new GooglePlayTrackLineState(
+                track.Id,
+                track.DisplayName,
+                track.IsProduction,
+                track.VersionCodes))
+            .ToArray();
 
     public string PackageId => _context?.PackageId ?? "No Android package detected";
     public string VersionLabel => _context is null ? "Select an Android project" : $"{_context.DisplayVersion} ({_context.VersionCode})";
@@ -715,12 +824,70 @@ public sealed partial class GooglePlayViewModel : ObservableObject
         SelectedTrack = Tracks.FirstOrDefault(track => GooglePlayTrackCatalog.IsInternalTesting(track.Id))
             ?? Tracks.FirstOrDefault(track => !track.IsProduction)
             ?? Tracks.FirstOrDefault();
+        OnPropertyChanged(nameof(DeviceLineSummary));
+        OnPropertyChanged(nameof(DeviceLineSteps));
+        await RefreshPlaySigningCertificateAsync(cancellationToken);
         SetStatus(
             tracks.Count == 0 ? "Play Console setup needed" : "Ready to publish",
             tracks.Count == 0
                 ? "Standard tracks are shown; confirm access and configuration in Play Console."
                 : $"Found {tracks.Count} release track{(tracks.Count == 1 ? string.Empty : "s")}.",
             tracks.Count == 0 ? GooglePlayStatusTone.Warning : GooglePlayStatusTone.Success);
+    }
+
+    /// <summary>
+    /// Reads the certificate Google Play signs releases with. The API reports it per version
+    /// code, and it is the same certificate for every version of the app.
+    /// </summary>
+    private async Task RefreshPlaySigningCertificateAsync(CancellationToken cancellationToken)
+    {
+        if (_context is null || SelectedAccount is null)
+        {
+            PlaySigningCertificate = string.Empty;
+            NotifyPlaySigningCertificate();
+            return;
+        }
+
+        var versionCode = Tracks
+            .SelectMany(track => track.VersionCodes)
+            .Select(code => int.TryParse(code, out var value) ? value : (int?)null)
+            .Where(code => code is not null)
+            .Select(code => code!.Value)
+            .OrderByDescending(code => code)
+            .FirstOrDefault();
+
+        if (versionCode == 0)
+        {
+            PlaySigningCertificate = string.Empty;
+            NotifyPlaySigningCertificate();
+            return;
+        }
+
+        try
+        {
+            var certificate = await _trackWorkflow.GetAppSigningCertificateAsync(
+                SelectedAccount.Id,
+                _context.PackageId,
+                versionCode,
+                cancellationToken);
+
+            PlaySigningCertificate = certificate ?? string.Empty;
+        }
+        catch (Exception)
+        {
+            // The certificate is a helpful extra, not a requirement: a failure to read it must not
+            // stop the release lines from being managed.
+            PlaySigningCertificate = string.Empty;
+        }
+
+        NotifyPlaySigningCertificate();
+    }
+
+    private void NotifyPlaySigningCertificate()
+    {
+        OnPropertyChanged(nameof(PlaySigningCertificate));
+        OnPropertyChanged(nameof(HasPlaySigningCertificate));
+        OnPropertyChanged(nameof(IsDevicePlayUpdatable));
     }
 
     /// <summary>

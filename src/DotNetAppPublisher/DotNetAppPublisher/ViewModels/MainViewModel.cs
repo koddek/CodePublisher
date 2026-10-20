@@ -11,6 +11,7 @@ using CommunityToolkit.Mvvm.Input;
 using DotNetAppPublisher.Features.Deployment.Android;
 using DotNetAppPublisher.Features.GooglePlay;
 using DotNetAppPublisher.Features.GooglePlay.Models;
+using DotNetAppPublisher.Features.GooglePlay.Tracks;
 using DotNetAppPublisher.Features.Publishing.Artifacts;
 using DotNetAppPublisher.Features.Publishing.Capture;
 using DotNetAppPublisher.Features.Publishing.Configure;
@@ -1625,6 +1626,9 @@ private string _projectDirectory = string.Empty;
     /// Shows what the device has installed for the package: who installed it, the version code
     /// it runs, and the certificate it was signed with. The user needs this to know whether a
     /// Play Store update can replace the install, and which release line the device is on.
+    ///
+    /// The result also feeds the Google Play workspace, so its release line check knows the
+    /// version code the device runs.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanRunAndroidActions))]
     private async Task InspectInstalledAndroidPackageAsync()
@@ -1639,14 +1643,22 @@ private string _projectDirectory = string.Empty;
             return;
         }
 
+        var installed = await _publisherService.ReadInstalledAndroidPackageAsync(
+            PackageId,
+            SelectedDevice?.Serial,
+            CancellationToken.None);
+
+        _googlePlayViewModel.SetConnectedDevice(installed is null
+            ? null
+            : new GooglePlayDeviceLineState(
+                installed.VersionCode,
+                installed.InstalledByGooglePlay,
+                installed.CertificateDigests));
+
         await RunQuickActionAsync(
-            async () => await _publisherService.ReadInstalledAndroidPackageAsync(
-                    PackageId,
-                    SelectedDevice?.Serial,
-                    CancellationToken.None)
-                is { } installed
-                ? DescribeInstalledPackage(installed)
-                : $"{PackageId} is not installed on {SelectedDevice?.Name}.",
+            async () => installed is null
+                ? $"{PackageId} is not installed on {SelectedDevice?.Name}."
+                : DescribeInstalledPackage(installed),
             "Inspect installed app");
     }
 

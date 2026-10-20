@@ -848,7 +848,43 @@ public sealed class GooglePlayApiService
 
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         var message = TryReadGoogleError(body) ?? "Google Play returned an unknown error.";
-        throw new InvalidOperationException($"{context} ({(int)response.StatusCode}): {message}");
+        throw new InvalidOperationException(
+            $"{context} ({(int)response.StatusCode}): {message}{ExplainPlayError(message)}");
+    }
+
+    /// <summary>
+    /// Adds the next step for the errors that regularly block a release, because the bare Google
+    /// message does not say what to do about it.
+    /// </summary>
+    private static string ExplainPlayError(string message)
+    {
+        if (message.Contains("already been used", StringComparison.OrdinalIgnoreCase))
+        {
+            return " That version code is used by this app on some line already, and Google Play " +
+                "never reuses one. Raise the version code of the build and publish again.";
+        }
+
+        if (message.Contains("CHANGES_ALREADY_IN_REVIEW", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("changes in review", StringComparison.OrdinalIgnoreCase))
+        {
+            return " A previous change is still in review. Wait for it to finish, or cancel it in the " +
+                "Play Console before publishing again.";
+        }
+
+        if (message.Contains("multiApkShadowedActiveApk", StringComparison.OrdinalIgnoreCase))
+        {
+            return " A higher version code already exists on another line, so this one is never served. " +
+                "Publish a higher version code, or remove the higher release from the other line.";
+        }
+
+        if (message.Contains("required permission", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("403", StringComparison.OrdinalIgnoreCase))
+        {
+            return " The account may not have permission for this app. Check that the Google account is " +
+                "an app owner or tester with release access.";
+        }
+
+        return string.Empty;
     }
 
     private static string? TryReadGoogleError(string body)
