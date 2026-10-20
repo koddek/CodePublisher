@@ -7,7 +7,7 @@ using DotNetAppPublisher.Features.GooglePlay.Models;
 
 namespace DotNetAppPublisher.Features.GooglePlay.Services;
 
-internal sealed class GooglePlayApiService
+public sealed class GooglePlayApiService
 {
     private const string BaseUrl = "https://androidpublisher.googleapis.com/androidpublisher/v3";
     private readonly HttpClient _httpClient;
@@ -435,4 +435,4 @@ internal sealed class GooglePlayApiService
     }
 }
 
-internal sealed record GooglePlayReleaseNote(string Language, string Text);
+public sealed record GooglePlayReleaseNote(string Language, string Text);

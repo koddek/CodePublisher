@@ -2,7 +2,7 @@ using DotNetAppPublisher.Features.GooglePlay.Models;
 
 namespace DotNetAppPublisher.Features.GooglePlay.Authentication;
 
-internal interface IGoogleCredentialStore
+public interface IGoogleCredentialStore
 {
     GooglePlayAccountInfo Add(GoogleOAuthTokens tokens, GooglePlayAccountInfo account);
 

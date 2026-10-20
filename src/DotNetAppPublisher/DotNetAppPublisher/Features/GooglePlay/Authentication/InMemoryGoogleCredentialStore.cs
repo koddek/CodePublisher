@@ -5,7 +5,7 @@ using DotNetAppPublisher.Features.GooglePlay.Models;
 
 namespace DotNetAppPublisher.Features.GooglePlay.Authentication;
 
-internal sealed class InMemoryGoogleCredentialStore : IGoogleCredentialStore
+public sealed class InMemoryGoogleCredentialStore : IGoogleCredentialStore
 {
     private const string TokenEndpoint = "https://oauth2.googleapis.com/token";
     private readonly HttpClient _httpClient;
@@ -120,7 +120,7 @@ internal sealed class InMemoryGoogleCredentialStore : IGoogleCredentialStore
     }
 }
 
-internal sealed record GoogleOAuthTokens(
+public sealed record GoogleOAuthTokens(
     string AccessToken,
     string RefreshToken,
     DateTimeOffset AccessTokenExpiry);

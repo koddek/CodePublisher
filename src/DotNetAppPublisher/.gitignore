@@ -63,6 +63,8 @@ project.fragment.lock.json
 artifacts/
 # The Publishing/Artifacts feature slice holds artifact-ranking source, not build output.
 !DotNetAppPublisher/Features/Publishing/Artifacts/
+# The GooglePlay/Releases feature slice holds release-submission source, not build output.
+!DotNetAppPublisher/Features/GooglePlay/Releases/
 
 # Tye
 .tye/

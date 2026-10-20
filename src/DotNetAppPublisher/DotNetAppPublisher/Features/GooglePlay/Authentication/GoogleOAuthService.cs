@@ -9,7 +9,7 @@ using DotNetAppPublisher.Features.GooglePlay.Models;
 
 namespace DotNetAppPublisher.Features.GooglePlay.Authentication;
 
-internal sealed class GoogleOAuthService
+public sealed class GoogleOAuthService
 {
     private const string AuthorizationEndpoint = "https://accounts.google.com/o/oauth2/v2/auth";
     private const string TokenEndpoint = "https://oauth2.googleapis.com/token";
@@ -26,7 +26,7 @@ internal sealed class GoogleOAuthService
         _clientIdProvider = clientIdProvider;
     }
 
-    internal async Task<GoogleOAuthResult> SignInAsync(
+    public async Task<GoogleOAuthResult> SignInAsync(
         bool includeCloudAdmin,
         CancellationToken cancellationToken)
     {
@@ -259,7 +259,7 @@ internal sealed class GoogleOAuthService
         return string.IsNullOrWhiteSpace(initials) ? "G" : initials;
     }
 
-    internal sealed record GoogleOAuthResult(GooglePlayAccountInfo Account, GoogleOAuthTokens Tokens);
+    public sealed record GoogleOAuthResult(GooglePlayAccountInfo Account, GoogleOAuthTokens Tokens);
     private sealed record GoogleUserInfo(string Subject, string Email, string Name);
     private sealed record OAuthCallback(string? Error, string? Code, string? State, string? ErrorCode);
 }
