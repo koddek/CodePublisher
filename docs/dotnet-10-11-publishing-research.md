@@ -95,16 +95,18 @@ NativeAOT is already a native executable; do not combine it with the single-file
 
 | Combination | Result | Enforcement |
 | --- | --- | --- |
-| Framework-dependent + trimmed | Invalid | Normalizes trimming off; command builder rejects invalid direct input |
+| Framework-dependent + trimmed | Invalid | The graph turns self-contained on with the trimming request; the SDK would fail with NETSDK1102 |
 | Self-contained + trimmed | Valid | Requires trim-safe roots and runtime tests |
-| NativeAOT + ReadyToRun | Invalid | Normalizes ReadyToRun off; command builder rejects conflicts |
-| NativeAOT + trimmed | AOT implies full trimming | UI leaves the separate trim switch disabled |
-| NativeAOT + single-file | Redundant/risky | UI clears single-file; command builder rejects direct input |
-| Android RunAOT + `AndroidLinkMode=None` | Invalid | Normalized off; command builder gives an actionable error |
-| Android RunAOT + `PublishTrimmed=false` | Invalid (`XA1030`) | Normalized to trimmed; command builder gives an actionable error |
+| NativeAOT + ReadyToRun | Invalid | The graph turns ReadyToRun off; the SDK does not error but the two are mutually exclusive (dotnet/runtime#126598) |
+| NativeAOT + trimmed | AOT implies trimming | The graph keeps trimming on. The SDK fails the build with "PublishTrimmed is implied by native compilation and cannot be disabled." when trimming is explicitly off |
+| NativeAOT + single-file | Redundant | The graph turns single-file off; the SDK skips the single-file bundler under AOT without an error |
+| Single-file + no app host | Invalid | The graph turns the app host on; the SDK fails with NETSDK1098 |
+| Android RunAOT + `AndroidLinkMode=None` | Invalid | The graph switches the link mode to SdkOnly; the SDK fails with XA1030 without trimming |
+| Android RunAOT + `PublishTrimmed=false` | Invalid (`XA1030`) | Android trimming follows the linker, so the link mode rule settles it |
 | Android D8 + ProGuard | Invalid (`XA1011`) | Profile falls back to R8/D8; legacy direct values are rejected |
 | iOS simulator + archive/IPA | Invalid for the simulator path | Command uses `build` and omits archive/IPA options |
 | MacCatalyst + R2R/AOT/single-file | Not applicable | Command emits explicit false values; policy explains the reason |
+| iOS BuildIpa without ArchiveOnBuild | Incomplete | The graph turns archiving on, because the .ipa is packaged from the archive |
 
 ## Platform matrix
 
@@ -133,6 +135,11 @@ NativeAOT is already a native executable; do not combine it with the single-file
 11. The custom macOS app-bundle target ran after `Publish` but before the SDK's NativeAOT `CopyNativeBinary` step, so the `.app` bundle kept a 122 KB framework-dependent apphost while the publish root became a 25 MB native binary; launching the bundled app failed with "The application to execute does not exist". The bundle body is now shared by two anchors: `Publish` for normal publishes and `CopyNativeBinary` for NativeAOT. The bundle executable is now byte-identical to the publish root, and 4-second launch smokes of the default self-contained, trimmed, ReadyToRun, and NativeAOT bundles produced no console errors.
 12. `PublishAot=true` combined with `--no-restore` silently degrades to a trimmed self-contained publish when the assets file was produced by a restore that did not see `PublishAot` (ILCompiler is then missing from the graph). Observed locally: `dotnet restore -p:Configuration=Release` followed by `dotnet publish -p:PublishAot=true --no-restore` produced a 122 KB apphost plus 71 managed assemblies and no native binary, with no error. The correct invocation restores implicitly, producing a 25 MB native binary with zero managed assemblies. CI now runs the NativeAOT publish without `--no-restore` and fails if the managed entry assembly is present.
 13. `Avalonia.iOS` and `Avalonia.Android` were pinned to the 11.3 line while the core Avalonia packages were on 12.1.2. They are not referenced by any current project, but the central version list now keeps them aligned so a future mobile host does not inherit a mixed 11.3/12.1 graph. `Avalonia.Diagnostics` stays on 11.3.21 because NuGet has no 12.x release for that package.
+14. The publish options were related by scattered checks: a capability check in `PublishOptionPolicy` and a separate normalization pass in `PublishSettingsPolicy`. The two could disagree, and the normalization ran after the fact, so a combination the SDK rejects could reach the command. A single declarative graph now holds every relationship, and the platform rules and the graph are applied together until the result settles.
+15. Native AOT on a desktop target published `-p:PublishTrimmed=false` alongside `-p:PublishAot=true`. The .NET SDK rejects that combination with "PublishTrimmed is implied by native compilation and cannot be disabled." (dotnet/runtime `Microsoft.NETCore.Native.Publish.targets`). Reproduced locally: the same publish succeeds with `PublishTrimmed=true` and fails with `PublishTrimmed=false`. The graph now keeps trimming on under AOT.
+16. The .NET 8 SDK infers a self-contained publish for a trimmed publish, so a trimmed request no longer has to be dropped for a framework-dependent publish. The graph turns self-contained on with the trimming request instead, matching the SDK's own inference.
+17. Google Play signs every download with the app signing key, not the upload key. A build signed with the upload key is a different signer to the platform, so Android refuses to update it and Play never offers one. The install guidance and the new device inspection report the certificate rather than implying that the upload key is the right one.
+18. The Play API cannot update a track by itself. `edits.tracks.update` replaces the desired state of the track, so an empty release array is how a release is removed from it, and a `halted` status is how a rollout is stopped. Promotion is the same call against the target track with the same version code; the bundle is not uploaded again.
 
 ## Stability recommendation
 
@@ -166,6 +173,11 @@ The test suite does not call live Google Play, OAuth, Android devices, or iOS de
 ## Official sources
 
 - [.NET 11 download and release-candidate status](https://dotnet.microsoft.com/en-us/download/dotnet/11.0)
+- [How Android handles app updates](https://developer.android.com/google/play/app-updates) — the update rules: same application ID, same signing certificate (or a proof of rotation), and a version code at least as high as the installed one.
+- [Use Play App Signing](https://support.google.com/googleplay/android-developer/answer/9842756) — the upload key signs what you upload; the app signing key signs what the device receives.
+- [Version codes and testing track statuses](https://support.google.com/googleplay/android-developer/answer/9845334) — the highest eligible version code wins, production is always eligible, and internal testing is exclusive.
+- [Google Play release tracks](https://developers.google.com/android-publisher/tracks) — the track identifiers, the release statuses, and the halt and rollout rules.
+- [Ending a test](https://support.google.com/googleplay/android-developer/answer/9845334) — removing a release from a testing track so testers fall back to production.
 - [What’s new in .NET 11](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/overview)
 - [What’s new in the .NET 11 SDK](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/sdk)
 - [.NET 11 breaking changes](https://learn.microsoft.com/en-us/dotnet/core/compatibility/11)

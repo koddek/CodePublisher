@@ -210,4 +210,66 @@ Scope: Checking AAB builds both APK and AAB in one publish; unchecking AAB build
   EXPECT: the Windows job publishes self-contained, Linux/macOS publish NativeAOT without `--no-restore`, the managed entry assembly assertion guards against a silent trim fallback, and the macOS job compares the bundle executable with the publish root.
   EVIDENCE: workflow updated with the three publish/verify steps. Cross-OS execution is deferred to GitHub Actions because only the macOS osx-arm64 host is available locally; the same commands were executed locally for the AOT, trim, ReadyToRun, and self-contained paths.
 
+## Core library, option graph, and Play track increment
 
+Scope: Move the UI-free domain layer (publish policy, deployment, the Google Play API client, the
+shared models) out of the Avalonia app into a referenced class library; replace the ad-hoc
+publish-option normalization with one declarative dependency graph that auto-enables required
+companions, forbids mutually exclusive combinations, and cascades unchecks; and complete the
+Google Play release-track workflow (promote, remove from track, halt, rollout change, closed-track
+creation, version codes) so a release can move between the release, beta, and test lines without
+the Play Console website.
+
+- [x] L1: The domain layer lives in a UI-free class library that the app and the test suite both reference.
+  CHECK: dotnet build DotNetAppPublisher.slnx --no-restore
+  EXPECT: Build succeeded.
+  EVIDENCE: `Build succeeded. 0 Warning(s) 0 Error(s)` in Debug and in Release. The new `src/DotNetAppPublisher/DotNetAppPublisher.Core` project holds Models, Services, and the whole `Features/` tree; the app project keeps the views, the view models, the Avalonia capture adapter, and the desktop interaction service. `DotNetAppPublisher.slnx` lists all five projects; the test project references Core directly.
+
+- [x] L2: The core library carries no Avalonia reference and no UI types.
+  CHECK: if grep -rln "Avalonia" src/DotNetAppPublisher/DotNetAppPublisher.Core --include=*.cs | grep .; then exit 1; else echo no-avalonia-in-core; fi
+  EXPECT: no-avalonia-in-core
+  EVIDENCE: `no-avalonia-in-core`. The two Avalonia leaks were removed at the source: `PublisherService` used `AssetLoader` for the macOS icon (now the `IAppIconProvider` seam, implemented by `AvaloniaAppIconProvider` in the app project) and forwarded six screenshot methods over `Window`/`Control`/`ScrollViewer` (now `IScreenshotService`, called by the view model). The environment-variable view model also stayed in the app project, because it needs the MVVM toolkit.
+
+- [x] L3: One declarative dependency graph governs every publish option, and the resolver honours it on every toggle.
+  CHECK: dotnet run --project tests/DotNetAppPublisher.Tests/DotNetAppPublisher.Tests.csproj -- --disable-logo --progress off
+  EXPECT: all tests pass, including the per-platform option matrix.
+  EVIDENCE: 288/288 passed (Release, macOS osx-arm64, .NET 10.0.13). `PublishOptionGraph` holds every relationship with its platform scope and reason; `PublishOptionResolver` applies the platform rules and the graph together until the result settles, and `MainViewModel` reports what it changed. `PublishOptionGraphTests` covers the resolution rules per platform plus four invariants on the graph itself.
+
+- [x] L4: Required companions are enabled automatically, mutually exclusive options cannot both be on, and unchecking a prerequisite unchecks its dependents.
+  CHECK: dotnet run --project tests/DotNetAppPublisher.Tests/DotNetAppPublisher.Tests.csproj --treenode-filter "/*/*/PublishOptionGraphTests/*" --disable-logo --progress off
+  EXPECT: option-graph resolution tests pass.
+  EVIDENCE: 20/20 passed. AOT turns on self-contained and trimming and turns off ReadyToRun and single-file; unchecking self-contained turns off AOT and trimming; ReadyToRun wins when the user turns it on against AOT; trimming turns on self-contained; single-file turns on the app host; Android RunAOT switches the link mode to SdkOnly and turning the linker off takes RunAOT and Profiled AOT with it; Profiled AOT turns on RunAOT; iOS BuildIpa turns on archiving and turning archiving off takes BuildIpa with it; an optional companion is offered rather than forced. Four more tests guard the graph itself: resolving a settled state changes nothing, resolving twice gives the same result, no rule is declared twice, and every rule that targets a choice option names the values it accepts. The last two caught two real defects while they were being written: a duplicated RunAOT rule and a suggestion rule that pointed at a choice option with no accepted values, which would have switched the source off on every pass.
+
+- [x] L5: Google Play track management covers promote, remove-from-track, halt, rollout change, closed-track creation, and version codes.
+  CHECK: dotnet run --project tests/DotNetAppPublisher.Tests/DotNetAppPublisher.Tests.csproj -- --disable-logo --progress off
+  EXPECT: track management tests pass.
+  EVIDENCE: `GooglePlayTrackCatalogTests` pins the track identifiers and the classification of every kind (production, open testing, internal testing, the legacy closed track, developer-named closed tracks, and the `prefix:name` form-factor tracks) plus the form-factor prefix parsing. `GooglePlayTrackPayloadTests` pins the four request shapes: an empty release array (how a release is removed from a track), a halted release that keeps its version codes, a staged rollout with its user fraction, and a full rollout without one. `GooglePlayTrackWorkflow` exposes promote, remove, halt, rollout change, closed-track creation, used version codes, and the Play app-signing certificate; `GooglePlayViewModel` wires them to the release workspace and the Google Play view.
+
+- [x] L6: The Play app-signing certificate is compared with the local build so a sideloaded install is known to be Play-updatable or not.
+  CHECK: dotnet run --project tests/DotNetAppPublisher.Tests/DotNetAppPublisher.Tests.csproj -- --disable-logo --progress off
+  EXPECT: certificate compatibility tests pass.
+  EVIDENCE: `AndroidPlayUpdateCheckTests` covers the matching case, the mismatching case, the colon-separated uppercase form the Play Console shows, the unknown case, and the wording of all three outcomes. `AndroidSigningInspector.ParseVersionCode` reads the installed version code, and the new **Inspect installed app** deploy action reports who installed the app, its version code, and its certificate, with the Play consequence spelled out.
+
+- [x] L7: The solution still builds and the full suite passes after the library split.
+  CHECK: dotnet build DotNetAppPublisher.slnx --no-restore && dotnet run --project tests/DotNetAppPublisher.Tests/DotNetAppPublisher.Tests.csproj -- --disable-logo --progress off
+  EXPECT: zero errors and all tests pass.
+  EVIDENCE: Debug and Release builds succeed with zero errors and zero warnings. 288/288 tests pass in Debug and in Release (`--configuration Release --no-build`). The NativeAOT publish of the desktop host produces no managed entry assembly and no application-owned linker warnings, and the published app stays alive with an empty log. The browser host still serves its page with the same pre-existing `libSkiaSharp` startup failure it has on the untouched baseline; that failure needs the emscripten workload, which is not installed here, and it is unrelated to this increment.
+
+## Defects found and fixed in this increment
+
+- [x] X1: Native AOT on a desktop target published a combination the .NET SDK rejects.
+  CHECK: dotnet publish src/DotNetAppPublisher/DotNetAppPublisher.Desktop/DotNetAppPublisher.Desktop.csproj --configuration Release --self-contained true -p:PublishAot=true -p:PublishReadyToRun=false -p:PublishSingleFile=false -o "$TMPDIR/dnap-ci-aot"
+  EXPECT: the publish succeeds and the managed entry assembly is absent.
+  EVIDENCE: Before the fix the publish failed with `error : PublishTrimmed is implied by native compilation and cannot be disabled.` (dotnet/runtime `Microsoft.NETCore.Native.Publish.targets`), reproduced on a minimal project. The builder emitted `-p:PublishTrimmed=false` next to `-p:PublishAot=true`. The option graph now keeps trimming on under AOT. After the fix the publish succeeds with no managed entry assembly.
+- [x] X2: The CI NativeAOT job passed the rejected combination, so it failed on every run.
+  CHECK: dotnet publish src/DotNetAppPublisher/DotNetAppPublisher.Desktop/DotNetAppPublisher.Desktop.csproj --configuration Release --self-contained true -p:PublishAot=true -p:PublishReadyToRun=false -p:PublishSingleFile=false -o "$TMPDIR/dnap-ci-aot"
+  EXPECT: the publish succeeds.
+  EVIDENCE: The workflow passed `-p:PublishTrimmed=false -p:PublishAot=true`, which reproduces the SDK error above. The flag is removed; the publish now succeeds with no managed entry assembly.
+- [x] X3: A whole feature slice was missing from version control.
+  CHECK: git ls-files src/DotNetAppPublisher/DotNetAppPublisher/Features/GooglePlay/Releases/
+  EXPECT: the release workflow is tracked.
+  EVIDENCE: `Features/GooglePlay/Releases/` matched the `[Rr]eleases/` ignore rule, so `GooglePlayReleaseWorkflow.cs` was never committed. The baseline commit does not build: the app project cannot resolve `GooglePlayReleaseWorkflow`. A negation rule was added to `src/DotNetAppPublisher/.gitignore` and the file is now tracked.
+- [x] X4: The install guidance named the wrong signing key.
+  CHECK: dotnet run --project tests/DotNetAppPublisher.Tests/DotNetAppPublisher.Tests.csproj -- --disable-logo --progress off
+  EXPECT: certificate compatibility tests pass.
+  EVIDENCE: The install note told the user to sign with "the keystore registered in Play Console", which is the upload key. Google Play signs its downloads with the app signing key, so a build signed with the upload key can never be replaced by a Play Store update. The wording now names the app signing key and the signed universal APK from Play Console as the two ways to get a Play-updatable build.

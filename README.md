@@ -16,12 +16,14 @@ It is built with Avalonia and currently supports Android, macOS, Windows, and iO
 - Generate Windows publish outputs with `.exe` launcher support
 - Generate iOS publish commands with archive/IPA toggles
 - Toggle platform-specific publish settings including trimming, AOT, linker/shrinker, and cleanup behavior
+- Keep the publish options consistent with each other: turning on an option switches on the companion it needs, turning off a prerequisite turns off everything that relied on it, and two options that cannot be used together are never both on. An optional companion is offered rather than forced
 - Preview the exact `dotnet publish` command before running it
 - Stream live publish output in the app
 - Open the folder that actually holds the published APK/AAB — never a parent you have to dig through
 - Detect and deploy to real Android phones and tablets over USB or Wi-Fi, alongside emulators
 - See what the selected target reports about itself — model, Android version, API level, CPU ABI, transport, and readiness — in a row under the device selector
 - Install as an in-place update (`adb install -r`) that keeps app data; a preflight compares the APK's signing certificate with the copy already on the device and blocks a mismatched build — with both fingerprints and its Google Play update impact — before any command runs, instead of wiping data for you
+- Inspect what the device has installed for a package: who installed it, the version code it runs, and the certificate it carries, so you can tell whether a Play Store update can replace it
 - Pair wireless debugging three ways: the Android 11+ pairing code, a QR code the phone scans (Developer options → Wireless debugging → **Pair device with QR code**), or the legacy `adb tcpip` step for Android 10 and older
 - Browse the device's public folders (Downloads, Pictures, DCIM, Documents, Movies, Music), delete files with a confirmation, drag files from the computer into the open folder, and save device files back to the computer
 - Detect real iPhone and iPad targets with `xcrun devicectl` (macOS, Xcode 15+) and install, launch, or stop a signed build on one
@@ -33,6 +35,7 @@ It is built with Avalonia and currently supports Android, macOS, Windows, and iO
 - Publish Android App Bundles to Google Play from a dedicated Google Play workspace
 - Configure the Google Desktop OAuth client ID directly in the app, with session-only or user-profile persistence and visible configured/not-configured status
 - Connect a personal Google account with browser OAuth, choose internal, closed, open, or production tracks, add release notes, and submit staged or full rollouts
+- Move a release between lines without opening the Play Console website: promote a tested build to production, remove a release from a testing line, halt a rollout, change the rollout percentage, or create a closed testing line
 - Keep Google OAuth tokens and Android upload-key passwords in memory for the current session; use **Clear session** or quit to remove them
 
 ## Why this exists
@@ -94,11 +97,14 @@ DotNetAppPublisher/
 ├── DotNetAppPublisher.slnx
 └── src/
     └── DotNetAppPublisher/
-        ├── DotNetAppPublisher/
+        ├── DotNetAppPublisher.Core/       # UI-free domain layer
+        │   ├── Models/
+        │   ├── Services/
         │   └── Features/
         │       ├── GooglePlay/
         │       │   ├── Authentication/
         │       │   ├── Releases/
+        │       │   ├── Services/
         │       │   ├── Setup/
         │       │   ├── Signing/
         │       │   ├── State/
@@ -106,15 +112,22 @@ DotNetAppPublisher/
         │       ├── Publishing/
         │       │   ├── Artifacts/
         │       │   ├── Build/
-        │       │   ├── Capture/
         │       │   ├── Configure/
         │       │   ├── Inspect/
         │       │   └── Process/
         │       ├── Deployment/
+        │       │   ├── Android/
+        │       │   └── Ios/
         │       └── Shared/
+        ├── DotNetAppPublisher/            # Avalonia app: views and view models
         ├── DotNetAppPublisher.Browser/
         └── DotNetAppPublisher.Desktop/
 ```
+
+The `DotNetAppPublisher.Core` library carries the publish option graph, the publish command
+builder, the deployment services, and the Google Play API client. It has no Avalonia dependency,
+so every rule in it is testable without a window. The app project holds the views, the view
+models, and the Avalonia-bound adapters, and references the library.
 
 ## GitHub Actions
 
@@ -130,7 +143,6 @@ That gives the repo a solid starting point for sharing on GitHub without having 
 ### Publish workflows
 
 - Add guided presets for safe test builds, store-ready Android builds, and repeatable release profiles
-- Add validation rules that disable unsupported combinations before publish
 - Add saved publish profiles per project
 
 ### Google Play support
@@ -138,9 +150,11 @@ That gives the repo a solid starting point for sharing on GitHub without having 
 The current Google Play slice provides a dedicated workspace for:
 
 - personal Google account OAuth with session-only credentials
-- internal, closed, open, and production tracks
+- internal, closed, open, and production tracks, discovered by their real identifiers
 - localized release notes and staged or full rollouts
 - AAB structure preflight, upload, commit, and status checks
+- moving a release between lines: promote to another track, remove it from a testing line, halt it, or change its rollout
+- creating a closed testing line
 - in-memory upload-key setup from the Signing workspace, linked from the Google Play release card
 - clear-session controls for OAuth and signing material
 
@@ -174,6 +188,9 @@ The app is already useful for Android, macOS, Windows, and iOS publish flows, pl
 - Raw OAuth tokens, service-account keys, and keystore passwords are never shown in command previews or persisted by the Google Play slice. Session credentials are cleared when the window closes.
 - New Play apps, legal declarations, production access, managed publishing, and signing-key resets remain manual Play Console actions when the supported API does not expose them.
 - Some .NET projects override trim-related properties in custom ways. .NET App Publisher detects common project-specific trim property patterns so AOT and trimming combinations can be emitted correctly.
+- The publish options are related by one declarative graph, so the UI, the normalizer, and the command builder cannot disagree. Native AOT always trims — the .NET SDK fails the build with "PublishTrimmed is implied by native compilation and cannot be disabled." when trimming is off — so the graph keeps trimming on under AOT. ReadyToRun and single-file are mutually exclusive with AOT, trimming needs a self-contained publish, Android ahead-of-time compilation needs the linker, and the .ipa needs the archive.
+- Google Play signs its downloads with the app signing key, not the upload key. A build signed with the upload key can never be replaced by a Play Store update, because Android only accepts an update when the signing certificate matches. The app compares the certificate of a local build with the one on the device, and reports the Play app signing certificate where the API exposes it.
+- Google Play serves the highest version code a user is eligible for across every track, and never downgrades. Moving a device off a testing line therefore needs the release removed from that line *and* a production version code at least as high as the one on the device. Internal testing is exclusive: an internal tester receives only that track's version code, even when production is higher.
 - The browser host uses Avalonia's software renderer, synchronizes its canvas backing store after startup, and disables desktop-only device discovery, elevated processes, file browsing, and Google OAuth in browser mode.
 - The master-detail view narrows its navigation, stacks header actions, wraps form groups, and uses compact icon controls for low-emphasis actions at smaller window sizes.
 - `Signing` and `Google Play` are adjacent master-detail destinations; routine status stays inline, while modal alerts are reserved for errors and confirmations with a title and vertically centered details.
