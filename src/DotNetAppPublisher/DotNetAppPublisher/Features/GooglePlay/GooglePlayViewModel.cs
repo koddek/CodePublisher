@@ -707,12 +707,12 @@ public sealed partial class GooglePlayViewModel : ObservableObject
 
         if (Tracks.Count == 0)
         {
-            Tracks.Add(new GooglePlayTrackInfo("qa", "Internal testing", "Internal testing", "Not configured", false));
-            Tracks.Add(new GooglePlayTrackInfo("beta", "Open testing", "Open testing", "Not configured", false));
-            Tracks.Add(new GooglePlayTrackInfo("production", "Production", "Production", "Not configured", true));
+            Tracks.Add(GooglePlayTrackCatalog.Describe(GooglePlayTrackCatalog.InternalTesting, null, []));
+            Tracks.Add(GooglePlayTrackCatalog.Describe(GooglePlayTrackCatalog.OpenTesting, null, []));
+            Tracks.Add(GooglePlayTrackCatalog.Describe(GooglePlayTrackCatalog.Production, null, []));
         }
 
-        SelectedTrack = Tracks.FirstOrDefault(track => track.Id == "qa")
+        SelectedTrack = Tracks.FirstOrDefault(track => GooglePlayTrackCatalog.IsInternalTesting(track.Id))
             ?? Tracks.FirstOrDefault(track => !track.IsProduction)
             ?? Tracks.FirstOrDefault();
         SetStatus(
@@ -721,6 +721,234 @@ public sealed partial class GooglePlayViewModel : ObservableObject
                 ? "Standard tracks are shown; confirm access and configuration in Play Console."
                 : $"Found {tracks.Count} release track{(tracks.Count == 1 ? string.Empty : "s")}.",
             tracks.Count == 0 ? GooglePlayStatusTone.Warning : GooglePlayStatusTone.Success);
+    }
+
+    /// <summary>
+    /// Removes the release from the selected track. This is how a tester gets back onto the
+    /// production line: once the track stops serving the release, the next update the device
+    /// receives is the production build, as long as its version code is at least as high as the
+    /// one already installed.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanManageReleaseLine))]
+    private async Task RemoveReleaseFromTrackAsync()
+    {
+        if (_context is null || SelectedAccount is null || SelectedTrack is null)
+        {
+            return;
+        }
+
+        var track = SelectedTrack;
+        var confirmed = await _desktopInteractionService.ConfirmAsync(
+            "Remove the release from this track",
+            $"Remove the release from {track.DisplayName} ({track.Id})?\n\n" +
+            "Testers on that track stop receiving it, so their next update comes from another line, " +
+            "usually production. The app stays installed on their device.");
+        if (!confirmed)
+        {
+            return;
+        }
+
+        await RunAsync(async cancellationToken =>
+        {
+            var result = await _trackWorkflow.RemoveReleaseFromTrackAsync(
+                SelectedAccount.Id,
+                _context.PackageId,
+                track.Id,
+                message => Activity = message,
+                cancellationToken);
+
+            SetStatus("Release removed", result.Message, GooglePlayStatusTone.Success);
+            await LoadTracksAsync(cancellationToken);
+        }, "Removing the release from the track");
+    }
+
+    /// <summary>Holds back the release on the selected track so it is no longer served.</summary>
+    [RelayCommand(CanExecute = nameof(CanManageReleaseLine))]
+    private async Task HaltReleaseAsync()
+    {
+        if (_context is null || SelectedAccount is null || SelectedTrack is null)
+        {
+            return;
+        }
+
+        var track = SelectedTrack;
+        if (track.VersionCodes.Count == 0)
+        {
+            SetStatus(
+                "Nothing to halt",
+                $"The {track.DisplayName} track has no release.",
+                GooglePlayStatusTone.Warning);
+            return;
+        }
+
+        var confirmed = await _desktopInteractionService.ConfirmAsync(
+            "Halt the release on this track",
+            $"Stop serving the release on {track.DisplayName} ({track.Id})?\n\n" +
+            "The previous release on that track takes its place. A first release cannot be halted, " +
+            "because there is nothing to fall back to.");
+        if (!confirmed)
+        {
+            return;
+        }
+
+        await RunAsync(async cancellationToken =>
+        {
+            var result = await _trackWorkflow.HaltReleaseAsync(
+                SelectedAccount.Id,
+                _context.PackageId,
+                track.Id,
+                ReleaseName,
+                track.VersionCodes,
+                message => Activity = message,
+                cancellationToken);
+
+            SetStatus("Release halted", result.Message, GooglePlayStatusTone.Success);
+            await LoadTracksAsync(cancellationToken);
+        }, "Halting the release");
+    }
+
+    /// <summary>Copies the release on the selected track to another track, keeping the version code.</summary>
+    [RelayCommand(CanExecute = nameof(CanManageReleaseLine))]
+    private async Task PromoteReleaseAsync()
+    {
+        if (_context is null || SelectedAccount is null || SelectedTrack is null)
+        {
+            return;
+        }
+
+        var source = SelectedTrack;
+        if (source.VersionCodes.Count == 0)
+        {
+            SetStatus(
+                "Nothing to promote",
+                $"The {source.DisplayName} track has no release to promote.",
+                GooglePlayStatusTone.Warning);
+            return;
+        }
+
+        var targets = Tracks.Where(track => track.Id != source.Id).ToArray();
+        if (targets.Length == 0)
+        {
+            SetStatus(
+                "No target track",
+                "There is no other track to promote this release to.",
+                GooglePlayStatusTone.Warning);
+            return;
+        }
+
+        var target = await PickTrackAsync("Promote the release to which track?", targets);
+        if (target is null)
+        {
+            return;
+        }
+
+        await RunAsync(async cancellationToken =>
+        {
+            var result = await _trackWorkflow.PromoteReleaseAsync(
+                SelectedAccount.Id,
+                _context.PackageId,
+                source.Id,
+                target.Id,
+                ReleaseName,
+                source.VersionCodes,
+                [new GooglePlayReleaseNote(ReleaseNotesLanguage, ReleaseNotes)],
+                RolloutPercentage,
+                message => Activity = message,
+                cancellationToken);
+
+            SetStatus("Release promoted", result.Message, GooglePlayStatusTone.Success);
+            await LoadTracksAsync(cancellationToken);
+        }, "Promoting the release");
+    }
+
+    /// <summary>Creates a closed testing track, which is the only kind the Play API can create.</summary>
+    [RelayCommand]
+    private async Task CreateClosedTestingTrackAsync()
+    {
+        if (_context is null || SelectedAccount is null)
+        {
+            return;
+        }
+
+        var name = await _desktopInteractionService.PickTextAsync(
+            "New closed testing track",
+            "Track name");
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return;
+        }
+
+        await RunAsync(async cancellationToken =>
+        {
+            var result = await _trackWorkflow.CreateClosedTestingTrackAsync(
+                SelectedAccount.Id,
+                _context.PackageId,
+                name,
+                message => Activity = message,
+                cancellationToken);
+
+            SetStatus("Track created", result.Message, GooglePlayStatusTone.Success);
+            await LoadTracksAsync(cancellationToken);
+        }, "Creating the closed testing track");
+    }
+
+    /// <summary>Changes the rollout of the release on the selected track.</summary>
+    [RelayCommand(CanExecute = nameof(CanManageReleaseLine))]
+    private async Task UpdateRolloutAsync()
+    {
+        if (_context is null || SelectedAccount is null || SelectedTrack is null)
+        {
+            return;
+        }
+
+        var track = SelectedTrack;
+        if (track.VersionCodes.Count == 0)
+        {
+            SetStatus(
+                "Nothing to roll out",
+                $"The {track.DisplayName} track has no release.",
+                GooglePlayStatusTone.Warning);
+            return;
+        }
+
+        await RunAsync(async cancellationToken =>
+        {
+            var result = await _trackWorkflow.UpdateRolloutAsync(
+                SelectedAccount.Id,
+                _context.PackageId,
+                track.Id,
+                ReleaseName,
+                track.VersionCodes,
+                RolloutPercentage,
+                [new GooglePlayReleaseNote(ReleaseNotesLanguage, ReleaseNotes)],
+                message => Activity = message,
+                cancellationToken);
+
+            SetStatus("Rollout updated", result.Message, GooglePlayStatusTone.Success);
+            await LoadTracksAsync(cancellationToken);
+        }, "Updating the rollout");
+    }
+
+    private bool CanManageReleaseLine() => !IsBusy && IsDesktopSession && IsProjectReady && SelectedAccount is not null;
+
+    /// <summary>True when the release lines can be managed right now.</summary>
+    public bool CanManageTrack => !IsBusy && IsDesktopSession && IsProjectReady && SelectedAccount is not null;
+
+    /// <summary>
+    /// Asks the user to pick one of the tracks. The desktop interaction service shows a simple
+    /// list, so no extra view is needed for the choice.
+    /// </summary>
+    private async Task<GooglePlayTrackInfo?> PickTrackAsync(string title, IReadOnlyList<GooglePlayTrackInfo> tracks)
+    {
+        var names = tracks.Select(track => $"{track.DisplayName} ({track.Id})").ToArray();
+        var choice = await _desktopInteractionService.PickFromListAsync(title, names);
+        if (choice is null)
+        {
+            return null;
+        }
+
+        var index = Array.IndexOf(names, choice);
+        return index >= 0 && index < tracks.Count ? tracks[index] : null;
     }
 
     private async Task RunAsync(Func<CancellationToken, Task> operation, string action)
@@ -801,6 +1029,7 @@ public sealed partial class GooglePlayViewModel : ObservableObject
         OnPropertyChanged(nameof(ReadinessSummary));
         OnPropertyChanged(nameof(CanPublish));
         OnPropertyChanged(nameof(IsReadyToSubmit));
+        OnPropertyChanged(nameof(CanManageTrack));
         ConnectCommand.NotifyCanExecuteChanged();
         ClearSessionCommand.NotifyCanExecuteChanged();
         ClearSigningKeyCommand.NotifyCanExecuteChanged();
@@ -818,6 +1047,10 @@ public sealed partial class GooglePlayViewModel : ObservableObject
         PublishCommand.NotifyCanExecuteChanged();
         CheckStatusCommand.NotifyCanExecuteChanged();
         CancelCommand.NotifyCanExecuteChanged();
+        RemoveReleaseFromTrackCommand.NotifyCanExecuteChanged();
+        HaltReleaseCommand.NotifyCanExecuteChanged();
+        PromoteReleaseCommand.NotifyCanExecuteChanged();
+        UpdateRolloutCommand.NotifyCanExecuteChanged();
     }
 
     private void UpsertAccount(GooglePlayAccountInfo account)

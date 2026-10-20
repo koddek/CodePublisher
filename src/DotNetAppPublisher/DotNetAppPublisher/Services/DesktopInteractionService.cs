@@ -26,6 +26,154 @@ public sealed class DesktopInteractionService
         _window = window;
     }
 
+    /// <summary>Asks the user for a single line of text.</summary>
+    public async Task<string?> PickTextAsync(string title, string label)
+    {
+        var input = new TextBox
+        {
+            PlaceholderText = label,
+            MinWidth = 320
+        };
+
+        var confirmButton = new Button
+        {
+            Content = "Continue",
+            MinWidth = 96
+        };
+        confirmButton.Classes.Add("primary");
+
+        var cancelButton = new Button
+        {
+            Content = "Cancel",
+            MinWidth = 96
+        };
+
+        var actions = new WrapPanel
+        {
+            ItemSpacing = 8,
+            LineSpacing = 8,
+            HorizontalAlignment = HorizontalAlignment.Right
+        };
+        actions.Children.Add(cancelButton);
+        actions.Children.Add(confirmButton);
+
+        var content = new StackPanel { Spacing = 12 };
+        content.Children.Add(new TextBlock
+        {
+            Text = label,
+            FontSize = 13,
+            TextWrapping = TextWrapping.Wrap
+        });
+        content.Children.Add(input);
+        content.Children.Add(actions);
+
+        var dialog = new Window
+        {
+            Title = title,
+            Width = 420,
+            MinWidth = 320,
+            SizeToContent = SizeToContent.Height,
+            CanResize = false,
+            ShowInTaskbar = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Content = new Border { Padding = new Thickness(24), Child = content }
+        };
+
+        string? result = null;
+        confirmButton.Click += (_, _) =>
+        {
+            result = input.Text;
+            dialog.Close();
+        };
+        cancelButton.Click += (_, _) => dialog.Close();
+        input.KeyDown += (_, args) =>
+        {
+            if (args.Key == Avalonia.Input.Key.Enter)
+            {
+                result = input.Text;
+                dialog.Close();
+            }
+        };
+
+        await dialog.ShowDialog(Window);
+        return string.IsNullOrWhiteSpace(result) ? null : result.Trim();
+    }
+
+    /// <summary>Asks the user to pick one entry from a list.</summary>
+    public async Task<string?> PickFromListAsync(string title, IReadOnlyList<string> options)
+    {
+        if (options.Count == 0)
+        {
+            return null;
+        }
+
+        if (options.Count == 1)
+        {
+            return options[0];
+        }
+
+        var list = new ListBox
+        {
+            MinWidth = 320,
+            MaxHeight = 320
+        };
+        foreach (var option in options)
+        {
+            list.Items.Add(option);
+        }
+
+        list.SelectedIndex = 0;
+
+        var confirmButton = new Button
+        {
+            Content = "Continue",
+            MinWidth = 96
+        };
+        confirmButton.Classes.Add("primary");
+
+        var cancelButton = new Button
+        {
+            Content = "Cancel",
+            MinWidth = 96
+        };
+
+        var actions = new WrapPanel
+        {
+            ItemSpacing = 8,
+            LineSpacing = 8,
+            HorizontalAlignment = HorizontalAlignment.Right
+        };
+        actions.Children.Add(cancelButton);
+        actions.Children.Add(confirmButton);
+
+        var content = new StackPanel { Spacing = 12 };
+        content.Children.Add(list);
+        content.Children.Add(actions);
+
+        var dialog = new Window
+        {
+            Title = title,
+            Width = 420,
+            MinWidth = 320,
+            SizeToContent = SizeToContent.Height,
+            CanResize = false,
+            ShowInTaskbar = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Content = new Border { Padding = new Thickness(24), Child = content }
+        };
+
+        string? result = null;
+        confirmButton.Click += (_, _) =>
+        {
+            result = list.SelectedItem as string;
+            dialog.Close();
+        };
+        cancelButton.Click += (_, _) => dialog.Close();
+
+        await dialog.ShowDialog(Window);
+        return result;
+    }
+
     public async Task<string?> PickFolderAsync(string title, string? startPath = null)
     {
         var folder = await TryGetFolderAsync(startPath);

@@ -196,6 +196,26 @@
                             </ComboBox.ItemTemplate>
                         </ComboBox>
                     </StackPanel>
+
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Move the release between lines" FontSize="12" FontWeight="SemiBold"/>
+                        <TextBlock Classes="section-copy" Margin="0"
+                                   Text="Move a tested build to the production line, or take it off a testing line so testers go back to production."/>
+                        <WrapPanel ItemSpacing="8" LineSpacing="8">
+                            <Button Content="Promote to another line" Command="{Binding PromoteReleaseCommand}"
+                                    IsEnabled="{Binding CanManageTrack}"/>
+                            <Button Content="Remove release from this line" Command="{Binding RemoveReleaseFromTrackCommand}"
+                                    IsEnabled="{Binding CanManageTrack}"/>
+                            <Button Content="Halt this release" Command="{Binding HaltReleaseCommand}"
+                                    IsEnabled="{Binding CanManageTrack}"/>
+                            <Button Content="Update rollout" Command="{Binding UpdateRolloutCommand}"
+                                    IsEnabled="{Binding CanManageTrack}"/>
+                            <Button Content="New closed testing line" Command="{Binding CreateClosedTestingTrackCommand}"
+                                    IsEnabled="{Binding IsDesktopSession}"/>
+                        </WrapPanel>
+                        <TextBlock Classes="section-copy" Margin="0"
+                                   Text="A tester on a testing line keeps receiving that line's build until the line stops serving it. After that, the next update is the production build, provided the production version code is at least as high as the one on the device."/>
+                    </StackPanel>
                 </StackPanel>
             </Border>
 

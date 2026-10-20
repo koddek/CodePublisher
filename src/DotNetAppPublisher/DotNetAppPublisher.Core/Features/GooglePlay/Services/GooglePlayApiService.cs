@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using DotNetAppPublisher.Features.GooglePlay.Authentication;
 using DotNetAppPublisher.Features.GooglePlay.Models;
+using DotNetAppPublisher.Features.GooglePlay.Tracks;
 
 namespace DotNetAppPublisher.Features.GooglePlay.Services;
 
@@ -76,6 +77,359 @@ public sealed class GooglePlayApiService
         }
 
         return PublishCoreAsync(accountId, packageName, aabPath, trackId, releaseName, releaseNotes, rolloutPercentage, reportProgress, cancellationToken);
+    }
+
+    /// <summary>
+    /// Removes the releases from a track, so the track stops serving them.
+    ///
+    /// This is how a tester gets back onto the production line. Play serves the highest version
+    /// code the user is eligible for across every track, and a tester on a closed or open testing
+    /// track keeps receiving that track's build until the track stops serving it. Removing the
+    /// release leaves the track empty, and the next update the device receives is the production
+    /// build, provided its version code is at least as high as the one on the device.
+    /// </summary>
+    public Task<GooglePlayPublishResult> RemoveReleaseFromTrackAsync(
+        string accountId,
+        string packageName,
+        string trackId,
+        Action<string>? reportProgress,
+        CancellationToken cancellationToken) =>
+        UpdateTrackAsync(
+            accountId,
+            packageName,
+            trackId,
+            releases: [],
+            reportProgress,
+            cancellationToken,
+            successMessage: $"The release was removed from {trackId}. Testers on that track now receive the production build.");
+
+    /// <summary>
+    /// Halts a release on a track. A halted release is no longer served to new users, and the
+    /// previous completed release takes its place. A first release on a track cannot be halted,
+    /// because there would be nothing to fall back to.
+    /// </summary>
+    public Task<GooglePlayPublishResult> HaltReleaseAsync(
+        string accountId,
+        string packageName,
+        string trackId,
+        string releaseName,
+        IReadOnlyList<string> versionCodes,
+        Action<string>? reportProgress,
+        CancellationToken cancellationToken) =>
+        UpdateTrackAsync(
+            accountId,
+            packageName,
+            trackId,
+            releases:
+            [
+                new GooglePlayTrackRelease(
+                    releaseName,
+                    versionCodes,
+                    GooglePlayTrackReleaseStatus.Halted,
+                    null)
+            ],
+            reportProgress,
+            cancellationToken,
+            successMessage: $"The release on {trackId} was halted. It is no longer served to new users.");
+
+    /// <summary>
+    /// Changes the rollout of a release that is already on a track. A staged rollout is expressed
+    /// as a fraction of the eligible users; a full rollout completes the release.
+    /// </summary>
+    public Task<GooglePlayPublishResult> UpdateRolloutAsync(
+        string accountId,
+        string packageName,
+        string trackId,
+        string releaseName,
+        IReadOnlyList<string> versionCodes,
+        int rolloutPercentage,
+        IReadOnlyList<GooglePlayReleaseNote> releaseNotes,
+        Action<string>? reportProgress,
+        CancellationToken cancellationToken)
+    {
+        if (rolloutPercentage is < 1 or > 100)
+        {
+            throw new ArgumentOutOfRangeException(nameof(rolloutPercentage), "Rollout must be between 1 and 100 percent.");
+        }
+
+        var status = rolloutPercentage >= 100
+            ? GooglePlayTrackReleaseStatus.Completed
+            : GooglePlayTrackReleaseStatus.InProgress;
+        double? userFraction = rolloutPercentage >= 100
+            ? null
+            : (double)rolloutPercentage / 100d;
+
+        return UpdateTrackAsync(
+            accountId,
+            packageName,
+            trackId,
+            releases:
+            [
+                new GooglePlayTrackRelease(releaseName, versionCodes, status, userFraction, releaseNotes)
+            ],
+            reportProgress,
+            cancellationToken,
+            successMessage: $"The rollout on {trackId} is now {rolloutPercentage}%.");
+    }
+
+    /// <summary>
+    /// Copies a release from one track to another, which is how a tested build moves to the
+    /// production line. The version code stays the same, so the bundle is not uploaded again.
+    /// </summary>
+    public Task<GooglePlayPublishResult> PromoteReleaseAsync(
+        string accountId,
+        string packageName,
+        string sourceTrackId,
+        string targetTrackId,
+        string releaseName,
+        IReadOnlyList<string> versionCodes,
+        IReadOnlyList<GooglePlayReleaseNote> releaseNotes,
+        int rolloutPercentage,
+        Action<string>? reportProgress,
+        CancellationToken cancellationToken)
+    {
+        if (string.Equals(sourceTrackId, targetTrackId, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("The source and target tracks are the same.");
+        }
+
+        if (versionCodes.Count == 0)
+        {
+            throw new InvalidOperationException("The release has no version code to promote.");
+        }
+
+        if (rolloutPercentage is < 1 or > 100)
+        {
+            throw new ArgumentOutOfRangeException(nameof(rolloutPercentage), "Rollout must be between 1 and 100 percent.");
+        }
+
+        var status = rolloutPercentage >= 100
+            ? GooglePlayTrackReleaseStatus.Completed
+            : GooglePlayTrackReleaseStatus.InProgress;
+        double? userFraction = rolloutPercentage >= 100
+            ? null
+            : (double)rolloutPercentage / 100d;
+
+        return UpdateTrackAsync(
+            accountId,
+            packageName,
+            targetTrackId,
+            releases:
+            [
+                new GooglePlayTrackRelease(releaseName, versionCodes, status, userFraction, releaseNotes)
+            ],
+            reportProgress,
+            cancellationToken,
+            successMessage: $"The release was promoted to {targetTrackId}.");
+    }
+
+    /// <summary>
+    /// Creates a closed testing track. This is the only track kind the Play API can create; the
+    /// default tracks always exist.
+    /// </summary>
+    public Task<GooglePlayPublishResult> CreateClosedTestingTrackAsync(
+        string accountId,
+        string packageName,
+        string trackName,
+        Action<string>? reportProgress,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(trackName))
+        {
+            throw new InvalidOperationException("A track name is required.");
+        }
+
+        return ExecuteAsync(accountId, cancellationToken, async accessToken =>
+        {
+            reportProgress?.Invoke($"Creating the closed testing track {trackName}");
+            var edit = await CreateEditAsync(accessToken, packageName, cancellationToken);
+            try
+            {
+                using var response = await SendAsync(
+                    HttpMethod.Post,
+                    $"{BaseUrl}/applications/{Uri.EscapeDataString(packageName)}/edits/{edit}/tracks",
+                    accessToken,
+                    cancellationToken,
+                    JsonSerializer.Serialize(
+                        new GooglePlayTrackConfigRequest(trackName.Trim(), "CLOSED_TESTING", "DEFAULT"),
+                        GooglePlayJsonContext.Default.GooglePlayTrackConfigRequest));
+                await EnsureSuccessAsync(response, $"Could not create the closed testing track {trackName}", cancellationToken);
+
+                reportProgress?.Invoke("Validating the new track");
+                using (var validateResponse = await SendAsync(
+                           HttpMethod.Post,
+                           $"{BaseUrl}/applications/{Uri.EscapeDataString(packageName)}/edits/{edit}:validate",
+                           accessToken,
+                           cancellationToken))
+                {
+                    await EnsureSuccessAsync(validateResponse, "Google Play rejected the new track", cancellationToken);
+                }
+
+                reportProgress?.Invoke("Committing the new track");
+                using var commitRequest = new HttpRequestMessage(
+                    HttpMethod.Post,
+                    $"{BaseUrl}/applications/{Uri.EscapeDataString(packageName)}/edits/{edit}:commit?changesInReviewBehavior=ERROR_IF_IN_REVIEW")
+                {
+                    Content = new StringContent(string.Empty, Encoding.UTF8, "application/json")
+                };
+                commitRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+                using var commitResponse = await _httpClient.SendAsync(commitRequest, cancellationToken);
+                await EnsureSuccessAsync(commitResponse, "Google Play did not accept the new track", cancellationToken);
+
+                return new GooglePlayPublishResult(
+                    true,
+                    GooglePlayPublishStage.Published,
+                    $"The closed testing track {trackName} was created.",
+                    trackName,
+                    trackName);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    $"Creating the closed testing track {trackName} failed. The temporary edit {edit} was kept; retry or let it expire.",
+                    ex);
+            }
+        });
+    }
+
+    /// <summary>
+    /// Reads the version codes that are already used on a track, so a new release can use a
+    /// higher one. Play refuses a version code that was used anywhere on the app.
+    /// </summary>
+    public Task<IReadOnlyList<string>> GetUsedVersionCodesAsync(
+        string accountId,
+        string packageName,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(accountId, cancellationToken, async accessToken =>
+        {
+            var edit = await CreateEditAsync(accessToken, packageName, cancellationToken);
+            try
+            {
+                using var response = await SendAsync(
+                    HttpMethod.Get,
+                    $"{BaseUrl}/applications/{Uri.EscapeDataString(packageName)}/edits/{edit}/tracks",
+                    accessToken,
+                    cancellationToken);
+                await EnsureSuccessAsync(response, "Could not load the Google Play version codes", cancellationToken);
+                await using var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                using var document = await JsonDocument.ParseAsync(responseStream, cancellationToken: cancellationToken);
+                var codes = ReadUsedVersionCodes(document.RootElement);
+                await DeleteEditBestEffortAsync(accessToken, packageName, edit, CancellationToken.None);
+                return codes;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    $"Reading the Google Play version codes failed for edit {edit}. The temporary edit was kept; retry or let it expire.",
+                    ex);
+            }
+        });
+
+    /// <summary>
+    /// Fetches the certificate the Play app signing key signed a version with. Comparing it with
+    /// a local build tells the user whether Google Play will be able to update that build later.
+    /// </summary>
+    public Task<string?> GetAppSigningCertificateAsync(
+        string accountId,
+        string packageName,
+        int versionCode,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(accountId, cancellationToken, async accessToken =>
+        {
+            using var response = await SendAsync(
+                HttpMethod.Get,
+                $"{BaseUrl}/applications/{Uri.EscapeDataString(packageName)}/generatedApks/{versionCode}",
+                accessToken,
+                cancellationToken);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return null;
+            }
+
+            await EnsureSuccessAsync(response, "Could not read the Google Play signing certificate", cancellationToken);
+            await using var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var document = await JsonDocument.ParseAsync(responseStream, cancellationToken: cancellationToken);
+            return ReadAppSigningCertificate(document.RootElement);
+        });
+
+    private Task<GooglePlayPublishResult> UpdateTrackAsync(
+        string accountId,
+        string packageName,
+        string trackId,
+        IReadOnlyList<GooglePlayTrackRelease> releases,
+        Action<string>? reportProgress,
+        CancellationToken cancellationToken,
+        string successMessage)
+    {
+        if (string.IsNullOrWhiteSpace(trackId))
+        {
+            throw new InvalidOperationException("A release track is required.");
+        }
+
+        return ExecuteAsync(accountId, cancellationToken, async accessToken =>
+        {
+            reportProgress?.Invoke($"Updating the {trackId} track");
+            var edit = await CreateEditAsync(accessToken, packageName, cancellationToken);
+            try
+            {
+                var payload = BuildTrackUpdatePayload(trackId, releases);
+                using (var response = await SendAsync(
+                           HttpMethod.Put,
+                           $"{BaseUrl}/applications/{Uri.EscapeDataString(packageName)}/edits/{edit}/tracks/{Uri.EscapeDataString(trackId)}",
+                           accessToken,
+                           cancellationToken,
+                           payload))
+                {
+                    await EnsureSuccessAsync(response, $"Could not update the {trackId} track", cancellationToken);
+                }
+
+                reportProgress?.Invoke("Validating the change");
+                using (var validateResponse = await SendAsync(
+                           HttpMethod.Post,
+                           $"{BaseUrl}/applications/{Uri.EscapeDataString(packageName)}/edits/{edit}:validate",
+                           accessToken,
+                           cancellationToken))
+                {
+                    await EnsureSuccessAsync(validateResponse, "Google Play rejected the change", cancellationToken);
+                }
+
+                reportProgress?.Invoke("Committing the change");
+                using var commitRequest = new HttpRequestMessage(
+                    HttpMethod.Post,
+                    $"{BaseUrl}/applications/{Uri.EscapeDataString(packageName)}/edits/{edit}:commit?changesInReviewBehavior=ERROR_IF_IN_REVIEW")
+                {
+                    Content = new StringContent(string.Empty, Encoding.UTF8, "application/json")
+                };
+                commitRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+                using var commitResponse = await _httpClient.SendAsync(commitRequest, cancellationToken);
+                await EnsureSuccessAsync(commitResponse, "Google Play did not accept the change", cancellationToken);
+
+                return new GooglePlayPublishResult(
+                    true,
+                    GooglePlayPublishStage.Published,
+                    successMessage,
+                    trackId,
+                    trackId);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    $"Updating the {trackId} track failed. The temporary edit {edit} was kept; retry or let it expire.",
+                    ex);
+            }
+        });
     }
 
     private Task<GooglePlayPublishResult> PublishCoreAsync(
@@ -263,7 +617,7 @@ public sealed class GooglePlayApiService
         await EnsureSuccessAsync(response, $"Could not assign the release to {trackId}", cancellationToken);
     }
 
-    internal static string BuildTrackUpdatePayload(
+    public static string BuildTrackUpdatePayload(
         string trackId,
         string releaseName,
         int versionCode,
@@ -280,26 +634,48 @@ public sealed class GooglePlayApiService
             throw new InvalidOperationException("A release track is required.");
         }
 
+        var status = rolloutPercentage >= 100
+            ? GooglePlayTrackReleaseStatus.Completed
+            : GooglePlayTrackReleaseStatus.InProgress;
+        double? userFraction = rolloutPercentage >= 100
+            ? null
+            : (double)rolloutPercentage / 100d;
+
+        return BuildTrackUpdatePayload(
+            trackId,
+            [new GooglePlayTrackRelease(releaseName, [versionCode.ToString()], status, userFraction, releaseNotes)]);
+    }
+
+    /// <summary>
+    /// Builds the body of an <c>edits.tracks.update</c> call. The releases array is the desired
+    /// state of the track, so an empty array removes the releases from it.
+    /// </summary>
+    public static string BuildTrackUpdatePayload(string trackId, IReadOnlyList<GooglePlayTrackRelease> releases)
+    {
+        if (string.IsNullOrWhiteSpace(trackId))
+        {
+            throw new InvalidOperationException("A release track is required.");
+        }
+
         var request = new GooglePlayTrackUpdateRequest
         {
             Track = trackId,
-            Releases =
-            [
-                new GooglePlayReleaseUpdateRequest
+            Releases = releases
+                .Select(release => new GooglePlayReleaseUpdateRequest
                 {
-                    Name = releaseName,
-                    VersionCodes = [versionCode.ToString()],
-                    Status = rolloutPercentage >= 100 ? "completed" : "inProgress",
-                    UserFraction = rolloutPercentage >= 100 ? null : rolloutPercentage / 100d,
-                    ReleaseNotes = releaseNotes
+                    Name = release.Name,
+                    VersionCodes = [.. release.VersionCodes],
+                    Status = release.Status,
+                    UserFraction = release.UserFraction,
+                    ReleaseNotes = (release.ReleaseNotes ?? [])
                         .Select(note => new GooglePlayReleaseNoteUpdateRequest
                         {
                             Language = note.Language,
                             Text = note.Text
                         })
                         .ToArray()
-                }
-            ]
+                })
+                .ToArray()
         };
 
         return JsonSerializer.Serialize(request, GooglePlayJsonContext.Default.GooglePlayTrackUpdateRequest);
@@ -369,34 +745,95 @@ public sealed class GooglePlayApiService
         return tracks.EnumerateArray().Select(track =>
         {
             var id = track.GetProperty("track").GetString() ?? string.Empty;
-            var status = track.TryGetProperty("releases", out var releases) &&
-                          releases.ValueKind == JsonValueKind.Array &&
-                          releases.GetArrayLength() > 0
-                ? releases[0].TryGetProperty("status", out var releaseStatus)
-                    ? releaseStatus.GetString() ?? "Unknown"
-                    : "Unknown"
-                : "Not configured";
-            var group = id switch
+            var status = "Not configured";
+            IReadOnlyList<string> versionCodes = [];
+
+            if (track.TryGetProperty("releases", out var releases) &&
+                releases.ValueKind == JsonValueKind.Array &&
+                releases.GetArrayLength() > 0)
             {
-                "qa" => "Internal testing",
-                "beta" => "Open testing",
-                "production" => "Production",
-                _ when id.Contains(':', StringComparison.Ordinal) => "Form factor",
-                _ => "Closed testing"
-            };
-            return new GooglePlayTrackInfo(
-                id,
-                id switch
-                {
-                    "qa" => "Internal testing",
-                    "beta" => "Open testing",
-                    "production" => "Production",
-                    _ => id
-                },
-                group,
-                status,
-                id.EndsWith(":production", StringComparison.Ordinal) || id == "production");
+                var active = releases[0];
+                status = active.TryGetProperty("status", out var releaseStatus)
+                    ? releaseStatus.GetString() ?? "Unknown"
+                    : "Unknown";
+                versionCodes = ReadVersionCodes(active);
+            }
+
+            return GooglePlayTrackCatalog.Describe(id, status, versionCodes);
         }).OrderBy(track => track.Group).ThenBy(track => track.DisplayName).ToArray();
+    }
+
+    /// <summary>Reads the version codes of one release, highest first.</summary>
+    private static IReadOnlyList<string> ReadVersionCodes(JsonElement release)
+    {
+        if (!release.TryGetProperty("versionCodes", out var versionCodes) ||
+            versionCodes.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return versionCodes.EnumerateArray()
+            .Select(code => code.ValueKind == JsonValueKind.String ? code.GetString() : code.ToString())
+            .Where(code => !string.IsNullOrWhiteSpace(code))
+            .Select(code => code!)
+            .OrderByDescending(code => long.TryParse(code, out var value) ? value : long.MinValue)
+            .ToArray();
+    }
+
+    /// <summary>Reads every version code already used on the app, highest first.</summary>
+    private static IReadOnlyList<string> ReadUsedVersionCodes(JsonElement root)
+    {
+        if (!root.TryGetProperty("tracks", out var tracks) || tracks.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        var codes = new List<string>();
+        foreach (var track in tracks.EnumerateArray())
+        {
+            if (!track.TryGetProperty("releases", out var releases) || releases.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            foreach (var release in releases.EnumerateArray())
+            {
+                codes.AddRange(ReadVersionCodes(release));
+            }
+        }
+
+        return codes
+            .Distinct(StringComparer.Ordinal)
+            .OrderByDescending(code => long.TryParse(code, out var value) ? value : long.MinValue)
+            .ToArray();
+    }
+
+    /// <summary>
+    /// Reads the SHA-256 certificate the Play app signing key signed a version with. Play signs
+    /// the delivered app with the app signing key, not the upload key, so this is the certificate a
+    /// local build has to match for Google Play to be able to update it later.
+    /// </summary>
+    private static string? ReadAppSigningCertificate(JsonElement root)
+    {
+        if (!root.TryGetProperty("generatedApks", out var generated) || generated.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        foreach (var entry in generated.EnumerateArray())
+        {
+            if (entry.TryGetProperty("certificateSha256Hash", out var certificate) &&
+                certificate.ValueKind == JsonValueKind.String)
+            {
+                var value = certificate.GetString();
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value.Trim();
+                }
+            }
+        }
+
+        return null;
     }
 
     private static async Task EnsureSuccessAsync(
@@ -436,3 +873,33 @@ public sealed class GooglePlayApiService
 }
 
 public sealed record GooglePlayReleaseNote(string Language, string Text);
+
+/// <summary>The release states a Play track release can be in.</summary>
+public static class GooglePlayTrackReleaseStatus
+{
+    /// <summary>The release's bundles are served to a fraction of the users.</summary>
+    public const string InProgress = "inProgress";
+
+    /// <summary>The release is served to everyone and will not change further.</summary>
+    public const string Completed = "completed";
+
+    /// <summary>The release is no longer served. The previous release takes its place.</summary>
+    public const string Halted = "halted";
+
+    /// <summary>The release is not served to anyone yet.</summary>
+    public const string Draft = "draft";
+}
+
+/// <summary>One release on a track, as the Play API describes it.</summary>
+/// <param name="Name">The release name. Play only shows it in the Play Console.</param>
+/// <param name="VersionCodes">The version codes in the release.</param>
+/// <param name="Status">The release state.</param>
+/// <param name="UserFraction">The fraction of users a staged rollout serves. Null means the
+/// release is complete.</param>
+/// <param name="ReleaseNotes">The release notes, one per language.</param>
+public sealed record GooglePlayTrackRelease(
+    string Name,
+    IReadOnlyList<string> VersionCodes,
+    string Status,
+    double? UserFraction = null,
+    IReadOnlyList<GooglePlayReleaseNote>? ReleaseNotes = null);
