@@ -36,6 +36,7 @@ It is built with Avalonia and currently supports Android, macOS, Windows, and iO
 - Configure the Google Desktop OAuth client ID directly in the app, with session-only or user-profile persistence and visible configured/not-configured status
 - Connect a personal Google account with browser OAuth, choose internal, closed, open, or production tracks, add release notes, and submit staged or full rollouts
 - Move a release between lines without opening the Play Console website: promote a tested build to production, remove a release from a testing line, halt a rollout, change the rollout percentage, or create a closed testing line
+- See what it takes to move a connected device onto another line: which line it is effectively on, the version code the target line needs, and whether the other line has to stop serving first
 - Keep Google OAuth tokens and Android upload-key passwords in memory for the current session; use **Clear session** or quit to remove them
 
 ## Why this exists

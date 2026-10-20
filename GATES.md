@@ -255,6 +255,16 @@ the Play Console website.
   EXPECT: zero errors and all tests pass.
   EVIDENCE: Debug and Release builds succeed with zero errors and zero warnings. 288/288 tests pass in Debug and in Release (`--configuration Release --no-build`). The NativeAOT publish of the desktop host produces no managed entry assembly and no application-owned linker warnings, and the published app stays alive with an empty log. The browser host now starts: it reports a `2000x1400` canvas, a closed splash, and zero console messages, which matches the baseline the earlier increments recorded.
 
+- [x] L8: The release line check tells the user what moves a device onto another line.
+  CHECK: dotnet run --project tests/DotNetAppPublisher.Tests/DotNetAppPublisher.Tests.csproj -- --disable-logo --progress off
+  EXPECT: release line policy tests pass.
+  EVIDENCE: 301/301 passed (Release, macOS osx-arm64, .NET 10.0.13). `GooglePlayReleaseLinePolicy` works out which line a device is effectively on and what it takes to move it, because Google Play serves the highest eligible version code and never downgrades, so the version code the device runs is the floor. `GooglePlayReleaseLinePolicyTests` covers nine cases: a target below the device, a target above it, a competing line that has to stop first, the required version code, an unreadable device version code, an unknown target, the effective line, and the two cases where no line serves the device. The deploy section now reports the device's installer, version code, and certificate and feeds them into the workspace, and the Play app signing certificate is read from the API and compared with the device's.
+
+- [x] L9: A Google Play error that blocks a release says what to do about it.
+  CHECK: dotnet run --project tests/DotNetAppPublisher.Tests/DotNetAppPublisher.Tests.csproj -- --disable-logo --progress off
+  EXPECT: error guidance tests pass.
+  EVIDENCE: `GooglePlayApiServiceErrorTests` covers the four cases that matter: a version code that was already used (Play never reuses one), a change still in review, a release shadowed by a higher version code on another line, and an unrelated error that keeps Google's own wording.
+
 ## Defects found and fixed in this increment
 
 - [x] X1: Native AOT on a desktop target published a combination the .NET SDK rejects.
