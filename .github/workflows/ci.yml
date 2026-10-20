@@ -50,12 +50,16 @@ jobs:
       # NativeAOT must not use --no-restore: the ILCompiler package is only added
       # to the assets file by a restore that sees PublishAot, and a stale assets file
       # makes the publish silently fall back to a trimmed self-contained build.
+      #
+      # PublishTrimmed must not be set to false here: native compilation always trims,
+      # and the SDK fails the publish with "PublishTrimmed is implied by native
+      # compilation and cannot be disabled." when it is.
       - name: Publish (NativeAOT, Linux/macOS)
         if: runner.os != 'Windows'
         run: >
           dotnet publish src/DotNetAppPublisher/DotNetAppPublisher.Desktop/DotNetAppPublisher.Desktop.csproj
           --configuration Release --self-contained true
-          -p:PublishTrimmed=false -p:PublishAot=true -p:PublishReadyToRun=false -p:PublishSingleFile=false
+          -p:PublishAot=true -p:PublishReadyToRun=false -p:PublishSingleFile=false
           -o "${{ runner.temp }}/publish-aot"
 
       - name: Verify NativeAOT output
