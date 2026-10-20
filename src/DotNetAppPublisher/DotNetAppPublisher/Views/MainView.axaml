@@ -910,9 +910,12 @@
                                         <Button Content="Close app" Command="{Binding CloseAppCommand}" MinWidth="110"
                                                 ToolTip.Tip="Closes the app completely: every process is stopped, and its card is removed from Recents (the app switcher) so it is really gone instead of only stopped. The installed app and its data are kept; safe to press when the app is not running."/>
                                         <Button Content="Push File..." Command="{Binding CopyFileToAndroidDeviceCommand}" MinWidth="110"/>
+                                        <Button Content="Inspect installed app" Command="{Binding InspectInstalledAndroidPackageCommand}" MinWidth="160"
+                                                ToolTip.Tip="Shows who installed the app on the device, the version code it runs, and the certificate it was signed with. That tells you whether a Play Store update can replace it."/>
                                     </WrapPanel>
                                     <TextBlock Text="Install updates in place and keeps app data. It never uninstalls first: if the APK is signed with a different key, Uninstall (which deletes app data) then Install for a clean start. Browse and transfer files in the Device Files section." Classes="section-copy" TextWrapping="Wrap"/>
                                     <TextBlock Text="Install uses the publish folder; Uninstall, Launch, and Stop only need the Package ID above." Classes="section-copy"/>
+                                    <TextBlock Text="Google Play signs its downloads with the app signing key, not the upload key. A build signed with the upload key can never be replaced by a Play Store update, because Android only accepts an update when the certificate matches. Use Inspect installed app to see the certificate on the device." Classes="section-copy" TextWrapping="Wrap"/>
                                 </StackPanel>
                             </Border>
 

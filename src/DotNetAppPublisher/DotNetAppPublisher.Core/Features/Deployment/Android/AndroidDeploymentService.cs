@@ -41,6 +41,29 @@ public sealed class AndroidDeploymentService
     /// signing certificate is compared with the copy already on the device, so a build that could
     /// break Google Play updates is stopped with guidance instead of being installed.
     /// </summary>
+    /// <summary>
+    /// Reports what the device has installed for a package: who installed it, which certificates
+    /// it was signed with, and which version code it runs. This is what tells the user whether a
+    /// Play Store update can replace the install, and which release line the device is on.
+    /// </summary>
+    public async Task<AndroidInstalledPackageInfo?> ReadInstalledPackageAsync(
+        string packageId,
+        string? deviceSerial,
+        CancellationToken cancellationToken)
+    {
+        var adbPath = _adbPath ?? throw new InvalidOperationException("`adb` was not found. Install Android platform-tools or add adb to PATH.");
+        var targetDevice = !string.IsNullOrWhiteSpace(deviceSerial)
+            ? deviceSerial!.Trim()
+            : throw new InvalidOperationException("No device selected. Select a device first.");
+
+        if (string.IsNullOrWhiteSpace(packageId))
+        {
+            throw new InvalidOperationException("A package id is required to inspect the installed app.");
+        }
+
+        return await ReadInstalledPackageAsync(adbPath, targetDevice, packageId.Trim(), cancellationToken);
+    }
+
     public async Task<string> InstallLatestApkAsync(
         PublishConfiguration configuration,
         string? deviceSerial,
@@ -822,10 +845,11 @@ public sealed class AndroidDeploymentService
 
         var installerOutput = new StringBuilder();
         await ProcessRunner.RunAsync(
-            [adbPath, "-s", targetDevice, "shell", "pm", "list", "packages", "-i", packageId],
+            [adbPath, "-s", targetDevice, "shell", "pm", "list", "packages", "-i", packageId, "--show-versioncode"],
             text => installerOutput.Append(text),
             cancellationToken);
         var installerPackage = AndroidSigningInspector.ParseInstallerPackage(installerOutput.ToString(), packageId);
+        var versionCode = AndroidSigningInspector.ParseVersionCode(installerOutput.ToString());
 
         IReadOnlyList<string> certificateDigests = [];
         var apkSignerPath = _apkSignerPath();
@@ -865,12 +889,20 @@ public sealed class AndroidDeploymentService
             }
         }
 
-        return new AndroidInstalledPackageInfo(installerPackage, certificateDigests);
+        return new AndroidInstalledPackageInfo(installerPackage, certificateDigests)
+        {
+            VersionCode = versionCode
+        };
     }
 
     /// <summary>
     /// Success-message note stating the APK's signing fingerprint and what it means for future
     /// Google Play updates.
+    ///
+    /// Google Play signs every download with the app signing key, not the upload key. A build
+    /// signed with the upload key is a different signer to the platform, so Android refuses to
+    /// update it. The note says so plainly, because "the key I uploaded with" is the wrong key to
+    /// think about here.
     /// </summary>
     private static string? BuildInstallSignatureNote(
         IReadOnlyList<string>? apkDigests,
@@ -889,8 +921,9 @@ public sealed class AndroidDeploymentService
                 "working; keep every future version code higher than the last.";
         }
 
-        return $"{fingerprint} Google Play can update this app later only when its app-signing certificate " +
-            "matches this fingerprint (Play Console > Release > App integrity) and each Play release has a " +
-            "higher version code.";
+        return $"{fingerprint} Google Play signs its downloads with the app signing key, not the upload key. " +
+            "If this build was signed with the upload key, a Play Store update cannot replace it. Sign it " +
+            "with the app signing key, or install the signed universal APK from Play Console, and keep every " +
+            "version code higher than the last.";
     }
 }

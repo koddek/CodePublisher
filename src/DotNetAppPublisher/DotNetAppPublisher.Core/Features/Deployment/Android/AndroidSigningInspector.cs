@@ -2,10 +2,19 @@ namespace DotNetAppPublisher.Features.Deployment.Android;
 
 /// <summary>
 /// What the device reports about an already-installed package: who installed it (Google Play is
-/// <c>com.android.vending</c>) and the SHA-256 digests of its signing certificates, empty when the
-/// installed APK could not be inspected.
+/// <c>com.android.vending</c>), the SHA-256 digests of its signing certificates, and the version
+/// code it runs. The digests are empty when the installed APK could not be inspected.
 /// </summary>
-public sealed record AndroidInstalledPackageInfo(string? InstallerPackage, IReadOnlyList<string> CertificateDigests);
+public sealed record AndroidInstalledPackageInfo(
+    string? InstallerPackage,
+    IReadOnlyList<string> CertificateDigests)
+{
+    /// <summary>The version code the installed app runs, when the device reported it.</summary>
+    public int? VersionCode { get; init; }
+
+    /// <summary>True when Google Play installed the app.</summary>
+    public bool InstalledByGooglePlay => AndroidSigningInspector.IsGooglePlayInstaller(InstallerPackage);
+}
 
 /// <summary>
 /// Pure parsers for signing and package-manager output. Google Play can only update an installed
@@ -146,6 +155,38 @@ public static class AndroidSigningInspector
     /// <summary>True when Google Play is the installer of record for the package.</summary>
     public static bool IsGooglePlayInstaller(string? installerPackage) =>
         string.Equals(installerPackage?.Trim(), GooglePlayInstaller, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Reads the version code from the output of <c>pm list packages --show-versioncode</c>, whose
+    /// lines look like <c>package:com.example.app versionCode:42  installer=com.android.vending</c>.
+    /// Returns null when the line has no version code.
+    /// </summary>
+    public static int? ParseVersionCode(string? pmListOutput)
+    {
+        if (string.IsNullOrWhiteSpace(pmListOutput))
+        {
+            return null;
+        }
+
+        foreach (var rawLine in pmListOutput.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var marker = rawLine.IndexOf("versionCode:", StringComparison.Ordinal);
+            if (marker < 0)
+            {
+                continue;
+            }
+
+            var value = rawLine[(marker + "versionCode:".Length)..]
+                .Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .FirstOrDefault();
+            if (value is not null && int.TryParse(value, out var versionCode))
+            {
+                return versionCode;
+            }
+        }
+
+        return null;
+    }
 
     private static string? NormalizeDigest(string? value)
     {

@@ -516,6 +516,17 @@ public sealed class PublisherService
     public Task<string> UninstallAsync(string packageId, string? deviceSerial, CancellationToken cancellationToken) =>
         _androidDeploymentService.UninstallAsync(packageId, deviceSerial, cancellationToken);
 
+    /// <summary>
+    /// Reports what the device has installed for the package: who installed it, the version code
+    /// it runs, and the certificate it was signed with. This is what tells the user whether a
+    /// Play Store update can replace the install.
+    /// </summary>
+    public Task<AndroidInstalledPackageInfo?> ReadInstalledAndroidPackageAsync(
+        string packageId,
+        string? deviceSerial,
+        CancellationToken cancellationToken) =>
+        _androidDeploymentService.ReadInstalledPackageAsync(packageId, deviceSerial, cancellationToken);
+
     public Task<string> LaunchAsync(string packageId, string? deviceSerial, CancellationToken cancellationToken) =>
         _androidDeploymentService.LaunchAsync(packageId, deviceSerial, cancellationToken);
 

@@ -177,6 +177,7 @@ public partial class MainViewModel : ViewModelBase
         _ = InstallIosDeviceAppCommand;
         _ = LaunchIosDeviceAppCommand;
         _ = ApplyPublishOptionSuggestionCommand;
+        _ = InspectInstalledAndroidPackageCommand;
         _ = IsPublishing;
         _ = GooglePlay;
     }
@@ -1618,6 +1619,60 @@ private string _projectDirectory = string.Empty;
     private bool CanInstallLatestApk()
     {
         return CanRunAndroidActions();
+    }
+
+    /// <summary>
+    /// Shows what the device has installed for the package: who installed it, the version code
+    /// it runs, and the certificate it was signed with. The user needs this to know whether a
+    /// Play Store update can replace the install, and which release line the device is on.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanRunAndroidActions))]
+    private async Task InspectInstalledAndroidPackageAsync()
+    {
+        if (!TryValidateAndroidDeviceSelection("Inspect installed app"))
+        {
+            return;
+        }
+
+        if (!TryValidatePackageId("Inspect installed app"))
+        {
+            return;
+        }
+
+        await RunQuickActionAsync(
+            async () => await _publisherService.ReadInstalledAndroidPackageAsync(
+                    PackageId,
+                    SelectedDevice?.Serial,
+                    CancellationToken.None)
+                is { } installed
+                ? DescribeInstalledPackage(installed)
+                : $"{PackageId} is not installed on {SelectedDevice?.Name}.",
+            "Inspect installed app");
+    }
+
+    /// <summary>Describes the installed app in plain words the user can act on.</summary>
+    private static string DescribeInstalledPackage(AndroidInstalledPackageInfo installed)
+    {
+        var lines = new List<string>();
+        lines.Add(installed.InstalledByGooglePlay
+            ? "Installed by Google Play."
+            : $"Installed by {installed.InstallerPackage ?? "an unknown source"}.");
+        if (installed.VersionCode is { } versionCode)
+        {
+            lines.Add($"Version code {versionCode}.");
+        }
+
+        if (installed.CertificateDigests.Count > 0)
+        {
+            lines.Add($"Certificate SHA-256: {string.Join(", ", installed.CertificateDigests)}.");
+        }
+
+        lines.Add(installed.InstalledByGooglePlay
+            ? "Google Play signs its downloads with the app signing key, so only a build with that same " +
+              "certificate can be replaced by a Play Store update. Keep every new version code higher than this one."
+            : "This copy was not installed by Google Play. Google Play can only update it when it carries the " +
+              "same certificate the app signing key produces, and only with a higher version code.");
+        return string.Join(" ", lines);
     }
 
     [RelayCommand(CanExecute = nameof(CanRunAndroidActions))]
