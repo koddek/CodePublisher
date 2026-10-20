@@ -253,7 +253,7 @@ the Play Console website.
 - [x] L7: The solution still builds and the full suite passes after the library split.
   CHECK: dotnet build DotNetAppPublisher.slnx --no-restore && dotnet run --project tests/DotNetAppPublisher.Tests/DotNetAppPublisher.Tests.csproj -- --disable-logo --progress off
   EXPECT: zero errors and all tests pass.
-  EVIDENCE: Debug and Release builds succeed with zero errors and zero warnings. 288/288 tests pass in Debug and in Release (`--configuration Release --no-build`). The NativeAOT publish of the desktop host produces no managed entry assembly and no application-owned linker warnings, and the published app stays alive with an empty log. The browser host still serves its page with the same pre-existing `libSkiaSharp` startup failure it has on the untouched baseline; that failure needs the emscripten workload, which is not installed here, and it is unrelated to this increment.
+  EVIDENCE: Debug and Release builds succeed with zero errors and zero warnings. 288/288 tests pass in Debug and in Release (`--configuration Release --no-build`). The NativeAOT publish of the desktop host produces no managed entry assembly and no application-owned linker warnings, and the published app stays alive with an empty log. The browser host now starts: it reports a `2000x1400` canvas, a closed splash, and zero console messages, which matches the baseline the earlier increments recorded.
 
 ## Defects found and fixed in this increment
 
@@ -269,6 +269,10 @@ the Play Console website.
   CHECK: git ls-files src/DotNetAppPublisher/DotNetAppPublisher/Features/GooglePlay/Releases/
   EXPECT: the release workflow is tracked.
   EVIDENCE: `Features/GooglePlay/Releases/` matched the `[Rr]eleases/` ignore rule, so `GooglePlayReleaseWorkflow.cs` was never committed. The baseline commit does not build: the app project cannot resolve `GooglePlayReleaseWorkflow`. A negation rule was added to `src/DotNetAppPublisher/.gitignore` and the file is now tracked.
+- [x] X5: The browser host could not start because the native SkiaSharp library was never linked.
+  CHECK: dotnet publish src/DotNetAppPublisher/DotNetAppPublisher.Browser/DotNetAppPublisher.Browser.csproj --configuration Release -o "$TMPDIR/publish-browser"
+  EXPECT: the publish succeeds and the native module carries the linked Skia code.
+  EVIDENCE: The browser host failed at startup with `System.DllNotFoundException: libSkiaSharp`, on the untouched baseline as well, because it referenced neither the WebAssembly native assets nor the emscripten toolchain. With `WasmBuildNative` and the two `*.NativeAssets.WebAssembly` packages, the publish succeeds and the native module carries the linked Skia code (`sk_FragCoord` is present). The emscripten toolchain comes from the `wasm-tools` workload, which is a .NET workload: `dotnet workload install wasm-tools`. Installing it surfaced a second defect: the emscripten `clang` wrapper the SDK ships computes its own path with an unquoted `$(dirname $0)`, so any SDK path containing a space splits it and the tool cannot find `clang-19`. Quoting the expansion fixes it. CI now installs the workload and asserts the linked module is present.
 - [x] X4: The install guidance named the wrong signing key.
   CHECK: dotnet run --project tests/DotNetAppPublisher.Tests/DotNetAppPublisher.Tests.csproj -- --disable-logo --progress off
   EXPECT: certificate compatibility tests pass.

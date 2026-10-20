@@ -28,6 +28,11 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      # The browser host links the native SkiaSharp library, which needs the
+      # emscripten toolchain that ships with the wasm-tools workload.
+      - name: Install wasm-tools workload
+        run: dotnet workload install wasm-tools
+
       - name: Restore
         run: dotnet restore DotNetAppPublisher.slnx -p:Configuration=Release
 
@@ -70,6 +75,27 @@ jobs:
           # A NativeAOT publish has no managed entry assembly; a silent fallback to
           # a trimmed self-contained publish would leave it behind.
           test ! -f "$out/DotNetAppPublisher.Desktop.dll"
+
+      # The browser host links the native SkiaSharp library, so it fails at
+      # startup with "System.DllNotFoundException: libSkiaSharp" when the
+      # native assets or the emscripten toolchain are missing. Build it and
+      # check the output carries the linked native module.
+      - name: Build the browser host
+        run: >
+          dotnet publish
+          src/DotNetAppPublisher/DotNetAppPublisher.Browser/DotNetAppPublisher.Browser.csproj
+          --configuration Release --no-restore
+          -o "${{ runner.temp }}/publish-browser"
+
+      - name: Verify the browser host links the native SkiaSharp library
+        run: |
+          out="${{ runner.temp }}/publish-browser/wwwroot/_framework"
+          # The emscripten link step folds libSkiaSharp into the native module.
+          # Without it the app fails at startup with a DllNotFoundException.
+          # sk_FragCoord is a Skia shader symbol that only appears once the
+          # Skia native code is linked in.
+          test -n "$(ls "$out"/dotnet.native.*.wasm 2>/dev/null)"
+          grep -qa 'sk_FragCoord' "$out"/dotnet.native.*.wasm
 
       - name: Verify macOS bundle executable matches the publish output
         if: runner.os == 'macOS'
