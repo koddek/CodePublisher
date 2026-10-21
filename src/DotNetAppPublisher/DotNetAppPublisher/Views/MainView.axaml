@@ -964,6 +964,64 @@
                                      </Button>
                                 </StackPanel>
                             </Border>
+
+                            <Border Classes="card">
+                                <StackPanel Spacing="12">
+                                    <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+                                        <StackPanel Spacing="2">
+                                            <TextBlock Text="Crash logs" Classes="section-title" Margin="0,0,0,2"/>
+                                            <TextBlock Text="Find the crash reports of the app, read them, and copy them for an AI agent." Classes="section-copy" Margin="0"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                            <Button Content="Scan for crash logs" Command="{Binding ScanCrashLogsCommand}" MinWidth="150"
+                                                    ToolTip.Tip="Looks for the crash reports of the app on the selected target. It only reads: nothing is written to the device and no report is deleted."/>
+                                            <Button Content="Copy all" Command="{Binding CopyAllCrashLogsCommand}" MinWidth="100"
+                                                    ToolTip.Tip="Copies every crash report in one block, newest first, ready to paste into an AI agent."/>
+                                        </StackPanel>
+                                    </Grid>
+                                    <TextBlock Classes="section-copy" Margin="0" TextWrapping="Wrap"
+                                               Text="Apps do not keep their crash reports in one agreed place. The scan looks in the app's own data folder, in the crash store the operating system keeps, and in the device log, and it says which of those it could read. On a device it uses the Package ID above, because the crashes of the other apps are stored in the same place."/>
+                                    <WrapPanel ItemSpacing="8" LineSpacing="8" VerticalAlignment="Center">
+                                        <Border Classes="badge badge-device" HorizontalAlignment="Left"
+                                                ToolTip.Tip="The target the crash reports are read from.">
+                                            <TextBlock Text="{Binding CrashLogTargetText}" Classes="badge-text-device" FontSize="11" TextWrapping="Wrap"/>
+                                        </Border>
+                                    </WrapPanel>
+                                    <TextBlock Text="{Binding CrashLogsSummary}" Classes="section-copy" Margin="0" TextWrapping="Wrap"/>
+                                    <ProgressBar IsIndeterminate="True" Height="3" IsVisible="{Binding IsCrashLogsBusy}"/>
+                                    <Border Classes="status-banner" IsVisible="{Binding HasCrashLogNotes}" Padding="12,10">
+                                        <TextBlock Text="{Binding CrashLogNotes}" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondaryColor}"/>
+                                    </Border>
+                                    <ScrollViewer MaxHeight="300" HorizontalScrollBarVisibility="Disabled">
+                                        <ItemsControl ItemsSource="{Binding CrashLogs}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:CrashLogRowViewModel">
+                                                    <Border Classes="file-row">
+                                                        <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10" VerticalAlignment="Center">
+                                                            <PathIcon Data="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" Width="16" Height="16" VerticalAlignment="Center" Foreground="{DynamicResource TextSecondaryColor}"/>
+                                                            <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding Name}" FontSize="13" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Location}"/>
+                                                                <TextBlock Text="{Binding Summary}" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}" TextTrimming="CharacterEllipsis" IsVisible="{Binding HasSummary}"/>
+                                                                <TextBlock Text="{Binding DetailText}" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}" TextTrimming="CharacterEllipsis"/>
+                                                            </StackPanel>
+                                                            <Button Grid.Column="2" Content="Show" Command="{Binding ShowCommand}" MinWidth="80" IsVisible="{Binding CanShowText}"/>
+                                                            <Button Grid.Column="3" Content="Copy" Command="{Binding CopyCommand}" MinWidth="80"/>
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                    <Border Classes="console-shell" IsVisible="{Binding HasCrashLogPreview}" Padding="0" ClipToBounds="True">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding CrashLogPreviewTitle}" FontWeight="SemiBold" FontSize="12" Margin="12,10,12,4"/>
+                                            <ScrollViewer Classes="console-scroll" HorizontalScrollBarVisibility="Disabled" MaxHeight="320">
+                                                <TextBox Classes="console-textbox" Text="{Binding CrashLogPreview}" AcceptsReturn="True" MinHeight="180"/>
+                                            </ScrollViewer>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
 
                         <!-- Device Files Section -->

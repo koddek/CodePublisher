@@ -287,3 +287,37 @@ the Play Console website.
   CHECK: dotnet run --project tests/DotNetAppPublisher.Tests/DotNetAppPublisher.Tests.csproj -- --disable-logo --progress off
   EXPECT: certificate compatibility tests pass.
   EVIDENCE: The install note told the user to sign with "the keystore registered in Play Console", which is the upload key. Google Play signs its downloads with the app signing key, so a build signed with the upload key can never be replaced by a Play Store update. The wording now names the app signing key and the signed universal APK from Play Console as the two ways to get a Play-updatable build.
+
+## Crash report workspace increment
+
+- [x] C1: The crash reports of an app are found on an Android device, in every place they can be.
+  CHECK: dotnet run --project tests/DotNetAppPublisher.Tests/DotNetAppPublisher.Tests.csproj -- --disable-logo --progress off
+  EXPECT: the crash log parsers and the report builder pass, and a scan against a running emulator finds the app's own crash file, the report in Android's crash store, and the crash in the device log.
+  EVIDENCE: 337 tests pass (Debug, macOS osx-arm64, .NET 10.0.13). Against an Android 17 emulator with a debuggable `com.example.crashprobe` that holds `files/logs/crash-2026-10-20.log` and `cache/logs/crash-cache.log`, and that crashed once, the scan returned the two files of the app's own data folder, the `data_app_crash` entry of the DropBox store, and the crash in the device log. A later scan of the same emulator returned the first three and no device log, because the log buffer had rotated, and the note said exactly that. The same scan for `com.android.settings` returned only the crash store entry of that app, and the crash of the other app was left out of the device log. `app.log`, which is not a crash report, was not listed. A package that is not installed reports that it has no crash reports.
+
+- [x] C2: The crash reports of an app are found on an iOS simulator, in every place they can be.
+  CHECK: dotnet run --project tests/DotNetAppPublisher.Tests/DotNetAppPublisher.Tests.csproj -- --disable-logo --progress off
+  EXPECT: the CoreDevice file listing parser passes, and a scan against a running simulator finds the crash file in the app's container and the system crash report of the crashed app.
+  EVIDENCE: The parser accepts the field names of several Xcode versions. Against an iOS 18.6 simulator with a `com.example.simapp` that holds `Library/Logs/crash-2026-10-20.log` and that crashed once, the scan returned two reports: the file in the app's data container and the `MyApp-2026-10-20-204613.ips` that macOS wrote into `~/Library/Logs/DiagnosticReports`. The ordinary `app.log` in the same folder was not listed.
+
+- [x] C3: A found crash report can be read and copied as text that an AI agent can work with.
+  CHECK: dotnet run --project tests/DotNetAppPublisher.Tests/DotNetAppPublisher.Tests.csproj -- --disable-logo --progress off
+  EXPECT: the report builder names the report, its source, its location, its time, and what the crash was about, and puts every report in one block.
+  EVIDENCE: `CrashLogReport.BuildEntry` and `CrashLogReport.BuildAll` are covered by six tests. The copy of one report reads as a headed block: `=== Crash report: crash-2026-10-20.log ===`, `Source: App data folder`, `Location: /data/data/com.example.crashprobe/files/logs/crash-2026-10-20.log`, `Time:`, `Size:`, `Summary: System.InvalidOperationException: The configuration key "AppData" was not found.`, and then the text of the report.
+
+- [x] C4: The Deploy section carries the crash report workspace.
+  CHECK: dotnet build DotNetAppPublisher.slnx --no-restore
+  EXPECT: the solution builds, and the Deploy section of `MainView.axaml` holds the crash log card with the scan, the copy, the list, and the preview.
+  EVIDENCE: The solution builds with zero warnings and zero errors. The card in the Deploy section holds `Scan for crash logs`, `Copy all`, the target badge, the summary, the notes, the list of reports, and the preview of the selected report. `MainViewModel.CrashLogs.cs` owns the state and the commands, and `CrashLogRowViewModel` keeps the actions on the row. Every binding path of the card (19 of them) was checked against the view model by reflection, and every one resolves. The item template carries an `x:DataType`, so the XAML compiler checked its bindings at build time.
+
+- [x] C5: The place a crash report is stored is documented, with what was verified and what was not.
+  CHECK: test -f docs/crash-report-locations.md
+  EXPECT: the document names the folders each platform uses, the rule that the app's own folder is the app's own choice, and the sources of the claims.
+  EVIDENCE: `docs/crash-report-locations.md` records the Android data folder, the debuggable rule of `run-as`, the DropBox tags, the `logcat` buffer, the iOS container and the `.ips` reports, and the macOS and Windows folders, with the table of what the scan reads per platform and the list of the file names that mark a crash report. The real device path of `devicectl` was not exercised, because no iPhone was connected to this computer.
+
+## Crash log button increment
+
+- [x] C6: The crash report scan is available as soon as the Deploy section is open.
+  CHECK: dotnet run --project tests/DotNetAppPublisher.Tests/DotNetAppPublisher.Tests.csproj -- --disable-logo --progress off
+  EXPECT: the scan button is enabled for a device target and for a desktop target, it is disabled only while a scan runs, and a missing package id is reported when the scan is pressed instead of leaving a dead button.
+  EVIDENCE: The first version of the button depended on the package id in its enable state, and the package id is read from the project after the project is chosen. The command was never told to check again, so the button stayed disabled for the whole session. The scan now follows the rule of the other deploy actions: the button is enabled for the platform, and the package id is checked when the scan is pressed, with the message that says it is required and why. `MainViewModelCrashLogsTests` covers the enabled state for a device target, the enabled state for a desktop target, and the disabled state while a scan runs, and it fails when the notification that re-checks the button is removed. `AndroidCrashLogServiceTests` covers the missing package id and the missing device. 342 tests pass.

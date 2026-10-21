@@ -26,6 +26,7 @@ It is built with Avalonia and currently supports Android, macOS, Windows, and iO
 - Inspect what the device has installed for a package: who installed it, the version code it runs, and the certificate it carries, so you can tell whether a Play Store update can replace it
 - Pair wireless debugging three ways: the Android 11+ pairing code, a QR code the phone scans (Developer options → Wireless debugging → **Pair device with QR code**), or the legacy `adb tcpip` step for Android 10 and older
 - Browse the device's public folders (Downloads, Pictures, DCIM, Documents, Movies, Music), delete files with a confirmation, drag files from the computer into the open folder, and save device files back to the computer
+- Find the crash reports of the app on the selected target and read them in the app: the crash files the app wrote into its own data folder, the report the operating system kept, and the crash still in the device log. Copy one report or all of them to the clipboard, ready to paste into an AI agent. The place an app keeps its crash files is the app's own choice, so the scan says which of those sources it could read
 - Detect real iPhone and iPad targets with `xcrun devicectl` (macOS, Xcode 15+) and install, launch, or stop a signed build on one
 - Uninstall, launch, or close the app through `adb`: **Close app** stops every process *and* removes the app from Recents (the app switcher), so the app is really gone instead of only stopped. The installed app and its data are always kept
 - Discover available Android emulators and launch the one you want
@@ -118,6 +119,7 @@ DotNetAppPublisher/
         │       │   └── Process/
         │       ├── Deployment/
         │       │   ├── Android/
+        │       │   ├── CrashLogs/
         │       │   └── Ios/
         │       └── Shared/
         ├── DotNetAppPublisher/            # Avalonia app: views and view models

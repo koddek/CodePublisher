@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using DotNetAppPublisher.Features.Deployment.Android;
+using DotNetAppPublisher.Features.Deployment.CrashLogs;
 using DotNetAppPublisher.Features.Deployment.Ios;
 using DotNetAppPublisher.Features.Publishing.Artifacts;
 using DotNetAppPublisher.Features.Publishing.Build;
@@ -34,6 +35,9 @@ public sealed class PublisherService
     private readonly AndroidDeploymentService _androidDeploymentService;
     private readonly IosSimulatorService _iosSimulatorService;
     private readonly IosDeviceService _iosDeviceService;
+    private readonly AndroidCrashLogService _androidCrashLogService;
+    private readonly IosCrashLogService _iosCrashLogService;
+    private readonly DesktopCrashLogService _desktopCrashLogService;
     private readonly IAppIconProvider? _appIconProvider;
 
     public PublisherService(IAppIconProvider? appIconProvider = null)
@@ -76,6 +80,9 @@ public sealed class PublisherService
             FindBestApk);
         _iosSimulatorService = new IosSimulatorService(xcrunPath, FindNewestAppBundle);
         _iosDeviceService = new IosDeviceService(xcrunPath, FindNewestAppBundle);
+        _androidCrashLogService = new AndroidCrashLogService(AdbPath);
+        _iosCrashLogService = new IosCrashLogService(xcrunPath);
+        _desktopCrashLogService = new DesktopCrashLogService();
     }
 
     public string? DotnetPath { get; }
@@ -638,6 +645,55 @@ public sealed class PublisherService
 
     public Task<string> PushFileToSimulatorAsync(string localFilePath, string simulator, CancellationToken cancellationToken) =>
         _iosSimulatorService.PushFileAsync(localFilePath, simulator, cancellationToken);
+
+    /// <summary>
+    /// Looks for the crash reports of the app on the selected Android device: the app's own data
+    /// folder, Android's own crash store, and the device log.
+    /// </summary>
+    public Task<CrashLogScan> ScanAndroidCrashLogsAsync(
+        string? deviceSerial,
+        string packageId,
+        CancellationToken cancellationToken) =>
+        _androidCrashLogService.ScanAsync(deviceSerial ?? string.Empty, packageId, cancellationToken);
+
+    /// <summary>Looks for the crash reports of the app on the selected real iOS device.</summary>
+    public Task<CrashLogScan> ScanIosDeviceCrashLogsAsync(
+        string? deviceUdid,
+        string bundleId,
+        CancellationToken cancellationToken) =>
+        _iosCrashLogService.ScanDeviceAsync(deviceUdid ?? string.Empty, bundleId, cancellationToken);
+
+    /// <summary>Looks for the crash reports of the app on the selected iOS simulator.</summary>
+    public Task<CrashLogScan> ScanIosSimulatorCrashLogsAsync(
+        string? simulatorId,
+        string bundleId,
+        CancellationToken cancellationToken) =>
+        _iosCrashLogService.ScanSimulatorAsync(simulatorId ?? string.Empty, bundleId, cancellationToken);
+
+    /// <summary>Looks for the crash reports of the app on this computer.</summary>
+    public Task<CrashLogScan> ScanDesktopCrashLogsAsync(
+        string? appNameHint,
+        CancellationToken cancellationToken) =>
+        _desktopCrashLogService.ScanAsync(appNameHint, cancellationToken);
+
+    /// <summary>
+    /// The name of the published desktop app, used to pick the crash reports that belong to it out
+    /// of the ones macOS and Windows wrote for every app.
+    /// </summary>
+    public string? FindDesktopAppName(string outputDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(outputDirectory) || !Directory.Exists(outputDirectory))
+        {
+            return null;
+        }
+
+        var appBundle = new DirectoryInfo(outputDirectory)
+            .EnumerateDirectories("*.app", SearchOption.AllDirectories)
+            .OrderByDescending(directory => directory.LastWriteTimeUtc)
+            .FirstOrDefault();
+
+        return appBundle?.Name;
+    }
 
     private static string? ResolveExecutable(string name, IReadOnlyList<string> candidates)
     {
