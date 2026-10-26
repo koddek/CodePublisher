@@ -8,13 +8,13 @@
   <key>CFBundleExecutable</key>
   <string>DotNetAppPublisher.Desktop</string>
   <key>CFBundleIdentifier</key>
-  <string>com.dotnetapppublisher.desktop</string>
+  <string>com.codepublisher</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>.NET App Publisher</string>
+  <string>Code Publisher</string>
   <key>CFBundleDisplayName</key>
-  <string>.NET App Publisher</string>
+  <string>Code Publisher</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <!-- Version values are placeholders. The build stamps both from $(Version) in
@@ -39,7 +39,7 @@
        attributed to it, so the app's access is what the pairing and debugging connections use.
        The Bonjour entries are the two service types Wireless debugging advertises. -->
   <key>NSLocalNetworkUsageDescription</key>
-  <string>.NET App Publisher talks to your Android phones and emulators over your local network: it discovers them through Wi-Fi debugging, pairs with them, and deploys and inspects apps on them.</string>
+  <string>Code Publisher talks to your Android phones and emulators over your local network: it discovers them through Wi-Fi debugging, pairs with them, and deploys and inspects apps on them.</string>
   <key>NSBonjourServices</key>
   <array>
     <string>_adb-tls-pairing._tcp</string>

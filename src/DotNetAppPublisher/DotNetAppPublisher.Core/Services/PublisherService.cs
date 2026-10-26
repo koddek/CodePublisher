@@ -1655,7 +1655,7 @@ public sealed class PublisherService
             normalizedName = "dotnetapppublisher";
         }
 
-        return $"com.{normalizedName}.app";
+        return $"com.codepublisher";
     }
 
     private static string? GetProjectIdentifier(FileInfo projectFile, string projectName, string publishPlatform)
