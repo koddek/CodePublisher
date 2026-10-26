@@ -7,7 +7,7 @@
             "type": "process",
             "args": [
                 "build",
-                "${workspaceFolder}/src/DotNetAppPublisher/DotNetAppPublisher.Desktop/DotNetAppPublisher.Desktop.csproj",
+                "${workspaceFolder}/src/CodePublisher/CodePublisher.Desktop/CodePublisher.Desktop.csproj",
                 "-c",
                 "Debug",
                 "/property:GenerateFullPaths=true",
@@ -22,7 +22,7 @@
         {
             "label": "launch-desktop-bundle",
             "type": "shell",
-            "command": "dotnet build \"${workspaceFolder}/src/DotNetAppPublisher/DotNetAppPublisher.Desktop/DotNetAppPublisher.Desktop.csproj\" -c Debug || exit $?; open -n -a \"${workspaceFolder}/src/DotNetAppPublisher/DotNetAppPublisher.Desktop/bin/Debug/DotNetAppPublisher.app\" >/tmp/dotnet-app-publisher-debug-launch.log 2>&1 & echo $! > /tmp/dotnet-app-publisher-debug-launch.pid",
+            "command": "dotnet build \"${workspaceFolder}/src/CodePublisher/CodePublisher.Desktop/CodePublisher.Desktop.csproj\" -c Debug || exit $?; open -n -a \"${workspaceFolder}/src/CodePublisher/CodePublisher.Desktop/bin/Debug/CodePublisher.app\" >/tmp/codepublisher-debug-launch.log 2>&1 & echo $! > /tmp/codepublisher-debug-launch.pid",
             "problemMatcher": []
         },
         {

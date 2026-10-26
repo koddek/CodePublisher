@@ -1,0 +1,32 @@
+<linker>
+  <!-- The core library holds the domain layer. Its types are preserved where the UI binds
+       to them or a serializer reflects over them. -->
+  <assembly fullname="CodePublisher.Core">
+    <!-- Services: AndroidDeviceInfo.DisplayName is bound in DataTemplate -->
+    <type fullname="CodePublisher.Features.Deployment.Android.AndroidDeviceInfo" preserve="all" />
+    <type fullname="CodePublisher.Services.PublisherService" preserve="all" />
+
+    <!-- Models: may be reflected by serializers or debug displays -->
+    <type fullname="CodePublisher.Models.PublishConfiguration" preserve="all" />
+    <type fullname="CodePublisher.Models.PublishCommandBundle" preserve="all" />
+    <type fullname="CodePublisher.Models.ProjectMetadata" preserve="all" />
+  </assembly>
+
+  <!-- ViewModels: preserve all members because XAML binds to generated properties/commands -->
+  <assembly fullname="CodePublisher">
+    <type fullname="CodePublisher.ViewModels.MainViewModel" preserve="all" />
+    <type fullname="CodePublisher.Features.GooglePlay.GooglePlayViewModel" preserve="all" />
+    <type fullname="CodePublisher.ViewModels.ViewModelBase" preserve="all" />
+
+    <!-- Views: Avalonia XAML loader needs type metadata at runtime -->
+    <type fullname="CodePublisher.Views.MainView" preserve="all" />
+    <type fullname="CodePublisher.Views.GooglePlay.GooglePlayView" preserve="all" />
+    <type fullname="CodePublisher.Views.MainWindow" preserve="all" />
+    <type fullname="CodePublisher.Views.ScreenshotDialog" preserve="all" />
+
+    <!-- Services -->
+    <type fullname="CodePublisher.Services.DesktopInteractionService" preserve="all" />
+    <type fullname="CodePublisher.ViewModels.NavItem" preserve="all" />
+    <type fullname="CodePublisher.ViewModels.PublishSection" preserve="all" />
+  </assembly>
+</linker>

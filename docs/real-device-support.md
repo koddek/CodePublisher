@@ -554,8 +554,8 @@ seen on real hardware:
    pairing still connects.
 
 The host half of that flow was exercised live: with the snapshot taken first, publishing
-`dns-sd -R dotnetapppublisher-livetest _adb-tls-pairing._tcp local 55337` was found by the merged
-discovery (`dotnetapppublisher-livetest 192.168.50.158:55337`) while `adb mdns services` still listed
+`dns-sd -R codepublisher-livetest _adb-tls-pairing._tcp local 55337` was found by the merged
+discovery (`codepublisher-livetest 192.168.50.158:55337`) while `adb mdns services` still listed
 nothing, the differing-name fallback matched it against the requested name, the TCP probe reached the
 listener, and `adb pair` ended at the 60 s bound with the sentence about a phone that stopped
 answering.
@@ -702,7 +702,7 @@ shell granted access reaches the phone. `adb kill-server` before the next attemp
 the fix, not a superstition.
 
 The app-side fix: a macOS bundle that connects to other devices on the local network must declare it.
-`src/DotNetAppPublisher/DotNetAppPublisher.Desktop/macos/Info.plist` now carries
+`src/CodePublisher/CodePublisher.Desktop/macos/Info.plist` now carries
 `NSLocalNetworkUsageDescription` and `NSBonjourServices` (`_adb-tls-pairing._tcp`,
 `_adb-tls-connect._tcp`). Without the usage description macOS denies the app's LAN traffic silently and
 never offers a switch for it, which is why the failure had no visible cause on the host.
@@ -710,7 +710,7 @@ never offers a switch for it, which is why the failure had no visible cause on t
 What the user must still do, because it is a per-app consent and cannot be set from code:
 
 * System Settings > Privacy & Security > Local Network: switch on the app that starts adb — **JetBrains
-  Rider** when the app is run from the IDE (macOS logs that denial by name), and **.NET App Publisher**
+  Rider** when the app is run from the IDE (macOS logs that denial by name), and **Code Publisher**
   when the bundle is started on its own. Then relaunch it, so a fresh adb server inherits the grant.
 * The failure text built from `AndroidWirelessDebug.ReadConnectFailure` names this cause for macOS 15 and
   newer, so the app no longer blames the phone or the network for it.

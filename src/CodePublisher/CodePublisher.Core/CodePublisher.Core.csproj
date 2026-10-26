@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <AssemblyName>CodePublisher.Core</AssemblyName>
+        <PackageId>CodePublisher.Core</PackageId>
+        <RootNamespace>CodePublisher</RootNamespace>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="QRCoder" />
+    </ItemGroup>
+</Project>

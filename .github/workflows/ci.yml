@@ -34,20 +34,20 @@ jobs:
         run: dotnet workload install wasm-tools
 
       - name: Restore
-        run: dotnet restore DotNetAppPublisher.slnx -p:Configuration=Release
+        run: dotnet restore CodePublisher.slnx -p:Configuration=Release
 
       - name: Build
-        run: dotnet build DotNetAppPublisher.slnx --configuration Release --no-restore
+        run: dotnet build CodePublisher.slnx --configuration Release --no-restore
 
       - name: Test
-        run: dotnet run --project tests/DotNetAppPublisher.Tests/DotNetAppPublisher.Tests.csproj --configuration Release --no-build -- --disable-logo --progress off
+        run: dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj --configuration Release --no-build -- --disable-logo --progress off
 
       # Publish is verified because the macOS app-bundle target and the NativeAOT
       # output path are not exercised by `dotnet build`.
       - name: Publish (self-contained, Windows)
         if: runner.os == 'Windows'
         run: >
-          dotnet publish src/DotNetAppPublisher/DotNetAppPublisher.Desktop/DotNetAppPublisher.Desktop.csproj
+          dotnet publish src/CodePublisher/CodePublisher.Desktop/CodePublisher.Desktop.csproj
           --configuration Release --no-restore --self-contained true
           -p:PublishTrimmed=false -p:PublishAot=false -p:PublishReadyToRun=false
           -o "${{ runner.temp }}/publish-scd"
@@ -62,7 +62,7 @@ jobs:
       - name: Publish (NativeAOT, Linux/macOS)
         if: runner.os != 'Windows'
         run: >
-          dotnet publish src/DotNetAppPublisher/DotNetAppPublisher.Desktop/DotNetAppPublisher.Desktop.csproj
+          dotnet publish src/CodePublisher/CodePublisher.Desktop/CodePublisher.Desktop.csproj
           --configuration Release --self-contained true
           -p:PublishAot=true -p:PublishReadyToRun=false -p:PublishSingleFile=false
           -o "${{ runner.temp }}/publish-aot"
@@ -71,10 +71,10 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           out="${{ runner.temp }}/publish-aot"
-          test -f "$out/DotNetAppPublisher.Desktop"
+          test -f "$out/CodePublisher.Desktop"
           # A NativeAOT publish has no managed entry assembly; a silent fallback to
           # a trimmed self-contained publish would leave it behind.
-          test ! -f "$out/DotNetAppPublisher.Desktop.dll"
+          test ! -f "$out/CodePublisher.Desktop.dll"
 
       # The browser host links the native SkiaSharp library, so it fails at
       # startup with "System.DllNotFoundException: libSkiaSharp" when the
@@ -83,7 +83,7 @@ jobs:
       - name: Build the browser host
         run: >
           dotnet publish
-          src/DotNetAppPublisher/DotNetAppPublisher.Browser/DotNetAppPublisher.Browser.csproj
+          src/CodePublisher/CodePublisher.Browser/CodePublisher.Browser.csproj
           --configuration Release --no-restore
           -o "${{ runner.temp }}/publish-browser"
 
@@ -101,8 +101,8 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           out="${{ runner.temp }}/publish-aot"
-          published="$out/DotNetAppPublisher.Desktop"
-          bundled="$out/DotNetAppPublisher.app/Contents/MacOS/DotNetAppPublisher.Desktop"
+          published="$out/CodePublisher.Desktop"
+          bundled="$out/CodePublisher.app/Contents/MacOS/CodePublisher.Desktop"
           test -f "$published"
           test -f "$bundled"
           # A stale bundle would hold the framework-dependent apphost instead of

@@ -1,0 +1,137 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <!--If you are willing to use platform-specific APIs, use conditional compilation.
+        See https://docs.avaloniaui.net/docs/guides/platforms/platform-specific-code/dotnet for more details.-->
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <AssemblyName>CodePublisher.Desktop</AssemblyName>
+        <RootNamespace>CodePublisher.Desktop</RootNamespace>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <ApplicationManifest>app.manifest</ApplicationManifest>
+        <ApplicationIcon>..\CodePublisher\Assets\codepublisher.ico</ApplicationIcon>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('WINDOWS'))">
+        <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('LINUX'))">
+        <RuntimeIdentifiers>linux-x64;linux-arm64</RuntimeIdentifiers>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+        <RuntimeIdentifiers>osx-arm64;osx-x64</RuntimeIdentifiers>
+        <UseAppHost>true</UseAppHost>
+        <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+        <OutputPath>bin/$(Configuration)/CodePublisher.app/Contents/MacOS/</OutputPath>
+        <MacBundleContentsDir>bin/$(Configuration)/CodePublisher.app/Contents</MacBundleContentsDir>
+    </PropertyGroup>
+
+  <!-- Default publish properties for macOS self-contained release -->
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('OSX')) AND '$(Configuration)' == 'Release'">
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
+    <!-- Partial trim: trims framework assemblies but leaves the app assembly intact.
+         The app relies on XAML bindings, CommunityToolkit.Mvvm source-generated commands,
+         and DataTemplate bindings that require full type metadata at runtime. -->
+    <TrimMode>partial</TrimMode>
+  </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Avalonia.Desktop"/>
+        <!--Condition below is needed to remove Avalonia.Diagnostics package from build output in Release configuration.-->
+        <PackageReference Include="Avalonia.Diagnostics">
+            <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
+            <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
+        </PackageReference>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\CodePublisher\CodePublisher.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <TrimmerRootDescriptor Include="..\CodePublisher\Trimming\LinkerDescriptor.xml" />
+        <TrimmerRootAssembly Include="CodePublisher" />
+        <TrimmerRootAssembly Include="CodePublisher.Core" />
+    </ItemGroup>
+
+    <Target Name="PrepareMacBundle" AfterTargets="Build" Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+        <PropertyGroup>
+            <AppBundleDir>bin/$(Configuration)/CodePublisher.app</AppBundleDir>
+            <AppContentsDir>$(AppBundleDir)/Contents</AppContentsDir>
+            <AppMacOsDir>$(AppContentsDir)/MacOS</AppMacOsDir>
+            <AppResourcesDir>$(AppContentsDir)/Resources</AppResourcesDir>
+        </PropertyGroup>
+        <MakeDir Directories="$(AppMacOsDir);$(AppResourcesDir)"/>
+        <ItemGroup>
+            <MacBuildOutput Include="$(TargetDir)**/*" Exclude="$(TargetDir)$(TargetFileName).app\**\*" />
+        </ItemGroup>
+        <Copy SourceFiles="@(MacBuildOutput)" DestinationFiles="$(AppMacOsDir)/%(RecursiveDir)%(Filename)%(Extension)" SkipUnchangedFiles="true" />
+        <Copy SourceFiles="macos/Info.plist" DestinationFiles="$(AppContentsDir)/Info.plist"/>
+        <Copy SourceFiles="..\CodePublisher\Assets\codepublisher.icns" DestinationFiles="$(AppResourcesDir)/codepublisher.icns"/>
+    </Target>
+
+    <!--
+      The bundle body is shared by two anchors because the NativeAOT publish path
+      replaces the apphost in $(PublishDir) from CopyNativeBinary, which runs
+      after Publish. Anchoring only on Publish copies the framework-dependent
+      apphost into the .app before the native binary exists.
+    -->
+    <Target Name="CreateMacAppBundle" Condition="$([MSBuild]::IsOSPlatform('OSX')) AND '$(SelfContained)' == 'true'">
+        <PropertyGroup>
+            <AppBundleDir>$(PublishDir)CodePublisher.app</AppBundleDir>
+            <AppContentsDir>$(AppBundleDir)/Contents</AppContentsDir>
+            <AppMacOsDir>$(AppContentsDir)/MacOS</AppMacOsDir>
+            <AppResourcesDir>$(AppContentsDir)/Resources</AppResourcesDir>
+        </PropertyGroup>
+        <MakeDir Directories="$(AppMacOsDir);$(AppResourcesDir)"/>
+        <!-- Copy all publish outputs to MacOS directory, excluding the .app bundle itself -->
+        <ItemGroup>
+            <PublishFiles Include="$(PublishDir)**\*" Exclude="$(PublishDir)**\CodePublisher.app\**\*" />
+        </ItemGroup>
+        <Copy SourceFiles="@(PublishFiles)" DestinationFolder="$(AppMacOsDir)/%(RecursiveDir)" SkipUnchangedFiles="true" />
+        <Copy SourceFiles="macos/Info.plist" DestinationFiles="$(AppContentsDir)/Info.plist"/>
+        <Copy SourceFiles="..\CodePublisher\Assets\codepublisher.icns" DestinationFiles="$(AppResourcesDir)/codepublisher.icns"/>
+    </Target>
+
+    <Target Name="CreateMacAppBundleAfterPublish"
+            AfterTargets="Publish"
+            DependsOnTargets="CreateMacAppBundle"
+            Condition="'$(PublishAot)' != 'true' AND '$(_MacAppBundleCreated)' != 'true' AND $([MSBuild]::IsOSPlatform('OSX')) AND '$(SelfContained)' == 'true'">
+        <PropertyGroup>
+            <_MacAppBundleCreated>true</_MacAppBundleCreated>
+        </PropertyGroup>
+    </Target>
+
+    <Target Name="CreateMacAppBundleAfterNativePublish"
+            AfterTargets="CopyNativeBinary"
+            DependsOnTargets="CreateMacAppBundle"
+            Condition="'$(PublishAot)' == 'true' AND $([MSBuild]::IsOSPlatform('OSX')) AND '$(SelfContained)' == 'true'">
+        <PropertyGroup>
+            <_MacAppBundleCreated>true</_MacAppBundleCreated>
+        </PropertyGroup>
+    </Target>
+
+    <!--
+      Stamps the bundle version in the copied Info.plist from $(Version), so the
+      .app reports the version declared by the central version manager
+      (Directory.Version.props) instead of a value that drifts. Runs after every
+      path that writes Info.plist into a bundle: the build-time bundle and both
+      publish-time bundles (framework-dependent and NativeAOT).
+    -->
+    <Target Name="StampMacBundleVersion"
+            AfterTargets="PrepareMacBundle;CreateMacAppBundleAfterPublish;CreateMacAppBundleAfterNativePublish"
+            Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+        <XmlPoke XmlInputPath="$(AppContentsDir)/Info.plist"
+                 Query="/plist/dict/key[.='CFBundleShortVersionString']/following-sibling::string[1]"
+                 Value="$(Version)" />
+        <XmlPoke XmlInputPath="$(AppContentsDir)/Info.plist"
+                 Query="/plist/dict/key[.='CFBundleVersion']/following-sibling::string[1]"
+                 Value="$(Version)" />
+    </Target>
+</Project>

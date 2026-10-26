@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a defect or regression in .NET App Publisher
+description: Report a defect or regression in Code Publisher
 title: "[Bug]: "
 labels:
   - bug

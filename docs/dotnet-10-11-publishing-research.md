@@ -153,18 +153,18 @@ NativeAOT is already a native executable; do not combine it with the single-file
 ## Verification commands
 
 ```bash
-dotnet restore DotNetAppPublisher.slnx -p:Configuration=Release
-dotnet build DotNetAppPublisher.slnx --configuration Release --no-restore
-dotnet run --project tests/DotNetAppPublisher.Tests/DotNetAppPublisher.Tests.csproj --configuration Release --no-build -- --disable-logo --progress off
+dotnet restore CodePublisher.slnx -p:Configuration=Release
+dotnet build CodePublisher.slnx --configuration Release --no-restore
+dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj --configuration Release --no-build -- --disable-logo --progress off
 
 # NativeAOT: no --no-restore, and no -p:PublishSingleFile (NativeAOT is already native).
-dotnet publish src/DotNetAppPublisher/DotNetAppPublisher.Desktop/DotNetAppPublisher.Desktop.csproj \
+dotnet publish src/CodePublisher/CodePublisher.Desktop/CodePublisher.Desktop.csproj \
   -c Release -f net10.0 -r osx-arm64 -p:PublishAot=true -p:PublishSingleFile=false \
   -o "${TMPDIR:-/tmp}/dnap-aot"
-test ! -f "${TMPDIR:-/tmp}/dnap-aot/DotNetAppPublisher.Desktop.dll"
+test ! -f "${TMPDIR:-/tmp}/dnap-aot/CodePublisher.Desktop.dll"
 
 # Trimming smoke: the only expected warning is third-party Avalonia.DesignerSupport IL2104.
-dotnet publish src/DotNetAppPublisher/DotNetAppPublisher.Desktop/DotNetAppPublisher.Desktop.csproj \
+dotnet publish src/CodePublisher/CodePublisher.Desktop/CodePublisher.Desktop.csproj \
   -c Release -f net10.0 -r osx-arm64 -p:PublishTrimmed=true -o "${TMPDIR:-/tmp}/dnap-trim"
 ```
 

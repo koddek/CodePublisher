@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.WebAssembly">
+    <PropertyGroup>
+        <TargetFramework>net10.0-browser</TargetFramework>
+        <OutputType>Exe</OutputType>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <Nullable>enable</Nullable>
+        <AssemblyName>CodePublisher.Browser</AssemblyName>
+        <RootNamespace>CodePublisher.Browser</RootNamespace>
+    </PropertyGroup>
+
+    <!-- The browser host links the native SkiaSharp library, so it needs the
+         WebAssembly native assets and the emscripten toolchain that comes with
+         the wasm-tools workload. Without them the app fails at startup with
+         "System.DllNotFoundException: libSkiaSharp". -->
+    <PropertyGroup>
+        <WasmBuildNative>true</WasmBuildNative>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Avalonia.Browser"/>
+        <PackageReference Include="SkiaSharp.NativeAssets.WebAssembly"/>
+        <PackageReference Include="HarfBuzzSharp.NativeAssets.WebAssembly"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\CodePublisher\CodePublisher.csproj"/>
+    </ItemGroup>
+</Project>

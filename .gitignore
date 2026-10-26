@@ -367,7 +367,7 @@ project.lock.json
 project.fragment.lock.json
 artifacts/
 # The Publishing/Artifacts feature slice holds artifact-ranking source and tests, not build output.
-!tests/DotNetAppPublisher.Tests/Features/Publishing/Artifacts/
+!tests/CodePublisher.Tests/Features/Publishing/Artifacts/
 
 # StyleCop
 StyleCopReport.xml

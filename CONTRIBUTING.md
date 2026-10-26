@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve .NET App Publisher.
+Thanks for helping improve Code Publisher.
 
 ## Before you start
 
@@ -20,8 +20,8 @@ Thanks for helping improve .NET App Publisher.
 ### Run the app
 
 ```bash
-dotnet build DotNetAppPublisher.slnx
-dotnet run --project src/DotNetAppPublisher/DotNetAppPublisher.Desktop/DotNetAppPublisher.Desktop.csproj
+dotnet build CodePublisher.slnx
+dotnet run --project src/CodePublisher/CodePublisher.Desktop/CodePublisher.Desktop.csproj
 ```
 
 ## Pull requests

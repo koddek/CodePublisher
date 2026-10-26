@@ -1,8 +1,8 @@
-# .NET App Publisher
+# Code Publisher
 
-![.NET App Publisher icon](docs/dotnet-app-publisher-icon-v2.png)
+![Code Publisher icon](docs/codepublisher-icon-v2.png)
 
-.NET App Publisher is a desktop utility for .NET developers who want a faster, safer way to build publish commands, inspect exactly what will run, and handle common platform workflows without living in the terminal.
+Code Publisher is a desktop utility for .NET developers who want a faster, safer way to build publish commands, inspect exactly what will run, and handle common platform workflows without living in the terminal.
 
 It is built with Avalonia and currently supports Android, macOS, Windows, and iOS publish workflows for .NET projects.
 
@@ -57,20 +57,20 @@ MAUI Android publish commands can become long and easy to get wrong, especially 
 ### Run locally
 
 ```bash
-dotnet build DotNetAppPublisher.slnx
-dotnet run --project src/DotNetAppPublisher/DotNetAppPublisher.Desktop/DotNetAppPublisher.Desktop.csproj
-dotnet run --project src/DotNetAppPublisher/DotNetAppPublisher.Browser/DotNetAppPublisher.Browser.csproj
+dotnet build CodePublisher.slnx
+dotnet run --project src/CodePublisher/CodePublisher.Desktop/CodePublisher.Desktop.csproj
+dotnet run --project src/CodePublisher/CodePublisher.Browser/CodePublisher.Browser.csproj
 ```
 
 ## Commands
 
 | Command | Purpose |
 | --- | --- |
-| `dotnet restore DotNetAppPublisher.slnx` | Restore NuGet packages |
-| `dotnet build DotNetAppPublisher.slnx` | Build the solution |
-| `dotnet run --project src/DotNetAppPublisher/DotNetAppPublisher.Desktop/DotNetAppPublisher.Desktop.csproj` | Launch the desktop app |
-| `dotnet run --project src/DotNetAppPublisher/DotNetAppPublisher.Browser/DotNetAppPublisher.Browser.csproj` | Launch the browser host |
-| `dotnet run --project tests/DotNetAppPublisher.Tests/DotNetAppPublisher.Tests.csproj` | Run the TUnit test suite |
+| `dotnet restore CodePublisher.slnx` | Restore NuGet packages |
+| `dotnet build CodePublisher.slnx` | Build the solution |
+| `dotnet run --project src/CodePublisher/CodePublisher.Desktop/CodePublisher.Desktop.csproj` | Launch the desktop app |
+| `dotnet run --project src/CodePublisher/CodePublisher.Browser/CodePublisher.Browser.csproj` | Launch the browser host |
+| `dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj` | Run the TUnit test suite |
 
 ### Main workflow
 
@@ -86,20 +86,20 @@ dotnet run --project src/DotNetAppPublisher/DotNetAppPublisher.Browser/DotNetApp
 ## Project structure
 
 ```text
-DotNetAppPublisher/
+CodePublisher/
 ├── .github/
 │   └── workflows/
 ├── docs/
-│   └── dotnet-app-publisher-icon.png
+│   └── codepublisher-icon.png
 ├── Directory.Build.props
 ├── Directory.Packages.props
 ├── Directory.Version.props
 ├── tests/
-│   └── DotNetAppPublisher.Tests/
-├── DotNetAppPublisher.slnx
+│   └── CodePublisher.Tests/
+├── CodePublisher.slnx
 └── src/
-    └── DotNetAppPublisher/
-        ├── DotNetAppPublisher.Core/       # UI-free domain layer
+    └── CodePublisher/
+        ├── CodePublisher.Core/       # UI-free domain layer
         │   ├── Models/
         │   ├── Services/
         │   └── Features/
@@ -122,12 +122,12 @@ DotNetAppPublisher/
         │       │   ├── CrashLogs/
         │       │   └── Ios/
         │       └── Shared/
-        ├── DotNetAppPublisher/            # Avalonia app: views and view models
-        ├── DotNetAppPublisher.Browser/
-        └── DotNetAppPublisher.Desktop/
+        ├── CodePublisher/            # Avalonia app: views and view models
+        ├── CodePublisher.Browser/
+        └── CodePublisher.Desktop/
 ```
 
-The `DotNetAppPublisher.Core` library carries the publish option graph, the publish command
+The `CodePublisher.Core` library carries the publish option graph, the publish command
 builder, the deployment services, and the Google Play API client. It has no Avalonia dependency,
 so every rule in it is testable without a window. The app project holds the views, the view
 models, and the Avalonia-bound adapters, and references the library.
@@ -190,7 +190,7 @@ The app is already useful for Android, macOS, Windows, and iOS publish flows, pl
 - The Google Play account card stays at the top of the release workspace; upload-key controls are grouped under Signing and link back from the App card.
 - Raw OAuth tokens, service-account keys, and keystore passwords are never shown in command previews or persisted by the Google Play slice. Session credentials are cleared when the window closes.
 - New Play apps, legal declarations, production access, managed publishing, and signing-key resets remain manual Play Console actions when the supported API does not expose them.
-- Some .NET projects override trim-related properties in custom ways. .NET App Publisher detects common project-specific trim property patterns so AOT and trimming combinations can be emitted correctly.
+- Some .NET projects override trim-related properties in custom ways. Code Publisher detects common project-specific trim property patterns so AOT and trimming combinations can be emitted correctly.
 - The publish options are related by one declarative graph, so the UI, the normalizer, and the command builder cannot disagree. Native AOT always trims — the .NET SDK fails the build with "PublishTrimmed is implied by native compilation and cannot be disabled." when trimming is off — so the graph keeps trimming on under AOT. ReadyToRun and single-file are mutually exclusive with AOT, trimming needs a self-contained publish, Android ahead-of-time compilation needs the linker, and the .ipa needs the archive.
 - Google Play signs its downloads with the app signing key, not the upload key. A build signed with the upload key can never be replaced by a Play Store update, because Android only accepts an update when the signing certificate matches. The app compares the certificate of a local build with the one on the device, and reports the Play app signing certificate where the API exposes it.
 - Google Play serves the highest version code a user is eligible for across every track, and never downgrades. Moving a device off a testing line therefore needs the release removed from that line *and* a production version code at least as high as the one on the device. Internal testing is exclusive: an internal tester receives only that track's version code, even when production is higher.

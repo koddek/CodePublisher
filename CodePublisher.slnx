@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="src/CodePublisher/CodePublisher.Browser/CodePublisher.Browser.csproj" />
+  <Project Path="src/CodePublisher/CodePublisher.Core/CodePublisher.Core.csproj" />
+  <Project Path="src/CodePublisher/CodePublisher.Desktop/CodePublisher.Desktop.csproj" />
+  <Project Path="src/CodePublisher/CodePublisher/CodePublisher.csproj" />
+  <Project Path="tests/CodePublisher.Tests/CodePublisher.Tests.csproj" />
+</Solution>

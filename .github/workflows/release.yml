@@ -14,16 +14,16 @@ jobs:
         include:
           - os: ubuntu-latest
             runtime: linux-x64
-            artifact_name: dotnet-app-publisher-linux-x64
-            artifact_path: artifacts/dotnet-app-publisher-linux-x64.zip
+            artifact_name: codepublisher-linux-x64
+            artifact_path: artifacts/codepublisher-linux-x64.zip
           - os: windows-latest
             runtime: win-x64
-            artifact_name: dotnet-app-publisher-win-x64
-            artifact_path: artifacts/dotnet-app-publisher-win-x64.zip
+            artifact_name: codepublisher-win-x64
+            artifact_path: artifacts/codepublisher-win-x64.zip
           - os: macos-latest
             runtime: osx-x64
-            artifact_name: dotnet-app-publisher-osx-x64
-            artifact_path: artifacts/dotnet-app-publisher-osx-x64.zip
+            artifact_name: codepublisher-osx-x64
+            artifact_path: artifacts/codepublisher-osx-x64.zip
 
     runs-on: ${{ matrix.os }}
 
@@ -39,7 +39,7 @@ jobs:
       - name: Publish desktop app
         run: >
           dotnet publish
-          src/DotNetAppPublisher/DotNetAppPublisher.Desktop/DotNetAppPublisher.Desktop.csproj
+          src/CodePublisher/CodePublisher.Desktop/CodePublisher.Desktop.csproj
           --configuration Release
           --runtime ${{ matrix.runtime }}
           --self-contained true
@@ -51,7 +51,7 @@ jobs:
         shell: bash
         run: |
           ditto -c -k --sequesterRsrc --keepParent \
-            "artifacts/${{ matrix.artifact_name }}/DotNetAppPublisher.app" \
+            "artifacts/${{ matrix.artifact_name }}/CodePublisher.app" \
             "artifacts/${{ matrix.artifact_name }}.zip"
 
       - name: Package non-macOS release archive
