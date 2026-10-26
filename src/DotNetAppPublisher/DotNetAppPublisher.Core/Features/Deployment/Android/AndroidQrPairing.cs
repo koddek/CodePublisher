@@ -22,10 +22,10 @@ public static class AndroidQrPairing
     public const string PayloadPrefix = "WIFI:T:ADB";
 
     /// <summary>
-    /// Instance name asked of the phone. Android Studio uses its own random name here; the phone echoes
-    /// whatever `S` says, so the prefix only has to be unique enough to recognise our own invitation.
+    /// Instance name asked of the phone. Uses the standard `studio-` prefix Android Studio uses, which
+    /// every Android vendor build and QR scanner recognizes and echoes in mDNS advertisements.
     /// </summary>
-    public const string ServiceNamePrefix = "dotnetapppublisher-";
+    public const string ServiceNamePrefix = "studio-";
 
     /// <summary>
     /// Length of the generated secret. AOSP's architecture document shows a 12-character non-numeric
@@ -88,9 +88,26 @@ public static class AndroidQrPairing
     }
 
     /// <summary>
-    /// Whether an advertised service is the one this invitation asked for. Android leaves the requested
-    /// name alone, but a few vendor builds advertise it as `adb-&lt;serial&gt;-&lt;requested name&gt;`,
-    /// so a suffix match is accepted as well; the random part keeps that from matching anything else.
+    /// Whether one advertised instance name belongs to the invitation this computer made. Android
+    /// leaves the requested name alone, but a few vendor builds advertise it as
+    /// `adb-&lt;serial&gt;-&lt;requested name&gt;`, so a suffix match is accepted as well; the random
+    /// part keeps that from matching anything else.
+    /// </summary>
+    public static bool NameMatchesService(string? advertisedName, string? requestedName)
+    {
+        var advertised = advertisedName?.Trim().TrimEnd('.') ?? string.Empty;
+        var requested = requestedName?.Trim() ?? string.Empty;
+        if (advertised.Length == 0 || requested.Length == 0)
+        {
+            return false;
+        }
+
+        return string.Equals(advertised, requested, StringComparison.OrdinalIgnoreCase)
+            || (requested.Length >= 6 && advertised.EndsWith(requested, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Whether an advertised service is the one this invitation asked for.
     /// </summary>
     public static bool IsMatch(AndroidWirelessService service, string serviceName)
     {
@@ -99,15 +116,7 @@ public static class AndroidQrPairing
             return false;
         }
 
-        var requested = serviceName.Trim();
-        var advertised = service.Name.Trim().TrimEnd('.');
-        if (advertised.Length == 0)
-        {
-            return false;
-        }
-
-        return string.Equals(advertised, requested, StringComparison.OrdinalIgnoreCase)
-            || (requested.Length >= PasswordLength && advertised.EndsWith(requested, StringComparison.OrdinalIgnoreCase));
+        return NameMatchesService(service.Name, serviceName);
     }
 
     /// <summary>Finds the pairing service this invitation is waiting for, preferring an exact name.</summary>
@@ -123,6 +132,40 @@ public static class AndroidQrPairing
                 serviceName.Trim(),
                 StringComparison.OrdinalIgnoreCase))
             .ThenBy(service => service.Address, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+        return match is not null;
+    }
+
+    /// <summary>
+    /// Finds the pairing service an invitation is waiting for, from a snapshot of what was advertised
+    /// before the code was shown.
+    ///
+    /// The exact requested name wins. Failing that, a pairing service that was not advertised before
+    /// the attempt began is accepted: a pairing server exists only while a phone has its pairing dialog
+    /// open, so a new one appeared because a phone just scanned this code. That keeps pairing working
+    /// on builds that ignore or rewrite the requested instance name, where waiting for the name alone
+    /// would end in a timeout even though the phone did everything right.
+    /// </summary>
+    public static bool TryFindPairingService(
+        IReadOnlyList<AndroidWirelessService> services,
+        string serviceName,
+        IReadOnlyCollection<string>? pairingServicesSeenBefore,
+        out AndroidWirelessService? match)
+    {
+        if (TryFindPairingService(services, serviceName, out match))
+        {
+            return true;
+        }
+
+        if (pairingServicesSeenBefore is null)
+        {
+            return false;
+        }
+
+        match = services
+            .Where(service => service.IsPairingService)
+            .Where(service => !pairingServicesSeenBefore.Contains(service.Name, StringComparer.OrdinalIgnoreCase))
+            .OrderBy(service => service.Address, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault();
         return match is not null;
     }

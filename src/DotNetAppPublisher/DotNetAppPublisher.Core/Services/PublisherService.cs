@@ -54,14 +54,41 @@ public sealed class PublisherService
             androidCandidates.Add(Path.Combine(androidHome, "emulator/emulator"));
         }
 
-        AdbPath = ResolveExecutable("adb",
-        [
+        // The most outdated copy on the machine wins a "first found" search, which is how a host with
+        // the SDK's 37.x and a package manager's 36.x ends up pairing with the older one: the phone's
+        // pairing service speaks a newer protocol and the pair fails with a protocol fault. The
+        // candidates are therefore versioned and the newest one is used.
+        var adbCandidatePaths = new List<string>
+        {
             Path.Combine(home, "Library/Android/sdk/platform-tools/adb"),
             Path.Combine(home, "Android/Sdk/platform-tools/adb"),
+            Path.Combine(home, "Library/Developer/Xamarin/android-sdk-macosx/platform-tools/adb"),
+            Path.Combine(home, "AppData/Local/Android/Sdk/platform-tools/adb.exe"),
             "/opt/homebrew/bin/adb",
             "/usr/local/bin/adb",
-            .. androidCandidates.Where(p => p.EndsWith("adb", StringComparison.OrdinalIgnoreCase))
-        ]);
+            "/usr/bin/adb",
+            "/opt/homebrew/share/android-commandlinetools/platform-tools/adb"
+        };
+        const string caskroom = "/opt/homebrew/Caskroom/android-platform-tools";
+        if (Directory.Exists(caskroom))
+        {
+            try
+            {
+                adbCandidatePaths.AddRange(
+                    Directory.EnumerateFiles(caskroom, "adb", SearchOption.AllDirectories));
+            }
+            catch
+            {
+                // Best effort.
+            }
+        }
+        adbCandidatePaths.AddRange(
+            androidCandidates.Where(p => p.EndsWith("adb", StringComparison.OrdinalIgnoreCase)));
+        var adbCandidates = ResolveAdbCandidates(adbCandidatePaths.ToArray());
+
+        AdbPath = adbCandidates.NewestPath;
+        AdbVersion = adbCandidates.Detected;
+        AdbInstallations = adbCandidates.Installations;
 
         EmulatorPath = ResolveExecutable("emulator",
         [
@@ -89,6 +116,16 @@ public sealed class PublisherService
 
     public string? AdbPath { get; }
 
+    /// <summary>The adb build the app runs, as <c>adb version</c> reports it.</summary>
+    public AndroidAdbVersion? AdbVersion { get; }
+
+    /// <summary>
+    /// Every adb this computer has, newest first, with the one the app runs marked. Older copies are
+    /// never used and never removed by the app: a package manager or an IDE owns those files, and
+    /// removing a tool somebody else installed is not this app's call.
+    /// </summary>
+    public IReadOnlyList<AndroidAdbInstallation> AdbInstallations { get; } = [];
+
     public string? EmulatorPath { get; }
 
     /// <summary>
@@ -103,7 +140,25 @@ public sealed class PublisherService
 
     public string DotnetStatusText => DotnetPath is null ? "dotnet not found" : $"dotnet: {DotnetPath}";
 
-    public string AdbStatusText => AdbPath is null ? "adb not found" : $"adb: {AdbPath}";
+    public string AdbStatusText => AdbPath is null
+        ? "adb not found"
+        : AdbVersion is null ? $"adb: {AdbPath}" : $"adb {AdbVersion.Display}: {AdbPath}";
+
+    /// <summary>
+    /// The older adb copies this computer has, with the command that removes each. The app names them
+    /// and leaves them in place: a Homebrew cask or an IDE owns those files, and an app that deleted
+    /// another installer's files would break that installer's own records.
+    /// </summary>
+    public IReadOnlyList<string> UnusedAdbNotes =>
+        AdbInstallations
+            .Where(installation => !installation.IsUsed)
+            .Select(installation => $"{installation.Path} ({installation.Version.Display}) — remove it yourself with: " +
+                (installation.Path.Contains("/opt/homebrew", StringComparison.Ordinal)
+                    ? "brew uninstall --cask android-platform-tools"
+                    : installation.Path.Contains("/usr/local", StringComparison.Ordinal)
+                        ? "brew uninstall --cask android-platform-tools"
+                        : "delete that folder, or keep it and ignore this note"))
+            .ToArray();
 
     public string EmulatorStatusText => EmulatorPath is null ? "emulator not found" : $"emulator: {EmulatorPath}";
 
@@ -559,17 +614,81 @@ public sealed class PublisherService
     public Task<IReadOnlyList<AndroidDeviceListEntry>> ProbeAndroidDevicesAsync(CancellationToken cancellationToken) =>
         _androidDeploymentService.ProbeAndroidDevicesAsync(cancellationToken);
 
+    /// <summary>
+    /// Every wireless debugging service the computer can see, from the adb server's mDNS list and the
+    /// operating system's own resolver. The adb backend can be blind on a host where the resolver is
+    /// not, so a scan that reads only adb loses the phone.
+    /// </summary>
     public Task<IReadOnlyList<AndroidWirelessService>> DiscoverAndroidWirelessServicesAsync(CancellationToken cancellationToken) =>
-        _androidDeploymentService.DiscoverWirelessServicesAsync(cancellationToken);
+        _androidDeploymentService.DiscoverAllWirelessServicesAsync(cancellationToken);
+
+    /// <summary>
+    /// Fast dedicated search for wireless pairing services (`_adb-tls-pairing._tcp`), returning
+    /// immediately once an endpoint is discovered without scanning connect services.
+    /// </summary>
+    public Task<IReadOnlyList<AndroidWirelessService>> DiscoverAndroidWirelessPairingServicesAsync(CancellationToken cancellationToken) =>
+        _androidDeploymentService.DiscoverAllWirelessServicesAsync(cancellationToken, pairingOnly: true);
+
+    /// <summary>Drops the Wi-Fi transports an earlier pairing attempt left behind.</summary>
+    public Task<string> PrepareAndroidWirelessPairingAsync(string? previousHost, CancellationToken cancellationToken) =>
+        _androidDeploymentService.PrepareWirelessPairingAsync(previousHost, cancellationToken);
+
+    /// <summary>Drops every Wi-Fi transport and, with nothing else attached, restarts the adb server.</summary>
+    public Task<AndroidWirelessReset> ResetAndroidWirelessStateAsync(
+        string? host,
+        bool restartServerWhenIdle,
+        CancellationToken cancellationToken) =>
+        _androidDeploymentService.ResetWirelessStateAsync(host, restartServerWhenIdle, cancellationToken);
+
+    /// <summary>
+    /// Reads the adb server's own report of how it is set up for device discovery.
+    /// </summary>
+    public Task<AndroidAdbServerStatus> ReadAndroidAdbServerStatusAsync(CancellationToken cancellationToken) =>
+        _androidDeploymentService.ReadAdbServerStatusAsync(cancellationToken);
+
+    /// <summary>
+    /// Restarts the adb server with the discovery settings Google documents when the server that is
+    /// running cannot find devices and nothing else is attached to it. The result says what changed
+    /// and how many devices the server now sees on the network.
+    /// </summary>
+    public Task<AndroidWirelessRepair> RepairAndroidWirelessDiscoveryAsync(CancellationToken cancellationToken) =>
+        _androidDeploymentService.RepairWirelessDiscoveryAsync(cancellationToken);
 
     public Task<string> PairAndroidWirelessAsync(string address, string pairingCode, CancellationToken cancellationToken) =>
         _androidDeploymentService.PairWirelessDeviceAsync(address, pairingCode, cancellationToken);
 
+    /// <summary>
+    /// Probes a wireless debugging address before adb is asked to use it. Returns what the socket
+    /// said, because <c>adb pair</c> reports the same protocol fault whether the connection never
+    /// opened or the phone answered and did not speak the protocol.
+    /// </summary>
+    public Task<AndroidEndpointProbe> ProbeAndroidEndpointAsync(string address, CancellationToken cancellationToken) =>
+        AndroidDeploymentService.ProbeEndpointAsync(address, TimeSpan.FromSeconds(4), cancellationToken);
+
+    /// <summary>
+    /// Opens the phone's Developer options screen, where the paired computers are forgotten and the
+    /// debugging authorizations are revoked. There is no adb command that does either, so the phone
+    /// has to be put in front of the user with its screen already open.
+    /// </summary>
+    public Task<string> OpenAndroidDeveloperOptionsAsync(string? deviceSerial, CancellationToken cancellationToken) =>
+        _androidDeploymentService.OpenDeveloperOptionsAsync(deviceSerial, cancellationToken);
+
     public Task<string> PairAndroidWirelessSecretAsync(string address, string secret, CancellationToken cancellationToken) =>
         _androidDeploymentService.PairWirelessSecretAsync(address, secret, cancellationToken);
 
-    public Task<string> ConnectAndroidWirelessAsync(string address, CancellationToken cancellationToken) =>
+    public Task<AndroidWirelessConnectResult> ConnectAndroidWirelessAsync(string address, CancellationToken cancellationToken) =>
         _androidDeploymentService.ConnectWirelessDeviceAsync(address, cancellationToken);
+
+    /// <summary>
+    /// Connects to whatever debugging port a host publishes now, falling back to a saved address.
+    /// Every advertised endpoint for the host is tried, because a cached record and a live one can
+    /// carry different ports.
+    /// </summary>
+    public Task<AndroidWirelessConnectResult> ConnectAndroidWirelessHostAsync(
+        string host,
+        string? fallbackAddress,
+        CancellationToken cancellationToken) =>
+        _androidDeploymentService.ConnectWirelessHostAsync(host, fallbackAddress, cancellationToken);
 
     public Task<string> DisconnectAndroidWirelessAsync(string address, CancellationToken cancellationToken) =>
         _androidDeploymentService.DisconnectWirelessDeviceAsync(address, cancellationToken);
@@ -693,6 +812,109 @@ public sealed class PublisherService
             .FirstOrDefault();
 
         return appBundle?.Name;
+    }
+
+    /// <summary>
+    /// The adb installations found on this machine, with their versions read once. The newest one is
+    /// the one the app runs, because wireless debugging against a current phone needs adb 37.0.0 or
+    /// newer and a machine often holds an older package-manager copy as well.
+    /// </summary>
+    private sealed record AdbCandidates(IReadOnlyList<(string Path, AndroidAdbVersion Version)> Found)
+    {
+        /// <summary>The newest adb on this machine, and its version; null when none was found.</summary>
+        public (string? Path, AndroidAdbVersion? Version) Newest =>
+            Found
+                .Select((candidate, index) => (candidate, index))
+                .OrderByDescending(entry => entry.candidate.Version)
+                .ThenBy(entry => entry.index)
+                .Select(entry => ((string?)entry.candidate.Path, (AndroidAdbVersion?)entry.candidate.Version))
+                .FirstOrDefault();
+
+        public string? NewestPath => Newest.Path;
+
+        public AndroidAdbVersion? Detected => Newest.Version;
+
+        /// <summary>Newest first, with the app's own choice flagged on the first entry.</summary>
+        public IReadOnlyList<AndroidAdbInstallation> Installations =>
+            Found
+                .OrderByDescending(candidate => candidate.Version)
+                .Select((candidate, index) => new AndroidAdbInstallation(candidate.Path, candidate.Version, index == 0))
+                .ToArray();
+    }
+
+    private static AdbCandidates ResolveAdbCandidates(params string[] known)
+    {
+        var paths = new List<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var candidate in known)
+        {
+            if (string.IsNullOrWhiteSpace(candidate))
+            {
+                continue;
+            }
+
+            foreach (var executableName in GetExecutableNames(Path.GetFileName(candidate)))
+            {
+                var resolved = Path.Combine(Path.GetDirectoryName(candidate) ?? string.Empty, executableName);
+                if (File.Exists(resolved) && seen.Add(resolved))
+                {
+                    paths.Add(resolved);
+                }
+            }
+        }
+
+        var pathVariable = Environment.GetEnvironmentVariable("PATH");
+        if (!string.IsNullOrWhiteSpace(pathVariable))
+        {
+            foreach (var directory in pathVariable.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+            {
+                foreach (var executableName in GetExecutableNames("adb"))
+                {
+                    var resolved = Path.Combine(directory, executableName);
+                    if (File.Exists(resolved) && seen.Add(resolved))
+                    {
+                        paths.Add(resolved);
+                    }
+                }
+            }
+        }
+
+        var found = new List<(string, AndroidAdbVersion)>();
+        foreach (var path in paths)
+        {
+            found.Add((path, ReadAdbVersion(path)));
+        }
+
+        return new AdbCandidates(found);
+    }
+
+    private static AndroidAdbVersion ReadAdbVersion(string adbPath)
+    {
+        // This runs on the application's start-up path, which is the UI thread inside
+        // OnFrameworkInitializationCompleted. ProcessRunner.RunAsync awaits
+        // Process.WaitForExitAsync, and that continuation is posted to the SynchronizationContext
+        // the caller captured (the Avalonia dispatcher), so blocking on the task from the UI
+        // thread deadlocks: the task needs the very thread that is waiting for it, the
+        // constructor never returns, no window is created, and the Dock icon bounces forever.
+        // A thread-pool thread has no SynchronizationContext to capture, so the wait completes.
+        try
+        {
+            return Task.Run(() => ReadAdbVersionAsync(adbPath)).GetAwaiter().GetResult();
+        }
+        catch (Exception)
+        {
+            // An adb that cannot report a version stays at 0, so it never wins over one that can.
+        }
+
+        return AndroidAdbVersion.Parse(null);
+    }
+
+    private static async Task<AndroidAdbVersion> ReadAdbVersionAsync(string adbPath)
+    {
+        var output = new StringBuilder();
+        await ProcessRunner.RunAsync([adbPath, "version"], text => output.Append(text), CancellationToken.None)
+            .ConfigureAwait(false);
+        return AndroidAdbVersion.Parse(output.ToString());
     }
 
     private static string? ResolveExecutable(string name, IReadOnlyList<string> candidates)

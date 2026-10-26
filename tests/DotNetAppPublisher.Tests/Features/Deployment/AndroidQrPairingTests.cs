@@ -146,6 +146,72 @@ public sealed class AndroidQrPairingTests
     }
 
     [Test]
+    public async Task TryFindPairingService_AcceptsAServiceThatAppearedAfterTheCodeWasShown()
+    {
+        // A build that ignores or rewrites the requested instance name still starts its pairing
+        // server when it scans the code, and it is the only pairing service that appears afterwards.
+        string[] seenBefore = ["some-other-phone"];
+        List<AndroidWirelessService> services =
+        [
+            new("some-other-phone", "192.168.1.44:39411", true),
+            new("adb-R5CN20DFRKA-4f2a", "192.168.1.42:40123", true)
+        ];
+
+        var found = AndroidQrPairing.TryFindPairingService(
+            services,
+            "dotnetapppublisher-abcdefgh12",
+            seenBefore,
+            out var match);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(found).IsTrue();
+            await Assert.That(match!.Address).IsEqualTo("192.168.1.42:40123");
+        }
+    }
+
+    [Test]
+    public async Task TryFindPairingService_IgnoresAServiceThatWasAlreadyAdvertised()
+    {
+        string[] seenBefore = ["adb-R5CN20DFRKA-4f2a"];
+        List<AndroidWirelessService> services =
+        [
+            new("adb-R5CN20DFRKA-4f2a", "192.168.1.42:40123", true)
+        ];
+
+        var found = AndroidQrPairing.TryFindPairingService(
+            services,
+            "dotnetapppublisher-abcdefgh12",
+            seenBefore,
+            out _);
+
+        await Assert.That(found).IsFalse();
+    }
+
+    [Test]
+    public async Task TryFindPairingService_PrefersTheRequestedNameOverANewerService()
+    {
+        string[] seenBefore = [];
+        List<AndroidWirelessService> services =
+        [
+            new("adb-someone-else", "192.168.1.44:39411", true),
+            new("dotnetapppublisher-abcdefgh12", "192.168.1.42:40123", true)
+        ];
+
+        var found = AndroidQrPairing.TryFindPairingService(
+            services,
+            "dotnetapppublisher-abcdefgh12",
+            seenBefore,
+            out var match);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(found).IsTrue();
+            await Assert.That(match!.Address).IsEqualTo("192.168.1.42:40123");
+        }
+    }
+
+    [Test]
     public async Task CreatePng_ProducesASquarePngMadeOfWholeModules()
     {
         var png = AndroidQrPairingImage.CreatePng("WIFI:T:ADB;S:dotnetapppublisher-abcdefgh12;P:Ab3Xy7Zq1Wm4;;", 8);

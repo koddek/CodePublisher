@@ -58,6 +58,8 @@ public sealed record AndroidDeviceInfo(
     {
         AndroidDeviceState.Unauthorized => "unauthorized — approve the USB debugging prompt on the device",
         AndroidDeviceState.Offline => "offline — reconnect the cable, or connect again over Wi-Fi",
+        "authorizing" => "authorizing — check the phone's screen for the USB debugging prompt",
+        "no permissions" => "no permissions — check USB permissions or udev rules on this host",
         AndroidDeviceState.Unknown => "state unknown — run a refresh (adb is restarted on failure)",
         _ => string.Empty
     };

@@ -11,6 +11,11 @@ namespace DotNetAppPublisher.ViewModels;
 /// or an emulator appearing; and a focused wait after an emulator is started or a device is connected
 /// over Wi-Fi, which polls once a second, keeps the list live while the target boots, and selects what
 /// appeared.
+///
+/// The same poll also brings a paired Wi-Fi phone back on its own: a phone whose screen went off or whose
+/// Wireless debugging was closed keeps being retried, with the backoff decided by
+/// <see cref="AndroidWirelessReconnect"/>, so it reconnects when its debugging port starts answering
+/// again instead of waiting for the user to press Connect.
 /// </summary>
 public partial class MainViewModel
 {
@@ -20,6 +25,12 @@ public partial class MainViewModel
     private const string AutoRefreshStatus = "Watching for devices — the list refreshes itself.";
 
     private readonly SemaphoreSlim _deviceRefreshGate = new(1, 1);
+
+    /// <summary>When each paired host was last tried, and how many times in a row it failed.</summary>
+    private readonly Dictionary<string, DateTimeOffset> _wirelessReconnectLastAttempt = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _wirelessReconnectFailures = new(StringComparer.OrdinalIgnoreCase);
+
+    private bool _isAutoReconnectingWireless;
     private CancellationTokenSource? _deviceWatchCancellation;
     private Task? _deviceWatchTask;
     private CancellationTokenSource? _launchedTargetCancellation;
@@ -165,10 +176,12 @@ public partial class MainViewModel
                 consecutiveFailures = 0;
                 if (!AndroidDeviceWatch.NeedsRefresh(AndroidDeviceWatch.Fingerprint(AvailableAndroidDevices), probe))
                 {
+                    await TryReconnectPairedWirelessAsync(cancellationToken);
                     continue;
                 }
 
                 await RefreshDevicesSilentlyAsync(cancellationToken);
+                await TryReconnectPairedWirelessAsync(cancellationToken);
             }
             catch (OperationCanceledException)
             {
@@ -190,6 +203,98 @@ public partial class MainViewModel
                 return;
             }
         }
+    }
+
+    /// <summary>The hosts adb lists as usable right now, so nothing retries what is already connected.</summary>
+    private string[] ReadyWirelessHosts() =>
+        AvailableAndroidDevices
+            .Where(device => device.IsWireless && device.IsReady)
+            .Select(device => AndroidWirelessDebug.TryParseEndpoint(device.Serial, out var host, out _) ? host : device.Serial)
+            .Where(host => !string.IsNullOrWhiteSpace(host))
+            .ToArray();
+
+    /// <summary>
+    /// Reconnects a paired Wi-Fi phone on its own when it starts answering again. This is the case of a
+    /// phone whose screen went off, whose Wireless debugging was closed, or that left the network for a
+    /// moment while the app stayed open: pairing is still in place, so only the transport is missing.
+    ///
+    /// The retry is deliberately quiet — no alert sound, because nothing was asked for — and it leaves
+    /// one log line per run so the log says why a phone is still missing instead of repeating a failure
+    /// every few seconds.
+    /// </summary>
+    private async Task TryReconnectPairedWirelessAsync(CancellationToken cancellationToken)
+    {
+        if (_isAutoReconnectingWireless
+            || _pairedWirelessHosts.Count == 0
+            || IsBusy
+            || IsWirelessBusy
+            || IsWirelessQrWaiting
+            || _isWaitingForLaunchedTarget)
+        {
+            return;
+        }
+
+        var host = AndroidWirelessReconnect.ChooseHost(
+            _pairedWirelessHosts,
+            ReadyWirelessHosts(),
+            _wirelessReconnectLastAttempt,
+            _wirelessReconnectFailures,
+            DateTimeOffset.UtcNow);
+        if (host is null)
+        {
+            return;
+        }
+
+        _isAutoReconnectingWireless = true;
+        _wirelessReconnectLastAttempt[host] = DateTimeOffset.UtcNow;
+        try
+        {
+            var savedAddress = _pairedWirelessHosts.TryGetValue(host, out var stored) ? stored : null;
+            var result = await _publisherService.ConnectAndroidWirelessHostAsync(host, savedAddress, cancellationToken);
+            if (result.Connected)
+            {
+                _wirelessReconnectFailures.Remove(host);
+                _pairedWirelessHosts[host] = result.Address;
+                AppendLog($"{Environment.NewLine}[Wi-Fi] Reconnected to {result.Address} automatically.{Environment.NewLine}");
+
+                // The silent refresh puts the returned phone in the target list and selects it; the
+                // status line then says it came back on its own rather than that it merely appeared.
+                await RefreshDevicesSilentlyAsync(cancellationToken);
+                StatusMessage = $"{result.Address} reconnected over Wi-Fi automatically.";
+                return;
+            }
+
+            RecordWirelessReconnectFailure(host, result.State);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            RecordWirelessReconnectFailure(host, ex.Message);
+        }
+        finally
+        {
+            _isAutoReconnectingWireless = false;
+        }
+    }
+
+    /// <summary>
+    /// Counts one failed automatic attempt. Only the first failure of a run is written to the log: the
+    /// retry keeps going, and repeating the same sentence every minute would bury everything else.
+    /// </summary>
+    private void RecordWirelessReconnectFailure(string host, string reason)
+    {
+        var failures = (_wirelessReconnectFailures.TryGetValue(host, out var count) ? count : 0) + 1;
+        _wirelessReconnectFailures[host] = failures;
+        if (failures != 1)
+        {
+            return;
+        }
+
+        AppendLog($"{Environment.NewLine}[Wi-Fi] {host} is not back yet ({reason}). Retrying in the background." +
+            $"{Environment.NewLine}");
     }
 
     /// <summary>

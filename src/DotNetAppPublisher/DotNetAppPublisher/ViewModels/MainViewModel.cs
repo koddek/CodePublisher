@@ -117,6 +117,7 @@ public partial class MainViewModel : ViewModelBase
         IsProjectInternalVersionSupported = GetDefaultInternalVersionSupport(PublishPlatform);
         DotnetStatus = publisherService.DotnetStatusText;
         AdbStatus = publisherService.AdbStatusText;
+        AdbInstallationNote = BuildAdbInstallationNote(publisherService);
         EmulatorStatus = publisherService.EmulatorStatusText;
         StatusMessage = "Select a .NET project folder to start building your publish command.";
         SelectedNavItem = NavItems.FirstOrDefault();
@@ -174,6 +175,7 @@ public partial class MainViewModel : ViewModelBase
         _ = ConnectWirelessDeviceCommand;
         _ = DisconnectWirelessDeviceCommand;
         _ = EnableWirelessDebuggingCommand;
+        _ = ResetWirelessDebuggingCommand;
         _ = RefreshIosDevicesCommand;
         _ = InstallIosDeviceAppCommand;
         _ = LaunchIosDeviceAppCommand;
@@ -1037,6 +1039,29 @@ private string _projectDirectory = string.Empty;
             KeystorePath = selected;
         }
     }
+
+    /// <summary>
+    /// Names the older adb copies on this computer that the app does not use, and how each is removed.
+    /// The app leaves them where they are: a Homebrew cask or an IDE owns those files, and deleting
+    /// another installer's files would leave that installer's records wrong.
+    /// </summary>
+    private static string BuildAdbInstallationNote(PublisherService publisherService)
+    {
+        var unused = publisherService.UnusedAdbNotes;
+        if (unused.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var lines = string.Join("; ", unused);
+        return unused.Count == 1
+            ? $"This computer also has an older adb the app does not use: {lines}."
+            : $"This computer also has {unused.Count} older adb builds the app does not use: {lines}.";
+    }
+
+    /// <summary>Empty when this computer has only the adb the app runs.</summary>
+    [ObservableProperty]
+    private string _adbInstallationNote = string.Empty;
 
     [RelayCommand(CanExecute = nameof(CanRefreshEmulators))]
     private async Task RefreshEmulatorsAsync()

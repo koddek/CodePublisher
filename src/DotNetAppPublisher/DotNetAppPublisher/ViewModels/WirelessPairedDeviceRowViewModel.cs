@@ -3,9 +3,9 @@ using CommunityToolkit.Mvvm.Input;
 namespace DotNetAppPublisher.ViewModels;
 
 /// <summary>
-/// One device that has been paired with this computer but is not currently connected. Each row offers
-/// only the next action for that device (Connect) and a way to forget the pairing, so pair and connect
-/// are never offered side by side for the same device.
+/// One device that is not connected right now: a host this computer has paired with, or a Wi-Fi target
+/// adb lists that cannot accept work yet. Each row offers only the next action for that device (Connect)
+/// and a way to forget the pairing, so pair and connect are never offered side by side for the same device.
 /// </summary>
 public sealed partial class WirelessPairedDeviceRowViewModel : ViewModelBase
 {
@@ -21,7 +21,10 @@ public sealed partial class WirelessPairedDeviceRowViewModel : ViewModelBase
 
     public string Host { get; }
 
-    public string Title => Host;
+    /// <summary>Shown instead of the host when the row stands for an address adb lists right now.</summary>
+    public string? TitleOverride { get; init; }
+
+    public string Title => string.IsNullOrWhiteSpace(TitleOverride) ? Host : TitleOverride!;
 
     public string Subtitle { get; init; } = "Paired, not connected";
 

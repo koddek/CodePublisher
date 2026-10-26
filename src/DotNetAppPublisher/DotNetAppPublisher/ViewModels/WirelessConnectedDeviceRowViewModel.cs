@@ -11,12 +11,14 @@ public sealed partial class WirelessConnectedDeviceRowViewModel : ViewModelBase
 {
     private readonly Func<Task> _disconnect;
     private readonly Func<Task> _unpair;
+    private readonly Func<Task>? _select;
 
-    public WirelessConnectedDeviceRowViewModel(AndroidDeviceInfo device, Func<Task> disconnect, Func<Task>? unpair = null)
+    public WirelessConnectedDeviceRowViewModel(AndroidDeviceInfo device, Func<Task> disconnect, Func<Task>? unpair = null, Func<Task>? select = null)
     {
         Device = device;
         _disconnect = disconnect;
         _unpair = unpair ?? (() => Task.CompletedTask);
+        _select = select;
     }
 
     public AndroidDeviceInfo Device { get; }
@@ -31,6 +33,8 @@ public sealed partial class WirelessConnectedDeviceRowViewModel : ViewModelBase
     }
 
     public string Address => Device.Serial;
+
+    public bool CanSelect => _select is not null;
 
     public string Subtitle
     {
@@ -56,4 +60,7 @@ public sealed partial class WirelessConnectedDeviceRowViewModel : ViewModelBase
 
     [RelayCommand]
     private Task UnpairAsync() => _unpair();
+
+    [RelayCommand(CanExecute = nameof(CanSelect))]
+    private Task SelectAsync() => _select is { } select ? select() : Task.CompletedTask;
 }

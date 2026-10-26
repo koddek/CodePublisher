@@ -32,5 +32,18 @@
   <string>12.0</string>
   <key>NSHighResolutionCapable</key>
   <true/>
+  <!-- macOS 15 and newer gate outgoing connections to other devices on the local network on this
+       declaration. Without it the system denies the app's LAN traffic silently (BSD sockets fail
+       with "No route to host") and never lists the app under System Settings > Privacy & Security >
+       Local Network, so the user has nothing to switch on. adb is launched by this app and is
+       attributed to it, so the app's access is what the pairing and debugging connections use.
+       The Bonjour entries are the two service types Wireless debugging advertises. -->
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>.NET App Publisher talks to your Android phones and emulators over your local network: it discovers them through Wi-Fi debugging, pairs with them, and deploys and inspects apps on them.</string>
+  <key>NSBonjourServices</key>
+  <array>
+    <string>_adb-tls-pairing._tcp</string>
+    <string>_adb-tls-connect._tcp</string>
+  </array>
 </dict>
 </plist>
