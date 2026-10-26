@@ -12,7 +12,7 @@ public sealed class AlertSoundServiceTests
     [Test]
     public async Task BuildPlan_MacOs_PlaysTheSuccessSoundWithAfplay()
     {
-        var plan = AlertSoundService.BuildPlan(AlertTone.Success, AlertSoundPlatform.MacOs, File.Exists);
+        var plan = AlertSoundService.BuildPlan(AlertTone.Success, AlertSoundPlatform.MacOs, Only("/System/Library/Sounds/Glass.aiff"));
 
         var command = plan.Single();
         using (Assert.Multiple())
@@ -25,7 +25,7 @@ public sealed class AlertSoundServiceTests
     [Test]
     public async Task BuildPlan_MacOs_PlaysADifferentSoundForFailures()
     {
-        var plan = AlertSoundService.BuildPlan(AlertTone.Failure, AlertSoundPlatform.MacOs, File.Exists);
+        var plan = AlertSoundService.BuildPlan(AlertTone.Failure, AlertSoundPlatform.MacOs, Only("/System/Library/Sounds/Basso.aiff"));
 
         await Assert.That(plan.Single().Arguments.Single()).IsEqualTo("/System/Library/Sounds/Basso.aiff");
     }
