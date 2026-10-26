@@ -88,6 +88,7 @@ jobs:
           -o "${{ runner.temp }}/publish-browser"
 
       - name: Verify the browser host links the native SkiaSharp library
+        shell: bash
         run: |
           out="${{ runner.temp }}/publish-browser/wwwroot/_framework"
           # The emscripten link step folds libSkiaSharp into the native module.
