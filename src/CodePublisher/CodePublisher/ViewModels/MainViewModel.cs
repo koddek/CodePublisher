@@ -2257,6 +2257,7 @@ private string _projectDirectory = string.Empty;
         {
             PublishPlatform = PublishPlatform,
             ProjectDirectory = ProjectDirectory,
+            ProjectFilePath = ResolveProjectFilePath(),
             TargetFramework = TargetFramework,
             RuntimeIdentifier = RuntimeIdentifier,
             Configuration = Configuration,

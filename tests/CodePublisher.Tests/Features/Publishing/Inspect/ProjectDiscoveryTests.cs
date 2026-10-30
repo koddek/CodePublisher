@@ -81,6 +81,34 @@ public sealed class ProjectDiscoveryTests
     }
 
     [Test]
+    public async Task PickedProject_FlowsIntoThePublishConfiguration_AndTheBundle()
+    {
+        var root = CreateTree();
+        try
+        {
+            var viewModel = new MainViewModel(new PublisherService(), new DesktopInteractionService());
+            viewModel.PublishPlatform = PublisherService.MacOsPlatform;
+            viewModel.ProjectDirectory = root;
+            var mainLib = Path.Combine(root, "src", "MainLib", "MainLib.csproj");
+            viewModel.SelectedProjectFile = mainLib;
+
+            var configuration = viewModel.CreatePublishConfiguration();
+            var bundle = new PublisherService().BuildPublishCommandBundle(configuration);
+
+            using (Assert.Multiple())
+            {
+                // The bundle must target the picked nested project, not "no .csproj in the root".
+                await Assert.That(configuration.ProjectFilePath).IsEqualTo(mainLib);
+                await Assert.That(bundle.ProjectFilePath).IsEqualTo(mainLib);
+            }
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Test]
     public async Task SingleProjectFolder_KeepsThePickerHidden()
     {
         var root = Path.Combine(Path.GetTempPath(), $"cp-disc-{Guid.NewGuid():N}");

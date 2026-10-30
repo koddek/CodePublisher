@@ -209,8 +209,12 @@ public sealed class PublisherService
     public PublishCommandBundle BuildPublishCommandBundle(PublishConfiguration configuration, string? projectFilePath = null)
     {
         var projectDirectory = ProjectInspector.CreateProjectDirectory(configuration.ProjectDirectory);
-        var projectFile = !string.IsNullOrWhiteSpace(projectFilePath) && File.Exists(projectFilePath)
-            ? new FileInfo(projectFilePath)
+        // The configuration's picked project wins, then the explicit argument, then top-level lookup.
+        var explicitPath = !string.IsNullOrWhiteSpace(configuration.ProjectFilePath)
+            ? configuration.ProjectFilePath
+            : projectFilePath;
+        var projectFile = !string.IsNullOrWhiteSpace(explicitPath) && File.Exists(explicitPath)
+            ? new FileInfo(explicitPath)
             : ProjectInspector.FindProjectFile(projectDirectory)
             ?? throw new InvalidOperationException($"No .csproj found in {projectDirectory}.");
 

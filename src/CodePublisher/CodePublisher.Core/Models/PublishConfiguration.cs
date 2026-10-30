@@ -4,6 +4,9 @@ public sealed record PublishConfiguration
 {
     public required string ProjectDirectory { get; init; }
 
+    /// <summary>The picked .csproj when the folder holds several; null means "first one found".</summary>
+    public string? ProjectFilePath { get; init; }
+
     public required string PublishPlatform { get; init; }
 
     public required string TargetFramework { get; init; }

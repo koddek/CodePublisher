@@ -84,7 +84,10 @@ public sealed class AndroidDeploymentService
         if (!string.IsNullOrWhiteSpace(configuration.ProjectDirectory))
         {
             var projectDirectory = ProjectInspector.CreateProjectDirectory(configuration.ProjectDirectory);
-            projectNameHint = ProjectInspector.FindProjectFile(projectDirectory)?.Name is { } fileName
+            var projectFileName = !string.IsNullOrWhiteSpace(configuration.ProjectFilePath) && File.Exists(configuration.ProjectFilePath)
+                ? Path.GetFileName(configuration.ProjectFilePath)
+                : ProjectInspector.FindProjectFile(projectDirectory)?.Name;
+            projectNameHint = projectFileName is { Length: > 0 } fileName
                 ? Path.GetFileNameWithoutExtension(fileName)
                 : null;
         }
