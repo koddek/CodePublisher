@@ -7,6 +7,8 @@
              xmlns:android="using:CodePublisher.Features.Deployment.Android"
              xmlns:ios="using:CodePublisher.Features.Deployment.Ios"
              xmlns:googlePlay="using:CodePublisher.Views.GooglePlay"
+             xmlns:nuget="using:CodePublisher.Views.NuGet"
+             xmlns:nugetModels="using:CodePublisher.Features.NuGet.Models"
              xmlns:converters="using:CodePublisher.Views"
              mc:Ignorable="d"
              d:DesignWidth="1280"
@@ -124,7 +126,9 @@
                                     </WrapPanel>
                                     <StackPanel Spacing="8" IsVisible="{Binding SelectedProjectFile, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                         <TextBlock Text="Project File" FontWeight="SemiBold" FontSize="13"/>
-                                        <TextBox Text="{Binding SelectedProjectFile}" IsReadOnly="True" PlaceholderText="No project detected"/>
+                                        <TextBlock Text="Several projects found under this folder — choose the one to publish. Referenced projects (like a source generator) are built automatically when it packs." Classes="section-copy" TextWrapping="Wrap" IsVisible="{Binding HasMultipleProjectFiles}"/>
+                                        <ComboBox ItemsSource="{Binding AvailableProjectFiles}" SelectedItem="{Binding SelectedProjectFile, Mode=TwoWay}" MaxWidth="640" IsVisible="{Binding HasMultipleProjectFiles}" ToolTip.Tip="Every .csproj found under the selected folder"/>
+                                        <TextBox Text="{Binding SelectedProjectFile}" IsReadOnly="True" PlaceholderText="No project detected" IsVisible="{Binding !HasMultipleProjectFiles}"/>
                                         <TextBlock Text="Output Layout" FontWeight="SemiBold" FontSize="13" Margin="0,8,0,0"/>
                                         <TextBox Text="{Binding ProjectOutputLayoutSummary}" IsReadOnly="True" PlaceholderText="Output layout not detected" TextWrapping="Wrap"/>
                                         <TextBlock Text="Version" FontWeight="SemiBold" FontSize="13" Margin="0,8,0,0"/>
@@ -158,6 +162,7 @@
                                         </StackPanel>
                                     </WrapPanel>
                                     <TextBlock Text="Linux publishes framework-dependent or self-contained with the selected RID. No device actions are required." Classes="section-copy" IsVisible="{Binding IsLinuxPublishOptionsVisible}"/>
+                                    <TextBlock Text="NuGet packs the project into a .nupkg package — no runtime identifier or device is involved. Configure and pack it in the NuGet section; push it to a feed from the NuGet or Deploy section." Classes="section-copy" TextWrapping="Wrap" IsVisible="{Binding IsNuGetPlatform}"/>
                                 </StackPanel>
                             </Border>
 
@@ -447,7 +452,7 @@
                                 </Button>
                             </Grid>
 
-                            <Border Classes="card">
+                            <Border Classes="card" IsVisible="{Binding IsAppBuildOptionsVisible}">
                                 <StackPanel Spacing="14">
                                     <WrapPanel ItemSpacing="8" LineSpacing="8" VerticalAlignment="Center">
                                         <TextBlock Text="Build identity" Classes="section-title" VerticalAlignment="Center"/>
@@ -523,7 +528,7 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Classes="card">
+                            <Border Classes="card" IsVisible="{Binding IsAppBuildOptionsVisible}">
                                 <StackPanel Spacing="14">
                                     <TextBlock Text="Optimization and cleanup" Classes="section-title"/>
                                     <TextBlock Text="These switches change size, startup, and reflection behavior. Disabled options explain why." Classes="section-copy"/>
@@ -711,6 +716,14 @@
                                 </StackPanel>
                             </Border>
 
+                            <!-- NuGet platform: app build options do not apply; packing lives in the NuGet section. -->
+                            <Border Classes="card" IsVisible="{Binding IsNuGetPlatform}">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="NuGet package build" Classes="section-title"/>
+                                    <TextBlock Text="With the NuGet platform selected there is no app to optimize: self-contained, trimming, AOT, single-file, and app-host options only apply to app publishes. Use the NuGet section to set the package id, version, and output folder, then Pack." Classes="section-copy" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+
                             <!-- macOS-specific -->
                             <Border Classes="card" IsVisible="{Binding IsMacOsPublishOptionsVisible}">
                                 <StackPanel Spacing="16">
@@ -862,10 +875,16 @@
                                                IsVisible="{Binding GooglePlay.HasSigningKey}" TextTrimming="CharacterEllipsis"/>
                                 </StackPanel>
                             </Border>
-                            <Border Classes="card" IsVisible="{Binding !IsAndroidPlatform}">
+                            <Border Classes="card" IsVisible="{Binding IsPlatformSigningCardVisible}">
                                 <StackPanel Spacing="8">
                                     <TextBlock Text="Platform signing" Classes="section-title"/>
                                     <TextBlock Text="Signing is configured for Android. Choose Signing on an Android project to manage the Play upload key." Classes="section-copy"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Classes="card" IsVisible="{Binding IsNuGetPlatform}">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="NuGet package signing" Classes="section-title"/>
+                                    <TextBlock Text="NuGet packages are not signed here; `dotnet pack` produces an unsigned .nupkg. Repository signing (`dotnet nuget sign`) can be added later. Android keystore signing stays under an Android platform." Classes="section-copy" TextWrapping="Wrap"/>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -937,6 +956,17 @@
                         <!-- Google Play Section -->
                         <StackPanel Spacing="20" IsVisible="{Binding IsGooglePlaySection}">
                             <googlePlay:GooglePlayView DataContext="{Binding GooglePlay}"/>
+                        </StackPanel>
+
+                        <!-- NuGet Section -->
+                        <StackPanel Spacing="20" IsVisible="{Binding IsNuGetSection}">
+                            <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+                                <TextBlock Text="NuGet" FontSize="18" FontWeight="SemiBold"/>
+                                <Button Grid.Column="1" Classes="icon-action-button" ToolTip.Tip="Screenshot this section" AutomationProperties.Name="Screenshot this section" Click="OnCaptureDetailClick" Tag="NuGet" Padding="8" MinWidth="36" MinHeight="32">
+                                    <PathIcon Data="M20 6h-3.17L15 4H9L7.17 6H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-8 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6zm0-10c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2z" Width="16" Height="16"/>
+                                </Button>
+                            </Grid>
+                            <nuget:NuGetView DataContext="{Binding NuGet}"/>
                         </StackPanel>
 
                         <!-- Deploy Section -->
@@ -1017,7 +1047,61 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Classes="card">
+                            <Border Classes="card" IsVisible="{Binding IsNuGetDeployCardVisible}">
+                                <StackPanel Spacing="12">
+                                    <TextBlock Text="NuGet feed" Classes="section-title"/>
+                                    <TextBlock Text="Deploy the packed package to a NuGet host instead of a device. Pack it first in the NuGet section, then choose the feed here." Classes="section-copy" TextWrapping="Wrap"/>
+                                    <WrapPanel ItemSpacing="12" LineSpacing="12">
+                                        <StackPanel MinWidth="170" MaxWidth="240" Spacing="5">
+                                            <TextBlock Text="Feed" FontSize="12" FontWeight="SemiBold"/>
+                                            <ComboBox ItemsSource="{Binding NuGet.FeedTargets}" SelectedItem="{Binding NuGet.SelectedFeed, Mode=TwoWay}">
+                                                <ComboBox.ItemTemplate>
+                                                    <DataTemplate x:DataType="nugetModels:NuGetFeedTarget">
+                                                        <TextBlock Text="{Binding Label}"/>
+                                                    </DataTemplate>
+                                                </ComboBox.ItemTemplate>
+                                            </ComboBox>
+                                        </StackPanel>
+                                        <StackPanel MinWidth="180" MaxWidth="280" Spacing="5" IsVisible="{Binding NuGet.IsFeedOwnerVisible}">
+                                            <TextBlock Text="{Binding NuGet.FeedOwnerLabel}" FontSize="12" FontWeight="SemiBold"/>
+                                            <TextBox Text="{Binding NuGet.FeedOwnerOrFolder}" PlaceholderText="github-username-or-org, or /path/to/feed"/>
+                                        </StackPanel>
+                                        <StackPanel MinWidth="180" MaxWidth="280" Spacing="5" IsVisible="{Binding NuGet.IsApiKeyVisible}">
+                                            <TextBlock Text="API key (session only)" FontSize="12" FontWeight="SemiBold"/>
+                                            <TextBox Text="{Binding NuGet.ApiKey}" PasswordChar="●" PlaceholderText="Paste key here"/>
+                                        </StackPanel>
+                                    </WrapPanel>
+                                    <WrapPanel ItemSpacing="8" LineSpacing="8">
+                                        <Button Classes="primary" Content="Push .nupkg to feed" Command="{Binding NuGet.PushCommand}" MinWidth="170"
+                                                ToolTip.Tip="Pushes the package packed in the NuGet section to the selected feed (NuGet.org or GitHub Packages)."/>
+                                        <Button Content="Refresh versions" Command="{Binding NuGet.RefreshVersionsCommand}" MinWidth="150"/>
+                                        <Button Content="Detect owner &amp; key" Command="{Binding NuGet.DetectCredentialsCommand}" MinWidth="150"
+                                                ToolTip.Tip="Detects the GitHub owner from the project's git remote and reuses an API key already configured on this machine."/>
+                                    </WrapPanel>
+                                    <TextBlock Text="{Binding NuGet.FeedStatus}" Classes="section-copy" TextWrapping="Wrap"/>
+                                    <StackPanel Spacing="6" IsVisible="{Binding NuGet.HasFeedVersions}">
+                                        <ScrollViewer MaxHeight="220" HorizontalScrollBarVisibility="Disabled">
+                                            <ItemsControl ItemsSource="{Binding NuGet.FeedVersions}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="nugetModels:NuGetFeedVersionRowViewModel">
+                                                        <Border Classes="file-row">
+                                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10" VerticalAlignment="Center">
+                                                                <TextBlock Grid.Column="0" Text="{Binding Version}" FontSize="13" FontWeight="SemiBold"/>
+                                                                <Button Grid.Column="1" Classes="compact-icon" Command="{Binding DeleteCommand}"
+                                                                        ToolTip.Tip="Delete this version from the feed" AutomationProperties.Name="Delete version from feed">
+                                                                    <PathIcon Data="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" Width="16" Height="16"/>
+                                                                </Button>
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </ScrollViewer>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Classes="card" IsVisible="{Binding IsCrashLogsCardVisible}">
                                 <StackPanel Spacing="12">
                                     <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
                                         <StackPanel Spacing="2">
@@ -1191,11 +1275,18 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Classes="card" IsVisible="{Binding !IsAndroidPlatform}">
+                            <Border Classes="card" IsVisible="{Binding IsDeviceFilesFallbackVisible}">
                                 <StackPanel Spacing="10">
                                     <TextBlock Text="Device files" Classes="section-title"/>
                                     <TextBlock Text="Browsing a device's own folders needs Android: adb exposes the shared storage folders, so they can be listed, cleaned up, and filled from here." Classes="section-copy" TextWrapping="Wrap"/>
                                     <TextBlock Text="iPhone and iPad storage is sandboxed and cannot be browsed from a computer, and desktop targets have no device storage. Switch Publish target to Android in the Platform section to use the browser." Classes="section-copy" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Classes="card" IsVisible="{Binding IsNuGetPlatform}">
+                                <StackPanel Spacing="10">
+                                    <TextBlock Text="Device files" Classes="section-title"/>
+                                    <TextBlock Text="A NuGet package has no device to browse. Pack, test, and push it from the NuGet section; the Deploy section holds the feed card for this platform." Classes="section-copy" TextWrapping="Wrap"/>
                                 </StackPanel>
                             </Border>
                         </StackPanel>

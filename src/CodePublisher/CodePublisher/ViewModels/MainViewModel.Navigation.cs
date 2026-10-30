@@ -9,6 +9,7 @@ public enum PublishSection
     Build,
     Signing,
     GooglePlay,
+    NuGet,
     Output,
     Deploy,
     DeviceFiles,
@@ -30,6 +31,7 @@ public partial class MainViewModel
         new(PublishSection.Build, "Build", "M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"),
         new(PublishSection.Signing, "Signing", "M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"),
         new(PublishSection.GooglePlay, "Google Play", "M3.6 1.8 13.2 12l-9.6 10.2A2.1 2.1 0 0 1 3 20.7V3.3c0-.7.2-1.1.6-1.5Zm11.1 8.7L5.2 1.1c.3-.1.7-.2 1.1-.2 2.9 0 5.9 2.1 8.1 5.1L6.7 10.5Zm0 3.6 7.7 4.5C13.1 20.6 10.1 22.7 7.2 22.7c-.4 0-.8 0-1.1-.2l9.6-9.4Zm3.4-2L15.4 12l2.7-1.6c.6.5 1.1 1 1.5 1.5.8 1.4.4 3.2-1 4.1l-2.5-1.5Z"),
+        new(PublishSection.NuGet, "NuGet", "M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-9 3h2v3h3v2h-3v3h-2v-3H8v-2h3V7zm9 11H4V6h16v12zM6 8h2v2H6V8z"),
         new(PublishSection.Deploy, "Deploy", "M8 5v14l11-7z"),
         new(PublishSection.DeviceFiles, "Device Files", "M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2zm0 4 2 0 0 -2 4 0 0 2 4 0 0 10 -10 0 0 -10z"),
         new(PublishSection.Output, "Output", "M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"),
@@ -42,6 +44,7 @@ public partial class MainViewModel
     public bool IsSigningSection => SelectedSection == PublishSection.Signing;
     public bool IsOutputSection => SelectedSection == PublishSection.Output;
     public bool IsGooglePlaySection => SelectedSection == PublishSection.GooglePlay;
+    public bool IsNuGetSection => SelectedSection == PublishSection.NuGet;
     public bool IsDeploySection => SelectedSection == PublishSection.Deploy;
     public bool IsDeviceFilesSection => SelectedSection == PublishSection.DeviceFiles;
     public bool IsLogSection => SelectedSection == PublishSection.Log;
@@ -54,6 +57,7 @@ public partial class MainViewModel
         OnPropertyChanged(nameof(IsSigningSection));
         OnPropertyChanged(nameof(IsOutputSection));
         OnPropertyChanged(nameof(IsGooglePlaySection));
+        OnPropertyChanged(nameof(IsNuGetSection));
         OnPropertyChanged(nameof(IsDeploySection));
         OnPropertyChanged(nameof(IsDeviceFilesSection));
         OnPropertyChanged(nameof(IsLogSection));

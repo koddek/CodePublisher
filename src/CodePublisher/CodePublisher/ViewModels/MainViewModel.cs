@@ -11,10 +11,12 @@ using CommunityToolkit.Mvvm.Input;
 using CodePublisher.Features.Deployment.Android;
 using CodePublisher.Features.GooglePlay;
 using CodePublisher.Features.GooglePlay.Models;
+using CodePublisher.Features.NuGet;
 using CodePublisher.Features.GooglePlay.Tracks;
 using CodePublisher.Features.Publishing.Artifacts;
 using CodePublisher.Features.Publishing.Capture;
 using CodePublisher.Features.Publishing.Configure;
+using CodePublisher.Features.Publishing.Inspect;
 using CodePublisher.Models;
 using CodePublisher.Services;
 using CodePublisher.Views;
@@ -27,6 +29,7 @@ public partial class MainViewModel : ViewModelBase
     [
         nameof(PublishPlatform),
         nameof(ProjectDirectory),
+        nameof(SelectedProjectFile),
         nameof(TargetFramework),
         nameof(RuntimeIdentifier),
         nameof(Configuration),
@@ -74,6 +77,12 @@ public partial class MainViewModel : ViewModelBase
     private bool _isAssigningAutomaticOutputDirectory;
     private bool _isOutputDirectoryManualOverride;
     private bool _isNormalizingPublishSettings;
+    private bool _isReloadingMetadata;
+
+    /// <summary>Every .csproj found under the selected folder, so a source root with several projects can be picked from.</summary>
+    public ObservableCollection<string> AvailableProjectFiles { get; } = [];
+
+    public bool HasMultipleProjectFiles => AvailableProjectFiles.Count > 1;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(InstallLatestApkCommand))]
@@ -104,7 +113,8 @@ public partial class MainViewModel : ViewModelBase
         PublisherService publisherService,
         DesktopInteractionService desktopInteractionService,
         IScreenshotService? screenshotService = null,
-        GooglePlayViewModel? googlePlayViewModel = null)
+        GooglePlayViewModel? googlePlayViewModel = null,
+        NuGetViewModel? nugetViewModel = null)
     {
         _publisherService = publisherService;
         _desktopInteractionService = desktopInteractionService;
@@ -113,6 +123,11 @@ public partial class MainViewModel : ViewModelBase
             publisherService,
             desktopInteractionService,
             () => SelectedSection = PublishSection.Signing);
+        _nugetViewModel = nugetViewModel ?? NuGetFeatureFactory.Create(
+            publisherService,
+            desktopInteractionService,
+            AppendLog);
+        AttachNuGetNotifications();
         EnsureXamlBindingsPreserved();
         IsProjectInternalVersionSupported = GetDefaultInternalVersionSupport(PublishPlatform);
         DotnetStatus = publisherService.DotnetStatusText;
@@ -183,6 +198,7 @@ public partial class MainViewModel : ViewModelBase
         _ = InspectInstalledAndroidPackageCommand;
         _ = IsPublishing;
         _ = GooglePlay;
+        _ = NuGet;
     }
 
     public GooglePlayViewModel GooglePlay => _googlePlayViewModel;
@@ -193,7 +209,8 @@ public partial class MainViewModel : ViewModelBase
         PublisherService.MacOsPlatform,
         PublisherService.WindowsPlatform,
         PublisherService.IosPlatform,
-        PublisherService.LinuxPlatform
+        PublisherService.LinuxPlatform,
+        PublisherService.NuGetPlatform
     ];
 
     public IReadOnlyList<string> ConfigurationOptions { get; } = ["Release", "Debug"];
@@ -220,6 +237,13 @@ public partial class MainViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsAndroidPlatform))]
     [NotifyPropertyChangedFor(nameof(IsMacOsPlatform))]
     [NotifyPropertyChangedFor(nameof(IsLinuxPlatform))]
+    [NotifyCanExecuteChangedFor(nameof(OpenPublishFolderCommand))]
+    [NotifyPropertyChangedFor(nameof(IsNuGetPlatform))]
+    [NotifyPropertyChangedFor(nameof(IsAppBuildOptionsVisible))]
+    [NotifyPropertyChangedFor(nameof(IsNuGetDeployCardVisible))]
+    [NotifyPropertyChangedFor(nameof(IsCrashLogsCardVisible))]
+    [NotifyPropertyChangedFor(nameof(IsDeviceFilesFallbackVisible))]
+    [NotifyPropertyChangedFor(nameof(IsPlatformSigningCardVisible))]
     [NotifyPropertyChangedFor(nameof(IsAndroidActionsVisible))]
     [NotifyPropertyChangedFor(nameof(IsDeviceFilesAvailable))]
     [NotifyPropertyChangedFor(nameof(IosDeviceSupportNote))]
@@ -588,6 +612,9 @@ private string _projectDirectory = string.Empty;
 
     public bool IsLinuxPlatform => string.Equals(PublishPlatform, PublisherService.LinuxPlatform, StringComparison.Ordinal);
 
+    /// <summary>NuGet platform: the app publishes a package, not an app, so Publish packs a .nupkg.</summary>
+    public bool IsNuGetPlatform => string.Equals(PublishPlatform, PublisherService.NuGetPlatform, StringComparison.Ordinal);
+
     public bool IsAndroidActionsVisible => IsAndroidPlatform;
 
     public bool IsDesktopActionsVisible => IsMacOsPlatform;
@@ -665,8 +692,9 @@ private string _projectDirectory = string.Empty;
 
         if (e.PropertyName is not null && PreviewSensitiveProperties.Contains(e.PropertyName))
         {
-            RefreshCommandPreview();
+            // Context first: the NuGet pack preview reads the context, so the output preview must refresh after it.
             UpdateGooglePlayContext();
+            RefreshCommandPreview();
         }
     }
 
@@ -724,7 +752,70 @@ private string _projectDirectory = string.Empty;
         _projectOutputLayout = null;
         ProjectOutputLayoutSummary = string.Empty;
         SetAutomaticOutputDirectory(string.Empty);
+        RefreshAvailableProjectFiles();
         UpdateGooglePlayContext();
+    }
+
+    partial void OnSelectedProjectFileChanged(string value)
+    {
+        // Picking another discovered project reloads its metadata; the reload assigns the same
+        // value back, which fires no further change.
+        if (_isReloadingMetadata || string.IsNullOrWhiteSpace(value) || !File.Exists(value))
+        {
+            return;
+        }
+
+        if (IsProjectFileUnderSelectedDirectory(value))
+        {
+            _ = ReloadProjectMetadataAsync();
+        }
+    }
+
+    private void RefreshAvailableProjectFiles()
+    {
+        AvailableProjectFiles.Clear();
+        if (!string.IsNullOrWhiteSpace(ProjectDirectory) && Directory.Exists(ProjectDirectory))
+        {
+            foreach (var file in ProjectInspector.DiscoverProjectFiles(new DirectoryInfo(ProjectDirectory)))
+            {
+                AvailableProjectFiles.Add(file.FullName);
+            }
+        }
+
+        OnPropertyChanged(nameof(HasMultipleProjectFiles));
+    }
+
+    private bool IsProjectFileUnderSelectedDirectory(string projectFilePath)
+    {
+        if (string.IsNullOrWhiteSpace(ProjectDirectory))
+        {
+            return false;
+        }
+
+        var root = ProjectDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return projectFilePath.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>The project to build: the picked one when it belongs to the selected folder, else the first discovered.</summary>
+    internal string? ResolveProjectFilePath()
+    {
+        if (!string.IsNullOrWhiteSpace(SelectedProjectFile)
+            && File.Exists(SelectedProjectFile)
+            && IsProjectFileUnderSelectedDirectory(SelectedProjectFile))
+        {
+            return SelectedProjectFile;
+        }
+
+        if (!string.IsNullOrWhiteSpace(ProjectDirectory) && Directory.Exists(ProjectDirectory))
+        {
+            var discovered = ProjectInspector.DiscoverProjectFiles(new DirectoryInfo(ProjectDirectory));
+            if (discovered.Count > 0)
+            {
+                return discovered[0].FullName;
+            }
+        }
+
+        return null;
     }
 
     partial void OnOutputDirectoryChanged(string value)
@@ -1348,7 +1439,9 @@ private string _projectDirectory = string.Empty;
     {
         try
         {
-            var metadata = await _publisherService.LoadProjectMetadataAsync(ProjectDirectory, Configuration, TargetFramework, RuntimeIdentifier, PublishPlatform);
+            _isReloadingMetadata = true;
+            var metadata = await _publisherService.LoadProjectMetadataAsync(
+                ProjectDirectory, Configuration, TargetFramework, RuntimeIdentifier, PublishPlatform, ResolveProjectFilePath());
             SelectedProjectFile = metadata.ProjectFilePath;
             _projectOutputLayout = metadata.OutputLayout;
             ProjectOutputLayoutSummary = $"{metadata.OutputLayout.Description} Automatic destination: {metadata.DefaultOutputDirectory}";
@@ -1404,6 +1497,10 @@ private string _projectDirectory = string.Empty;
                     RuntimeIdentifier = "linux-x64";
                 }
             }
+            else if (IsNuGetPlatform && !string.Equals(RuntimeIdentifier, "any", StringComparison.OrdinalIgnoreCase))
+            {
+                RuntimeIdentifier = "any";
+            }
 
             StatusMessage = "Project metadata loaded. Review the command preview before publishing.";
         UpdateGooglePlayContext();
@@ -1413,6 +1510,10 @@ private string _projectDirectory = string.Empty;
             SelectedProjectFile = string.Empty;
             StatusMessage = "Could not load project metadata.";
             await _desktopInteractionService.ShowErrorAsync("Project metadata", ex.Message);
+        }
+        finally
+        {
+            _isReloadingMetadata = false;
         }
     }
 
@@ -1431,6 +1532,26 @@ private string _projectDirectory = string.Empty;
     [RelayCommand(CanExecute = nameof(CanPublish))]
     private async Task PublishAsync()
     {
+        // On the NuGet platform "Publish" means "pack the NuGet package", so the header button
+        // runs the NuGet pipeline instead of dotnet publish.
+        if (IsNuGetPlatform)
+        {
+            IsPublishing = true;
+            NotifyPublishStateChanged();
+            try
+            {
+                await _nugetViewModel.RunPackAsync();
+                StatusMessage = _nugetViewModel.StatusMessage;
+            }
+            finally
+            {
+                IsPublishing = false;
+                NotifyPublishStateChanged();
+            }
+
+            return;
+        }
+
         IsPublishing = true;
         IsBusy = true;
         ClearLog();
@@ -1569,8 +1690,25 @@ private string _projectDirectory = string.Empty;
     /// parent folder the user would have to dig through. Falls back to the configured output folder
     /// when no package has been published yet or the platform is not Android.
     /// </summary>
-    private IReadOnlyList<string> ResolvePublishArtifactFolders()
+    internal IReadOnlyList<string> ResolvePublishArtifactFolders()
     {
+        // On the NuGet platform the artifact is the .nupkg, so open the NuGet package folder
+        // (the packed artifact's folder when a pack has run), not the app publish output.
+        if (IsNuGetPlatform)
+        {
+            if (!string.IsNullOrWhiteSpace(NuGet.PackedPackagePath)
+                && Path.GetDirectoryName(NuGet.PackedPackagePath) is { Length: > 0 } packedFolder
+                && Directory.Exists(packedFolder))
+            {
+                return [packedFolder];
+            }
+
+            if (!string.IsNullOrWhiteSpace(NuGet.OutputDirectory) && Directory.Exists(NuGet.OutputDirectory))
+            {
+                return [NuGet.OutputDirectory.Trim()];
+            }
+        }
+
         var outputDirectory = OutputDirectory;
         if (IsAndroidPlatform && !string.IsNullOrWhiteSpace(outputDirectory) && Directory.Exists(outputDirectory))
         {
@@ -1616,7 +1754,18 @@ private string _projectDirectory = string.Empty;
 
     private bool CanOpenPublishFolder()
     {
-        return !IsBusy && !string.IsNullOrWhiteSpace(OutputDirectory);
+        if (IsBusy)
+        {
+            return false;
+        }
+
+        if (IsNuGetPlatform)
+        {
+            return !string.IsNullOrWhiteSpace(NuGet.PackedPackagePath)
+                || !string.IsNullOrWhiteSpace(NuGet.OutputDirectory);
+        }
+
+        return !string.IsNullOrWhiteSpace(OutputDirectory);
     }
 
     [RelayCommand(CanExecute = nameof(CanRunAndroidActions))]
@@ -2097,6 +2246,7 @@ private string _projectDirectory = string.Empty;
             ProjectDisplayVersion,
             ProjectInternalVersion,
             IsAndroidPlatform));
+        UpdateNuGetContext();
     }
 
     internal PublishConfiguration CreatePublishConfiguration() => CreateConfiguration();
@@ -2149,9 +2299,19 @@ private string _projectDirectory = string.Empty;
 
     private void RefreshCommandPreview()
     {
+        // The NuGet platform has no dotnet publish command; the Output preview shows the pack command.
+        if (IsNuGetPlatform)
+        {
+            CommandPreview = string.IsNullOrWhiteSpace(_nugetViewModel.PackCommandPreview)
+                ? "Select a project to build the pack command."
+                : _nugetViewModel.PackCommandPreview;
+            KnownGoodBaselineCommand = string.Empty;
+            return;
+        }
+
         try
         {
-            var bundle = _publisherService.BuildPublishCommandBundle(CreateConfiguration());
+            var bundle = _publisherService.BuildPublishCommandBundle(CreateConfiguration(), ResolveProjectFilePath());
             SelectedProjectFile = bundle.ProjectFilePath;
             CommandPreview = bundle.PreviewText;
             KnownGoodBaselineCommand = bundle.BaselinePreviewText;

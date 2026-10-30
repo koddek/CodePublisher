@@ -315,6 +315,116 @@ the Play Console website.
   EXPECT: the document names the folders each platform uses, the rule that the app's own folder is the app's own choice, and the sources of the claims.
   EVIDENCE: `docs/crash-report-locations.md` records the Android data folder, the debuggable rule of `run-as`, the DropBox tags, the `logcat` buffer, the iOS container and the `.ips` reports, and the macOS and Windows folders, with the table of what the scan reads per platform and the list of the file names that mark a crash report. The real device path of `devicectl` was not exercised, because no iPhone was connected to this computer.
 
+## NuGet package pipeline increment
+
+Scope: Add a NuGet workspace to Code Publisher. A new NuGet navigation tab packs the selected project into a `.nupkg` (`dotnet pack`), validates the package (nuspec identity, SemVer version, assets, zip-slip entries), and test-installs it from a local feed into a throwaway consumer project. The Deploy tab gains a NuGet feed card that pushes the packed package to NuGet.org or GitHub Packages (`dotnet nuget push`), lists the versions already on the feed, and deletes a version (`dotnet nuget delete`). API keys stay session-only and are masked in every command preview. Domain logic lives in `CodePublisher.Core/Features/NuGet` with no Avalonia dependency; the view model and view live in the app project.
+
+- [x] N1: Core NuGet slice exists and is pure/testable: feed catalog + URL/validation rules, pack/push/delete/test command builders with secret masking, nupkg reader, package validator, V3 version-list parsers, feed client, and the orchestrating `NuGetPackageService` behind a process-runner seam.
+  CHECK: dotnet build CodePublisher.slnx --no-restore
+  EXPECT: Build succeeded with zero warnings and errors.
+  EVIDENCE: `Build succeeded. 0 Warning(s) 0 Error(s)`; `Features/NuGet/{Models,Feeds,Build,Inspect,Validation,Services}` in CodePublisher.Core, no Avalonia references.
+- [x] N2: TUnit coverage for the NuGet slice: feed catalog URLs and id/version/owner validation, command builders and masking, nupkg reader against a real temp .nupkg, validator rules, version-list JSON parsers, and service orchestration with an imposter process runner.
+  CHECK: dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj -- --disable-logo --progress off
+  EXPECT: all tests pass, including the new NuGet tests.
+  EVIDENCE: 487/487 passed (Debug and Release); six new files under `tests/CodePublisher.Tests/Features/NuGet/`.
+- [x] N3: The NuGet tab is wired into navigation and composition: `PublishSection.NuGet`, nav item after Google Play, `NuGetViewModel` via `NuGetFeatureFactory`, `NuGetView` in MainView, context updates from project metadata, and a NuGet feed card in the Deploy section.
+  CHECK: dotnet build CodePublisher.slnx --no-restore
+  EXPECT: Build succeeded with zero warnings and errors; XAML compiles with x:CompileBindings.
+  EVIDENCE: `Build succeeded. 0 Warning(s) 0 Error(s)` for the whole solution; `Views/NuGet/NuGetView.axaml` + Deploy-section feed card compiled with x:CompileBindings; `MainViewModel.NuGet.cs` feeds project metadata into the slice via `UpdateGooglePlayContext`.
+- [x] N4: No NuGet secrets or hardcoded tokens in source; API key is session-only, masked in previews, and never written to disk by the feature.
+  CHECK: if rg -n "ghp_[A-Za-z0-9]{20,}|sk-nuget|BEGIN (RSA )?PRIVATE KEY" src/CodePublisher/CodePublisher.Core/Features/NuGet src/CodePublisher/CodePublisher/Features/NuGet src/CodePublisher/CodePublisher/Views/NuGet tests/CodePublisher.Tests/Features/NuGet; then exit 1; else echo clean; fi
+  EXPECT: clean
+  EVIDENCE: `clean`; `NuGetCommandBuilder.Mask` replaces every `--api-key`/`-k` value with asterisks and the service tests assert the key never appears in previews.
+- [x] N5: Full verification: Release solution build plus the whole TUnit suite.
+  CHECK: dotnet restore CodePublisher.slnx -p:Configuration=Release && dotnet build CodePublisher.slnx --configuration Release --no-restore && dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj --configuration Release --no-build -- --disable-logo --progress off
+  EXPECT: zero warnings/errors; all tests pass.
+  EVIDENCE: Release build `0 Warning(s) 0 Error(s)`; TUnit 487/487 passed in Release.
+- [x] N6: DOX pass: README (NuGet tab, nav order, workflow), src/AGENTS.md navigation-order contract, and the docs index stay current.
+  CHECK: rg -n "NuGet" README.md src/AGENTS.md
+  EXPECT: both name the NuGet tab and its pipeline.
+  EVIDENCE: README lists the NuGet pack/test/push/list/delete bullets, workflow step 8, and the navigation order with NuGet; `src/AGENTS.md` names the NuGet nav position and the shared `NuGetViewModel`; `CodePublisher.Core/AGENTS.md` and `CodePublisher/Features/AGENTS.md` created to match the src Child DOX Index and describe the slice's contracts.
+
+## NuGet platform and cross-thread fix increment
+
+Scope: (1) Fix the `InvalidOperationException: calling thread cannot access this object` crash when packing from the NuGet tab: `NuGetViewModel` awaited `Task.Run(...)` with `ConfigureAwait(false)`, so the continuation mutated UI-bound state (`IsBusy`, `ObservableCollection`s) on a thread-pool thread. All `ConfigureAwait(false)` calls were removed from the view model, so continuations resume on the Avalonia dispatcher like the rest of the app; the Core service keeps `ConfigureAwait(false)` because library code has no UI thread. (2) Make `NuGet` a first-class publish platform: selecting it in the Platform tab switches every tab to NuGet context (app build options, Android signing, crash logs, and device-files cards hide; the NuGet deploy card shows in Deploy), the header Publish button runs the pack pipeline, and the Output preview shows the masked `dotnet pack` command instead of an app-publish error.
+
+- [x] N7: No `ConfigureAwait(false)` remains in `NuGetViewModel`; UI-state mutations happen on the dispatcher thread.
+  CHECK: rg -n "ConfigureAwait" src/CodePublisher/CodePublisher/Features/NuGet/NuGetViewModel.cs
+  EXPECT: no matches.
+  EVIDENCE: `rg` returns nothing; solution builds with zero warnings/errors.
+- [x] N8: NuGet is a selectable platform with context-aware tabs and a routing Publish button.
+  CHECK: dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj -- --disable-logo --progress off
+  EXPECT: NuGetPlatformTests pass (platform listed, neutral defaults, RID not required, per-tab visibility flips, Output preview shows the pack command); whole suite passes.
+  EVIDENCE: 493/493 passed; `PublishPlatforms.NuGet`, `PublisherService.NuGetPlatform`, a `NuGet` arm in `PlatformProfiles.GetDefaults`, an early return for NuGet in `ProjectInspector.ValidateRuntimeForPlatform`, `MainViewModel.PublishAsync` routing to `NuGetViewModel.RunPackAsync`, and per-tab visibility properties (`IsAppBuildOptionsVisible`, `IsNuGetDeployCardVisible`, `IsCrashLogsCardVisible`, `IsDeviceFilesFallbackVisible`, `IsPlatformSigningCardVisible`) wired into MainView.axaml.
+- [x] N9: Full solution verification after the increment.
+  CHECK: dotnet build CodePublisher.slnx --configuration Release --no-restore && dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj --configuration Release --no-build -- --disable-logo --progress off
+  EXPECT: zero warnings/errors; all tests pass.
+  EVIDENCE: Release build `0 Warning(s) 0 Error(s)`; TUnit 493/493 passed in Release.
+
+## NU5026 pack recovery increment
+
+Scope: With the NuGet platform selected, the header Publish button runs `dotnet pack` (confirmed in the live log). A pack can fail with NU5026 ("file to be packed was not found") when MSBuild's up-to-date check skips the build while `bin` lacks the assembly. `NuGetPackageService.PackAsync` now detects NU5026 in the pack output, forces a real rebuild (`dotnet build -c <config> --no-incremental`), and repacks with `--no-build`.
+
+- [x] N10: NU5026 triggers a forced rebuild plus `--no-build` repack; other failures still fail fast.
+  CHECK: dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj -- --disable-logo --progress off
+  EXPECT: `Pack_NU5026_ForcesRebuild_ThenRepacksWithNoBuild` passes (call order pack → build --no-incremental → pack --no-build, success, identity read); whole suite passes.
+  EVIDENCE: 495/495 passed. Real-SDK check: `dotnet build -c Release --no-incremental` followed by `dotnet pack -c Release --no-build -o nupkgs` produced `DemoLib.1.0.0.nupkg` on .NET SDK 10.0.402.
+- [x] N11: Full solution verification after the increment.
+  CHECK: dotnet build CodePublisher.slnx --configuration Release --no-restore && dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj --configuration Release --no-build -- --disable-logo --progress off
+  EXPECT: zero warnings/errors; all tests pass.
+  EVIDENCE: Release build `0 Warning(s) 0 Error(s)`; TUnit 495/495 passed in Release.
+
+## Multi-project discovery increment
+
+Scope: Selecting a source root that contains several projects (main library plus a source-generator project, tests, samples) used to find no top-level .csproj. The app now discovers every .csproj under the selected folder (recursive, `bin`/`obj`/`node_modules`/etc. skipped, depth-limited), shows a picker in the Project section when more than one exists, and the chosen project drives metadata, the command preview, and the NuGet pack. Packing the main project already builds referenced projects (including analyzer-style generator references), verified against the real SDK.
+
+- [x] N12: Recursive project discovery skips build folders and feeds a picker; the chosen project drives the preview.
+  CHECK: dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj -- --disable-logo --progress off
+  EXPECT: ProjectDiscoveryTests pass (nested projects found, bin/obj copies excluded, picker shown only for multiple, chosen project appears in the pack preview); whole suite passes.
+  EVIDENCE: 498/498 passed. `ProjectInspector.DiscoverProjectFiles`, `PublisherService.LoadProjectMetadataAsync`/`BuildPublishCommandBundle` accept an explicit project file, `MainViewModel.AvailableProjectFiles` + `ResolveProjectFilePath`, and the Project-section ComboBox. Fixed along the way: `SelectedProjectFile` added to the preview-sensitive set and the context update now runs before the preview refresh, so switching projects updates the preview in one pass.
+- [x] N13: Real-SDK proof that packing a main project with a referenced generator project works.
+  CHECK: dotnet new classlib main + gen, project reference, dotnet pack src/MainLib -c Release -o nupkgs
+  EXPECT: package created containing lib/net10.0/MainLib.dll; referenced project built automatically.
+  EVIDENCE: `Successfully created package .../MainLib.1.0.0.nupkg` with `MainLib.nuspec` + `lib/net10.0/MainLib.dll` inside on .NET SDK 10.0.402.
+- [x] N14: Full solution verification after the increment.
+  CHECK: dotnet build CodePublisher.slnx --configuration Release --no-restore && dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj --configuration Release --no-build -- --disable-logo --progress off
+  EXPECT: zero warnings/errors; all tests pass.
+  EVIDENCE: Release build `0 Warning(s) 0 Error(s)`; TUnit 498/498 passed in Release.
+
+## NuGet credential and owner auto-detection increment
+
+Scope: In the NuGet/Deploy feed UI, selecting GitHub Packages auto-fills the owner from the project's csproj repository URL (`RepositoryUrl`/`PackageProjectUrl`/`ProjectUrl`) or the nearest `.git/config` remote (walking up, worktree `gitdir:` pointers included), and a "Detect owner & key" button re-runs detection. API keys are detected from `GH_TOKEN`/`GITHUB_TOKEN` (GitHub Packages) or `NUGET_API_KEY` (nuget.org), falling back to `gh auth token`; the token is kept in memory only and never logged. Parsing is pure (`GitHubOwnerDetector`, `GitConfigParser`, `NuGetProjectRepositoryReader`); credential lookup goes through the env/process-runner seams.
+
+- [x] N15: Owner detection covers https/ssh/credentialed GitHub URLs, csproj properties, and git config; non-GitHub yields null.
+  CHECK: dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj -- --disable-logo --progress off
+  EXPECT: GitHubOwnerDetectorTests pass (URL shapes, git config remotes, csproj-over-remote precedence, walk-up); suite passes.
+  EVIDENCE: 507/507 passed.
+- [x] N16: API-key detection prefers env vars, falls back to `gh auth token`, returns null when nothing is set, and never runs gh for nuget.org.
+  CHECK: dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj -- --disable-logo --progress off
+  EXPECT: NuGetCredentialDetectionTests pass with the env and process-runner imposters.
+  EVIDENCE: 507/507 passed; `DetectApiKey_GitHub_FallsBackToGhCli`, `DetectApiKey_NuGetOrg_UsesNuGetApiKey_AndNeverCallsGh`, `DetectApiKey_NothingConfigured_ReturnsNull` all green.
+- [x] N17: Full solution verification after the increment.
+  CHECK: dotnet build CodePublisher.slnx --configuration Release --no-restore && dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj --configuration Release --no-build -- --disable-logo --progress off
+  EXPECT: zero warnings/errors; all tests pass.
+  EVIDENCE: Release build `0 Warning(s) 0 Error(s)`; TUnit 507/507 passed in Release.
+
+## Deep offline .nupkg validation increment
+
+Scope: "Test package" now validates the artifact in-process without installing it anywhere: the package is opened with NuGet's own `PackageArchiveReader` (NuGet.Packaging 7.9.0, added centrally), the nuspec must parse with a valid id and SemVer 2.0 version, dependency groups must be well formed, no zip entry may escape the archive, and every `lib/**/*.dll` must carry a real CLR header (own `ManagedAssemblyInspector` PE check), so a broken DLL can never be packed silently. Missing readme/no assets are warnings. The existing consumer-install test (local feed + throwaway project + build) still runs on top. `dotnet nuget verify` was researched and rejected: it only verifies signatures, not content.
+
+- [x] N18: Validator checks the archive dependency-free (NuGet.Packaging was tried first and dropped: its signing P/Invokes raise WASM0001 in the browser host) plus a CLR-header check on every lib DLL.
+  CHECK: dotnet build CodePublisher.slnx --no-restore && dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj -- --disable-logo --progress off
+  EXPECT: zero warnings on every host including the browser WASM build; validator tests pass (real managed dll passes, text-as-dll errors, malformed nuspec errors, missing readme warns, malformed dependency errors); whole suite passes.
+  EVIDENCE: 511/511 passed; solution build `0 Warning(s) 0 Error(s)` with no new package references.
+- [x] N19: Real-SDK proof: validator accepts a real `dotnet pack` artifact with the correct identity.
+  CHECK: dotnet pack a fresh classlib, then run NuGetPackageValidator over the produced .nupkg
+  EXPECT: valid=true, id/version read from the nuspec, only the readme warning.
+  EVIDENCE: `valid=True id=RealLib version=1.0.0 entries=5` + readme warning on SDK 10.0.402.
+- [x] N20: Full Release verification.
+  CHECK: dotnet build CodePublisher.slnx --configuration Release --no-restore && dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj --configuration Release --no-build -- --disable-logo --progress off
+  EXPECT: zero warnings/errors; all tests pass.
+  EVIDENCE: Release build `0 Warning(s) 0 Error(s)`; TUnit 511/511 passed in Release.
+
 ## Crash log button increment
 
 - [x] C6: The crash report scan is available as soon as the Deploy section is open.

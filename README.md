@@ -4,11 +4,11 @@
 
 Code Publisher is a desktop utility for .NET developers who want a faster, safer way to build publish commands, inspect exactly what will run, and handle common platform workflows without living in the terminal.
 
-It is built with Avalonia and currently supports Android, macOS, Windows, and iOS publish workflows for .NET projects.
+It is built with Avalonia and currently supports Android, macOS, Windows, and iOS publish workflows for .NET projects, plus a NuGet workflow that packs, tests, and publishes .NET packages to NuGet.org or GitHub Packages.
 
 ## What it does
 
-- Select a .NET project folder and auto-detect the `.csproj`
+- Select a .NET project folder and auto-detect the `.csproj`; when the folder holds several projects in subfolders (main library, source generator, tests), every `.csproj` is listed and you pick the one to publish
 - Read project metadata and pick platform-appropriate target framework/runtime combinations
 - Detect the project's effective version wherever it is declared — the csproj, `Directory.Build.props`, a central `Directory.Version.props`, or any imported props file (via MSBuild evaluation, falling back to the project file when `dotnet` is unavailable)
 - Generate the Android APK on every publish, and check AAB once to add the Google Play bundle to the same build
@@ -33,6 +33,11 @@ It is built with Avalonia and currently supports Android, macOS, Windows, and iO
 - Keep the device list live instead of refreshing by hand: while the Platform, Deploy, or Device Files section is open, a phone that is plugged in, authorized, or unplugged, and an emulator you start, appear and get selected automatically — and starting an emulator reports when it comes online
 - Capture the app window to clipboard or disk with a visible countdown
 - Hear a short alert when a task finishes — publish, deploy actions, device file transfers, and clipboard copies — and mute it from the speaker button in the header
+- Pack the selected project into a NuGet package from the NuGet section (`dotnet pack`), with a live command preview
+- Validate the packed .nupkg offline (no install needed): archive safety, nuspec identity + SemVer version, well-formed dependency groups, and a CLR-header check that every `lib/**/*.dll` is a real managed assembly; then test-install it from a local feed into a throwaway consumer project that must build
+- Push the package to NuGet.org or GitHub Packages from the NuGet section or the Deploy section, with the API key held in memory for the session only and masked in every preview
+- Auto-detect the GitHub owner from the project's repository URL or git remote, and reuse an API key already configured on the machine (`gh auth token`, `GH_TOKEN`/`GITHUB_TOKEN`, `NUGET_API_KEY`) via "Detect owner & key"
+- List the versions already hosted on the selected feed and delete one from there (`dotnet nuget delete`)
 - Publish Android App Bundles to Google Play from a dedicated Google Play workspace
 - Configure the Google Desktop OAuth client ID directly in the app, with session-only or user-profile persistence and visible configured/not-configured status
 - Connect a personal Google account with browser OAuth, choose internal, closed, open, or production tracks, add release notes, and submit staged or full rollouts
@@ -76,11 +81,12 @@ dotnet run --project src/CodePublisher/CodePublisher.Browser/CodePublisher.Brows
 
 1. Pick the .NET project directory.
 2. Review the detected `.csproj`, package id, and target framework.
-3. Choose platform (`Android`, `macOS`, `Windows`, or `iOS`) and set the publish options for that slice.
+3. Choose platform (`Android`, `macOS`, `Windows`, `iOS`, `Linux`, or `NuGet`) and set the publish options for that slice. Every tab is context-aware: with `NuGet` selected, only NuGet cards show, and the header **Publish** button packs the `.nupkg`.
 4. Confirm the command preview looks correct.
 5. Configure Android signing and the Google Play upload key from the Signing workspace.
 6. Publish and watch the live output panel.
 7. Open the output folder, or deploy to a real device or emulator from the Platform and Deploy sections.
+8. In the NuGet section, pack the project into a .nupkg, test it against a local feed, and push it to NuGet.org or GitHub Packages from the NuGet or Deploy section.
 8. Use Device Files to browse the selected Android device's public folders, send files to it, and save files from it.
 
 ## Project structure
@@ -198,7 +204,7 @@ The app is already useful for Android, macOS, Windows, and iOS publish flows, pl
 - The browser host links the native SkiaSharp library, so it needs the `wasm-tools` workload for the emscripten toolchain: run `dotnet workload install wasm-tools` before building it. Without that, the app fails at startup with `System.DllNotFoundException: libSkiaSharp`.
 - The master-detail view narrows its navigation, stacks header actions, wraps form groups, and uses compact icon controls for low-emphasis actions at smaller window sizes.
 - `Signing` and `Google Play` are adjacent master-detail destinations; routine status stays inline, while modal alerts are reserved for errors and confirmations with a title and vertically centered details.
-- The navigation reads Project, Platform, Build, Signing, Google Play, Deploy, Device Files, Output, Log, so build output and the log stay side by side.
+- The navigation reads Project, Platform, Build, Signing, Google Play, NuGet, Deploy, Device Files, Output, Log, so build output and the log stay side by side.
 - Task alerts are played by one shared `AlertSoundService`; the header speaker button mutes them, and alerts that arrive within its coalesce window sound once.
 - Release verification uses `dotnet restore -p:Configuration=Release`, a Release solution build, and the TUnit suite; no live Google Play or device calls are made by tests.
 

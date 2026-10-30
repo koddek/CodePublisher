@@ -31,6 +31,62 @@ public static class ProjectInspector
             .FirstOrDefault();
     }
 
+    private static readonly HashSet<string> SkippedDiscoveryFolders =
+        new(StringComparer.OrdinalIgnoreCase) { "bin", "obj", "node_modules", ".git", ".idea", ".vs", "artifacts", "packages" };
+
+    /// <summary>
+    /// Every .csproj under the directory, recursively, skipping build output folders. A source root
+    /// that holds several projects (a main library plus a source generator, tests, samples) yields
+    /// them all, so the UI can offer a picker instead of silently using the first top-level project.
+    /// </summary>
+    public static IReadOnlyList<FileInfo> DiscoverProjectFiles(DirectoryInfo projectDirectory, int maxDepth = 5)
+    {
+        var found = new List<FileInfo>();
+        CollectProjectFiles(projectDirectory, found, depth: 0, maxDepth);
+        return found
+            .OrderBy(file => file.FullName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static void CollectProjectFiles(DirectoryInfo directory, List<FileInfo> found, int depth, int maxDepth)
+    {
+        if (depth > maxDepth || !directory.Exists)
+        {
+            return;
+        }
+
+        try
+        {
+            found.AddRange(directory.GetFiles("*.csproj", SearchOption.TopDirectoryOnly));
+        }
+        catch
+        {
+            // Unreadable folder: skip it, the rest of the tree still matters.
+        }
+
+        if (depth == maxDepth)
+        {
+            return;
+        }
+
+        try
+        {
+            foreach (var subdirectory in directory.GetDirectories())
+            {
+                if (SkippedDiscoveryFolders.Contains(subdirectory.Name))
+                {
+                    continue;
+                }
+
+                CollectProjectFiles(subdirectory, found, depth + 1, maxDepth);
+            }
+        }
+        catch
+        {
+            // Unreadable folder: skip it.
+        }
+    }
+
     public static string GetDefaultOutputDirectory(
         DirectoryInfo projectDirectory,
         string configuration,
@@ -83,6 +139,12 @@ public static class ProjectInspector
 
     public static void ValidateRuntimeForPlatform(PublishConfiguration configuration)
     {
+        // NuGet packages are platform-neutral: dotnet pack needs no runtime identifier.
+        if (string.Equals(configuration.PublishPlatform, PublishPlatforms.NuGet, StringComparison.Ordinal))
+        {
+            return;
+        }
+
         var runtimeIdentifier = configuration.RuntimeIdentifier.Trim();
         if (string.IsNullOrWhiteSpace(runtimeIdentifier))
         {

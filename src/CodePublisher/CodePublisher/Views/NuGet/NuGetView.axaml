@@ -1,0 +1,169 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:nuget="using:CodePublisher.Features.NuGet"
+             xmlns:nugetModels="using:CodePublisher.Features.NuGet.Models"
+             mc:Ignorable="d"
+             d:DesignWidth="880"
+             d:DesignHeight="800"
+             x:Class="CodePublisher.Views.NuGet.NuGetView"
+             x:CompileBindings="True"
+             x:DataType="nuget:NuGetViewModel">
+
+    <StackPanel Spacing="20">
+
+        <Border Classes="card" IsVisible="{Binding IsBrowser}">
+            <StackPanel Spacing="8">
+                <TextBlock Text="NuGet packaging needs the desktop app" Classes="section-title"/>
+                <TextBlock Text="Packing, test-installing, and pushing run `dotnet` on this computer, which the browser host cannot do." Classes="section-copy" TextWrapping="Wrap"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Pack -->
+        <Border Classes="card">
+            <StackPanel Spacing="12">
+                <TextBlock Text="Pack the project" Classes="section-title"/>
+                <TextBlock Text="Runs `dotnet pack` on the selected project: this is the NuGet equivalent of Publish. The .nupkg lands in the output folder." Classes="section-copy" TextWrapping="Wrap"/>
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Project file" FontWeight="SemiBold" FontSize="13"/>
+                    <TextBox Text="{Binding ProjectFile}" IsReadOnly="True" PlaceholderText="No project selected — pick one in the Project section" TextWrapping="Wrap"/>
+                </StackPanel>
+                <WrapPanel ItemSpacing="12" LineSpacing="12">
+                    <StackPanel MinWidth="220" MaxWidth="420" Spacing="5">
+                        <TextBlock Text="Package ID" FontSize="12" FontWeight="SemiBold" ToolTip.Tip="The id the package is published under; read from the project (PackageId or assembly name)."/>
+                        <TextBox Text="{Binding PackageId}" PlaceholderText="MyCompany.MyLibrary"/>
+                    </StackPanel>
+                    <StackPanel MinWidth="130" MaxWidth="200" Spacing="5">
+                        <TextBlock Text="Version" FontSize="12" FontWeight="SemiBold" ToolTip.Tip="SemVer 2.0. Prefilled from the project version; passed to pack as PackageVersion."/>
+                        <TextBox Text="{Binding PackageVersion}" PlaceholderText="1.0.0"/>
+                    </StackPanel>
+                    <StackPanel MinWidth="100" MaxWidth="140" Spacing="5">
+                        <TextBlock Text="Configuration" FontSize="12" FontWeight="SemiBold"/>
+                        <ComboBox ItemsSource="{Binding ConfigurationOptions}" SelectedItem="{Binding Configuration, Mode=TwoWay}"/>
+                    </StackPanel>
+                </WrapPanel>
+                <StackPanel Spacing="5">
+                    <TextBlock Text="Package output folder" FontSize="12" FontWeight="SemiBold" ToolTip.Tip="Where dotnet pack writes the .nupkg."/>
+                    <TextBox Text="{Binding OutputDirectory}" PlaceholderText="&lt;project&gt;/nupkgs"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                    <CheckBox Content="Include symbol package (.snupkg)" IsChecked="{Binding IncludeSymbols}" Margin="0,4"
+                              ToolTip.Tip="Also packs a .snupkg next to the .nupkg. A symbol package carries the debug symbols (PDBs) for the package DLLs: without it, stack traces that go into your library show no file names or line numbers. Push it to a symbol server (nuget.org hosts symbols at symbols.nuget.org when you push the matching .snupkg) so consumers debugging against your package get full symbols."/>
+                    <Border Classes="option-info">
+                        <TextBlock Text="i"/>
+                    </Border>
+                </StackPanel>
+                <TextBlock Text="A .snupkg is a second, smaller package with the PDB debug symbols of the DLLs in the .nupkg. It is not referenced by consumers; it only feeds symbol servers (nuget.org: symbols.nuget.org) so crash reports and debugger stack traces into your library keep file/line info. Leave it off for a plain library release; turn it on when you want debuggable releases." Classes="section-copy" TextWrapping="Wrap"/>
+                <WrapPanel ItemSpacing="8" LineSpacing="8">
+                    <Button Classes="primary" Content="Pack (create .nupkg)" Command="{Binding PackCommand}" MinWidth="190"
+                            ToolTip.Tip="Builds the project and creates the NuGet package in the output folder."/>
+                    <Button Content="Test package" Command="{Binding TestPackageCommand}" MinWidth="130"
+                            ToolTip.Tip="Validates the .nupkg, then installs it from a local feed into a throwaway project and builds that project, proving the package really works."/>
+                    <Button Classes="compact-icon" Command="{Binding CopyPackCommandCommand}" ToolTip.Tip="Copy the exact pack command (secrets masked)" AutomationProperties.Name="Copy pack command">
+                        <PathIcon Data="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" Width="16" Height="16"/>
+                    </Button>
+                </WrapPanel>
+                <TextBlock Text="Pack command preview" FontSize="12" FontWeight="SemiBold" Margin="0,4,0,0"/>
+                <Border Classes="console-shell" Padding="0" ClipToBounds="True">
+                    <ScrollViewer Classes="console-scroll">
+                        <TextBox Classes="console-textbox" Text="{Binding PackCommandPreview}" AcceptsReturn="True" MinHeight="50" IsReadOnly="True"/>
+                    </ScrollViewer>
+                </Border>
+                <TextBlock Text="{Binding StatusMessage}" Classes="section-copy" TextWrapping="Wrap"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Validation result -->
+        <Border Classes="card" IsVisible="{Binding HasPackedPackage}">
+            <StackPanel Spacing="10">
+                <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+                    <TextBlock Text="Packed package" Classes="section-title"/>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                        <Button Classes="compact-icon" Command="{Binding OpenPackageFolderCommand}"
+                                ToolTip.Tip="Open the folder that holds the packed .nupkg" AutomationProperties.Name="Open package folder">
+                            <PathIcon Data="M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM14 3v2h3.59L7.76 14.83l1.41 1.41L19 6.41V10h2V3h-7z" Width="16" Height="16"/>
+                        </Button>
+                        <Border Classes="badge" Background="{DynamicResource StatusSuccessBackgroundColor}" BorderBrush="{DynamicResource StatusSuccessBorderColor}">
+                            <TextBlock Text="{Binding PackedPackageLabel}" Foreground="{DynamicResource StatusSuccessTextColor}" FontSize="11"/>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+                <TextBlock Text="{Binding PackedPackagePath}" Classes="section-copy" TextWrapping="Wrap"/>
+                <TextBlock Text="{Binding ValidationSummary}" Classes="section-copy" TextWrapping="Wrap"/>
+                <ItemsControl ItemsSource="{Binding ValidationIssues}" IsVisible="{Binding HasValidationIssues}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="nugetModels:NuGetValidationIssue">
+                            <TextBlock Text="{Binding Message}" FontSize="12" Foreground="{DynamicResource StatusWarningTextColor}" TextWrapping="Wrap"/>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Border>
+
+        <!-- Deploy to a feed -->
+        <Border Classes="card">
+            <StackPanel Spacing="12">
+                <TextBlock Text="Deploy to a NuGet feed" Classes="section-title"/>
+                <TextBlock Text="Pushes the packed .nupkg to the chosen host. Feeds never overwrite a version: if it already exists, bump the version and pack again. The API key stays in memory for this session only." Classes="section-copy" TextWrapping="Wrap"/>
+                <WrapPanel ItemSpacing="12" LineSpacing="12">
+                    <StackPanel MinWidth="180" MaxWidth="260" Spacing="5">
+                        <TextBlock Text="Feed" FontSize="12" FontWeight="SemiBold"/>
+                        <ComboBox ItemsSource="{Binding FeedTargets}" SelectedItem="{Binding SelectedFeed, Mode=TwoWay}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="nugetModels:NuGetFeedTarget">
+                                    <TextBlock Text="{Binding Label}"/>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </StackPanel>
+                    <StackPanel MinWidth="200" MaxWidth="320" Spacing="5" IsVisible="{Binding IsFeedOwnerVisible}">
+                        <TextBlock Text="{Binding FeedOwnerLabel}" FontSize="12" FontWeight="SemiBold"/>
+                        <TextBox Text="{Binding FeedOwnerOrFolder}" PlaceholderText="github-username-or-org, or /path/to/feed"/>
+                    </StackPanel>
+                    <StackPanel MinWidth="200" MaxWidth="320" Spacing="5" IsVisible="{Binding IsApiKeyVisible}">
+                        <TextBlock Text="API key (session only)" FontSize="12" FontWeight="SemiBold" ToolTip.Tip="nuget.org API key, or a GitHub PAT with read:packages and write:packages (plus delete:packages to delete). Never saved."/>
+                        <TextBox Text="{Binding ApiKey}" PasswordChar="●" PlaceholderText="Paste key here"/>
+                    </StackPanel>
+                </WrapPanel>
+                <TextBlock Text="{Binding FeedHint}" Classes="section-copy" TextWrapping="Wrap"/>
+                <WrapPanel ItemSpacing="8" LineSpacing="8">
+                    <Button Classes="primary" Content="Push to feed" Command="{Binding PushCommand}" MinWidth="140"
+                            ToolTip.Tip="Uploads the packed .nupkg to the selected feed with `dotnet nuget push`."/>
+                    <Button Content="Refresh versions" Command="{Binding RefreshVersionsCommand}" MinWidth="150"
+                            ToolTip.Tip="Lists the versions of this package already hosted on the selected feed."/>
+                    <Button Content="Detect owner &amp; key" Command="{Binding DetectCredentialsCommand}" MinWidth="160"
+                            ToolTip.Tip="Reads the GitHub owner from the project's repository URL or git remote, and finds an API key already configured (gh CLI, GH_TOKEN/GITHUB_TOKEN, NUGET_API_KEY). The key stays in memory only."/>
+                    <Button Content="Clear key" Command="{Binding ClearApiKeyCommand}" MinWidth="100" IsVisible="{Binding IsApiKeyVisible}"
+                            ToolTip.Tip="Remove the API key from this session's memory."/>
+                </WrapPanel>
+                <TextBlock Text="{Binding FeedStatus}" Classes="section-copy" TextWrapping="Wrap"/>
+                <ProgressBar IsIndeterminate="True" Height="3" IsVisible="{Binding IsFeedBusy}"/>
+                <StackPanel Spacing="6" IsVisible="{Binding HasFeedVersions}">
+                    <TextBlock Text="Versions on the feed" FontSize="13" FontWeight="SemiBold"/>
+                    <ScrollViewer MaxHeight="260" HorizontalScrollBarVisibility="Disabled">
+                        <ItemsControl ItemsSource="{Binding FeedVersions}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="nugetModels:NuGetFeedVersionRowViewModel">
+                                    <Border Classes="file-row">
+                                        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10" VerticalAlignment="Center">
+                                            <StackPanel Grid.Column="0" Spacing="2">
+                                                <TextBlock Text="{Binding Version}" FontSize="13" FontWeight="SemiBold"/>
+                                                <TextBlock Text="{Binding DetailText}" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}"/>
+                                            </StackPanel>
+                                            <Button Grid.Column="2" Classes="compact-icon" Command="{Binding DeleteCommand}"
+                                                    ToolTip.Tip="Delete this version from the feed (needs delete permission)" AutomationProperties.Name="Delete version from feed">
+                                                <PathIcon Data="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" Width="16" Height="16"/>
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+    </StackPanel>
+</UserControl>

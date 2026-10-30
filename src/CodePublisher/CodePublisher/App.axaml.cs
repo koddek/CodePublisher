@@ -8,6 +8,7 @@ using System.Linq;
 using Avalonia.Markup.Xaml;
 using CodePublisher.Features.Deployment.Android;
 using CodePublisher.Features.GooglePlay;
+using CodePublisher.Features.NuGet;
 using CodePublisher.Features.Publishing.Capture;
 using CodePublisher.Services;
 using CodePublisher.ViewModels;
@@ -32,6 +33,10 @@ public partial class App : Application
         DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.NonPublicProperties |
         DynamicallyAccessedMemberTypes.PublicMethods | DynamicallyAccessedMemberTypes.NonPublicMethods,
         typeof(Features.GooglePlay.GooglePlayViewModel))]
+    [DynamicDependency(
+        DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.NonPublicProperties |
+        DynamicallyAccessedMemberTypes.PublicMethods | DynamicallyAccessedMemberTypes.NonPublicMethods,
+        typeof(Features.NuGet.NuGetViewModel))]
     [DynamicDependency(DynamicallyAccessedMemberTypes.PublicProperties, typeof(AndroidDeviceInfo))]
     [DynamicDependency(DynamicallyAccessedMemberTypes.PublicProperties, typeof(NavItem))]
     public override void OnFrameworkInitializationCompleted()

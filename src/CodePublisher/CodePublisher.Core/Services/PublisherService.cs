@@ -22,6 +22,7 @@ public sealed class PublisherService
     public const string WindowsPlatform = PublishPlatforms.Windows;
     public const string IosPlatform = PublishPlatforms.Ios;
     public const string LinuxPlatform = PublishPlatforms.Linux;
+    public const string NuGetPlatform = PublishPlatforms.NuGet;
 
     private const string MacAppIconFileName = "codepublisher";
 
@@ -162,17 +163,19 @@ public sealed class PublisherService
 
     public string EmulatorStatusText => EmulatorPath is null ? "emulator not found" : $"emulator: {EmulatorPath}";
 
-    public ProjectMetadata LoadProjectMetadata(string projectDirectory, string configuration, string targetFramework, string runtimeIdentifier, string publishPlatform)
+    public ProjectMetadata LoadProjectMetadata(string projectDirectory, string configuration, string targetFramework, string runtimeIdentifier, string publishPlatform, string? projectFilePath = null)
     {
-        return LoadProjectMetadataAsync(projectDirectory, configuration, targetFramework, runtimeIdentifier, publishPlatform)
+        return LoadProjectMetadataAsync(projectDirectory, configuration, targetFramework, runtimeIdentifier, publishPlatform, projectFilePath)
             .GetAwaiter()
             .GetResult();
     }
 
-    public async Task<ProjectMetadata> LoadProjectMetadataAsync(string projectDirectory, string configuration, string targetFramework, string runtimeIdentifier, string publishPlatform)
+    public async Task<ProjectMetadata> LoadProjectMetadataAsync(string projectDirectory, string configuration, string targetFramework, string runtimeIdentifier, string publishPlatform, string? projectFilePath = null)
     {
         var projectDirectoryPath = ProjectInspector.CreateProjectDirectory(projectDirectory);
-        var projectFile = ProjectInspector.FindProjectFile(projectDirectoryPath)
+        var projectFile = !string.IsNullOrWhiteSpace(projectFilePath) && File.Exists(projectFilePath)
+            ? new FileInfo(projectFilePath)
+            : ProjectInspector.FindProjectFile(projectDirectoryPath)
             ?? throw new InvalidOperationException($"No .csproj found in {projectDirectoryPath}.");
         var projectName = Path.GetFileNameWithoutExtension(projectFile.Name);
         var detectedTargetFramework = ProjectInspector.ReadTargetFramework(projectFile, publishPlatform);
@@ -203,10 +206,12 @@ public sealed class PublisherService
             outputLayout);
     }
 
-    public PublishCommandBundle BuildPublishCommandBundle(PublishConfiguration configuration)
+    public PublishCommandBundle BuildPublishCommandBundle(PublishConfiguration configuration, string? projectFilePath = null)
     {
         var projectDirectory = ProjectInspector.CreateProjectDirectory(configuration.ProjectDirectory);
-        var projectFile = ProjectInspector.FindProjectFile(projectDirectory)
+        var projectFile = !string.IsNullOrWhiteSpace(projectFilePath) && File.Exists(projectFilePath)
+            ? new FileInfo(projectFilePath)
+            : ProjectInspector.FindProjectFile(projectDirectory)
             ?? throw new InvalidOperationException($"No .csproj found in {projectDirectory}.");
 
         ProjectInspector.ValidateProjectTargetFramework(projectFile, configuration.TargetFramework);
