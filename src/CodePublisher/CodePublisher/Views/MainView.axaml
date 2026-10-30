@@ -468,7 +468,7 @@
                                                 <TextBlock Text="i"/>
                                             </Border>
                                         </StackPanel>
-                                        <TextBox Text="{Binding PackageId}" IsEnabled="{Binding IsEditorEnabled}" PlaceholderText="com.codepublisher"/>
+                                        <TextBox Text="{Binding PackageId}" IsEnabled="{Binding IsEditorEnabled}" PlaceholderText="com.example.app"/>
                                         <TextBlock Text="{Binding PackageIdDescription}" Classes="section-copy" TextWrapping="Wrap"/>
                                     </StackPanel>
                                     <WrapPanel ItemSpacing="16" LineSpacing="12">
@@ -982,7 +982,7 @@
                                 <StackPanel Spacing="12">
                                     <TextBlock Text="Android Deploy" Classes="section-title"/>
                                     <StackPanel Spacing="8" MaxWidth="420" HorizontalAlignment="Left">
-                                        <TextBlock Text="Package ID" FontWeight="SemiBold" FontSize="13" ToolTip.Tip="Loaded from the project; edit here to deploy without a project"/><TextBox Text="{Binding PackageId}" IsEnabled="{Binding IsEditorEnabled}" PlaceholderText="com.codepublisher"/>
+                                        <TextBlock Text="Package ID" FontWeight="SemiBold" FontSize="13" ToolTip.Tip="Loaded from the project; edit here to deploy without a project"/><TextBox Text="{Binding PackageId}" IsEnabled="{Binding IsEditorEnabled}" PlaceholderText="com.example.app"/>
                                      </StackPanel>
                                      <WrapPanel ItemSpacing="8" LineSpacing="8">
                                          <Button Content="Install APK" Command="{Binding InstallLatestApkCommand}" MinWidth="120"
@@ -1006,7 +1006,7 @@
                                 <StackPanel Spacing="12">
                                     <TextBlock Text="iOS Deploy" Classes="section-title"/>
                                     <StackPanel Spacing="8" MaxWidth="420" HorizontalAlignment="Left">
-                                        <TextBlock Text="Bundle ID" FontWeight="SemiBold" FontSize="13" ToolTip.Tip="Loaded from the project; edit here to deploy without a project"/><TextBox Text="{Binding PackageId}" IsEnabled="{Binding IsEditorEnabled}" PlaceholderText="com.codepublisher"/>
+                                        <TextBlock Text="Bundle ID" FontWeight="SemiBold" FontSize="13" ToolTip.Tip="Loaded from the project; edit here to deploy without a project"/><TextBox Text="{Binding PackageId}" IsEnabled="{Binding IsEditorEnabled}" PlaceholderText="com.example.app"/>
                                      </StackPanel>
                                      <WrapPanel ItemSpacing="8" LineSpacing="8">
                                          <Button Content="Install" Command="{Binding InstallIosAppCommand}" MinWidth="100"/>

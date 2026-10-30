@@ -13,9 +13,13 @@ namespace CodePublisher.Features.Publishing.Inspect;
 /// </summary>
 public static class ProjectVersionResolver
 {
-    /// <summary>The version-shaped properties an opened project may declare, evaluated per load.</summary>
+    /// <summary>The version and identity properties an opened project may declare, evaluated per load.</summary>
     public static readonly string[] Properties =
     [
+        "ApplicationId",
+        "PackageName",
+        "PackageId",
+        "CFBundleIdentifier",
         "ApplicationDisplayVersion",
         "ApplicationVersion",
         "Version",

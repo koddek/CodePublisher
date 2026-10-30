@@ -57,6 +57,7 @@ public sealed record AndroidDeviceInfo(
     public string StateDetail => State switch
     {
         AndroidDeviceState.Unauthorized => "unauthorized — approve the USB debugging prompt on the device",
+        AndroidDeviceState.Offline when IsEmulator => "offline — launch to start",
         AndroidDeviceState.Offline => "offline — reconnect the cable, or connect again over Wi-Fi",
         "authorizing" => "authorizing — check the phone's screen for the USB debugging prompt",
         "no permissions" => "no permissions — check USB permissions or udev rules on this host",
@@ -106,7 +107,9 @@ public sealed record AndroidDeviceInfo(
     {
         get
         {
-            var identity = $"{Name} ({Serial}, {ConnectionLabel})";
+            var identity = string.IsNullOrWhiteSpace(Serial)
+                ? $"{Name} ({ConnectionLabel})"
+                : $"{Name} ({Serial}, {ConnectionLabel})";
             if (!IsReady)
             {
                 var detail = StateDetail.Length > 0 ? StateDetail : "not ready";

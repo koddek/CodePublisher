@@ -354,6 +354,7 @@ public partial class MainViewModel
                     var target = AndroidDeviceWatch.ChooseLaunchedTarget(devices, knownSerials, expectedAvdName, cameOnline.Serial);
                     if (target is not null)
                     {
+                        SelectedDevice = target;
                         StatusMessage = $"{target.DisplayName} is online and selected.";
                         AppendLog($"{Environment.NewLine}[{what}] {StatusMessage}{Environment.NewLine}");
                         PlayCompletionAlert(failed: false);

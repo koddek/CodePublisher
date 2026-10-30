@@ -198,7 +198,7 @@ public sealed class PublisherService
         return new ProjectMetadata(
             projectFile.FullName,
             outputLayout.DefaultOutputDirectory,
-            GetProjectIdentifier(projectFile, projectName, publishPlatform),
+            GetProjectIdentifier(projectFile, projectName, publishPlatform, evaluatedVersions),
             detectedTargetFramework,
             ProjectInspector.ReadVersion(projectFile, publishPlatform, isDisplay: true, evaluatedVersions),
             ProjectInspector.ReadVersion(projectFile, publishPlatform, isDisplay: false, evaluatedVersions),
@@ -1130,6 +1130,11 @@ public sealed class PublisherService
         return string.Equals(publishPlatform, LinuxPlatform, StringComparison.Ordinal);
     }
 
+    private static bool IsNuGetPlatform(string publishPlatform)
+    {
+        return string.Equals(publishPlatform, NuGetPlatform, StringComparison.Ordinal);
+    }
+
     private static bool RequiresMobileWorkload(string targetFramework)
     {
         return targetFramework.Contains("android", StringComparison.OrdinalIgnoreCase)
@@ -1664,27 +1669,110 @@ public sealed class PublisherService
             normalizedName = "codepublisher";
         }
 
-        return $"com.codepublisher";
+        return $"com.{normalizedName}";
     }
 
-    private static string? GetProjectIdentifier(FileInfo projectFile, string projectName, string publishPlatform)
+    private static string? GetProjectIdentifier(
+        FileInfo projectFile,
+        string projectName,
+        string publishPlatform,
+        IReadOnlyDictionary<string, string>? evaluated = null)
     {
-        var identifier = ProjectInspector.ReadProperty(
-            projectFile,
-            "PackageId",
-            "ApplicationId",
-            "PackageName",
-            "ApplicationIdentifier",
-            "CFBundleIdentifier");
-
-        if (!string.IsNullOrWhiteSpace(identifier))
+        string? FromEvaluated(params string[] names)
         {
-            return identifier.Trim();
+            if (evaluated is not null)
+            {
+                foreach (var name in names)
+                {
+                    if (evaluated.TryGetValue(name, out var value) && !string.IsNullOrWhiteSpace(value))
+                    {
+                        return value.Trim();
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        if (IsAndroidPlatform(publishPlatform))
+        {
+            // 1. MSBuild evaluated properties (ApplicationId / PackageName)
+            var evaluatedId = FromEvaluated("ApplicationId", "PackageName");
+            if (!string.IsNullOrWhiteSpace(evaluatedId))
+            {
+                return evaluatedId;
+            }
+
+            // 2. AndroidManifest.xml package attribute
+            var manifestPackage = ProjectInspector.ReadAndroidManifestPackage(projectFile);
+            if (!string.IsNullOrWhiteSpace(manifestPackage))
+            {
+                return manifestPackage;
+            }
+
+            // 3. csproj ApplicationId / PackageName
+            var csprojId = ProjectInspector.ReadProperty(projectFile, "ApplicationId", "PackageName");
+            if (!string.IsNullOrWhiteSpace(csprojId))
+            {
+                return csprojId.Trim();
+            }
+
+            // 4. Fallback to evaluated PackageId or csproj PackageId if it looks like a reverse-DNS identifier
+            var packageId = FromEvaluated("PackageId") ?? ProjectInspector.ReadProperty(projectFile, "PackageId", "ApplicationIdentifier");
+            if (!string.IsNullOrWhiteSpace(packageId))
+            {
+                var trimmed = packageId.Trim();
+                if (trimmed.Contains('.', StringComparison.Ordinal))
+                {
+                    return trimmed;
+                }
+            }
+
+            return BuildBundleIdentifier(packageId ?? string.Empty, projectName);
+        }
+
+        if (IsIosPlatform(publishPlatform))
+        {
+            var evaluatedId = FromEvaluated("ApplicationId", "CFBundleIdentifier");
+            if (!string.IsNullOrWhiteSpace(evaluatedId))
+            {
+                return evaluatedId;
+            }
+
+            var plistBundleId = ProjectInspector.ReadIosBundleIdentifier(projectFile);
+            if (!string.IsNullOrWhiteSpace(plistBundleId))
+            {
+                return plistBundleId;
+            }
+
+            var csprojId = ProjectInspector.ReadProperty(projectFile, "ApplicationId", "CFBundleIdentifier", "ApplicationIdentifier");
+            if (!string.IsNullOrWhiteSpace(csprojId))
+            {
+                return csprojId.Trim();
+            }
+
+            var packageId = FromEvaluated("PackageId") ?? ProjectInspector.ReadProperty(projectFile, "PackageId");
+            return BuildBundleIdentifier(packageId ?? string.Empty, projectName);
         }
 
         if (IsWindowsPlatform(publishPlatform) || IsLinuxPlatform(publishPlatform))
         {
-            return null;
+            return FromEvaluated("PackageId", "ApplicationId")
+                ?? ProjectInspector.ReadProperty(projectFile, "PackageId", "ApplicationId", "PackageName");
+        }
+
+        if (IsNuGetPlatform(publishPlatform))
+        {
+            return FromEvaluated("PackageId")
+                ?? ProjectInspector.ReadProperty(projectFile, "PackageId")
+                ?? projectName;
+        }
+
+        var genericId = FromEvaluated("PackageId", "ApplicationId", "CFBundleIdentifier")
+            ?? ProjectInspector.ReadProperty(projectFile, "PackageId", "ApplicationId", "CFBundleIdentifier", "ApplicationIdentifier");
+        if (!string.IsNullOrWhiteSpace(genericId))
+        {
+            return genericId.Trim();
         }
 
         return BuildBundleIdentifier(string.Empty, projectName);

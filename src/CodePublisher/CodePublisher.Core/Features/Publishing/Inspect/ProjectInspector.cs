@@ -294,6 +294,88 @@ public static class ProjectInspector
         return null;
     }
 
+    /// <summary>
+    /// Reads package="..." from an AndroidManifest.xml located at Platforms/Android, Properties, or project root.
+    /// </summary>
+    public static string? ReadAndroidManifestPackage(FileInfo projectFile)
+    {
+        try
+        {
+            var directory = projectFile.Directory;
+            if (directory is null || !directory.Exists)
+            {
+                return null;
+            }
+
+            string[] candidateRelativePaths =
+            [
+                Path.Combine("Platforms", "Android", "AndroidManifest.xml"),
+                Path.Combine("Properties", "AndroidManifest.xml"),
+                "AndroidManifest.xml"
+            ];
+
+            foreach (var relPath in candidateRelativePaths)
+            {
+                var fullPath = Path.Combine(directory.FullName, relPath);
+                if (File.Exists(fullPath))
+                {
+                    var doc = XDocument.Load(fullPath);
+                    var packageAttr = doc.Root?.Attribute("package")?.Value;
+                    if (!string.IsNullOrWhiteSpace(packageAttr))
+                    {
+                        return packageAttr.Trim();
+                    }
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Reads CFBundleIdentifier from an Info.plist located at Platforms/iOS or project root.
+    /// </summary>
+    public static string? ReadIosBundleIdentifier(FileInfo projectFile)
+    {
+        try
+        {
+            var directory = projectFile.Directory;
+            if (directory is null || !directory.Exists)
+            {
+                return null;
+            }
+
+            string[] candidateRelativePaths =
+            [
+                Path.Combine("Platforms", "iOS", "Info.plist"),
+                "Info.plist"
+            ];
+
+            foreach (var relPath in candidateRelativePaths)
+            {
+                var fullPath = Path.Combine(directory.FullName, relPath);
+                if (File.Exists(fullPath))
+                {
+                    var doc = XDocument.Load(fullPath);
+                    var keyElem = doc.Descendants("key").FirstOrDefault(e => string.Equals(e.Value, "CFBundleIdentifier", StringComparison.Ordinal));
+                    var stringElem = keyElem?.ElementsAfterSelf("string").FirstOrDefault();
+                    if (!string.IsNullOrWhiteSpace(stringElem?.Value))
+                    {
+                        return stringElem.Value.Trim();
+                    }
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        return null;
+    }
+
     public static string? ReadTargetFramework(FileInfo projectFile, string publishPlatform)
     {
         var singleTarget = ReadProperty(projectFile, "TargetFramework");

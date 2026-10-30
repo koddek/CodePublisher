@@ -139,7 +139,7 @@ public partial class MainViewModel : ViewModelBase
         RefreshCommandPreview();
         if (!OperatingSystem.IsBrowser())
         {
-            _ = RefreshEmulatorsAsync();
+            _ = RefreshEmulatorsInternalAsync(setBusy: false);
         }
         else
         {
@@ -753,6 +753,10 @@ private string _projectDirectory = string.Empty;
         ProjectOutputLayoutSummary = string.Empty;
         SetAutomaticOutputDirectory(string.Empty);
         RefreshAvailableProjectFiles();
+        if (!string.IsNullOrWhiteSpace(SelectedProjectFile) && !IsProjectFileUnderSelectedDirectory(SelectedProjectFile))
+        {
+            SelectedProjectFile = AvailableProjectFiles.FirstOrDefault() ?? string.Empty;
+        }
         UpdateGooglePlayContext();
     }
 
@@ -787,13 +791,26 @@ private string _projectDirectory = string.Empty;
 
     private bool IsProjectFileUnderSelectedDirectory(string projectFilePath)
     {
-        if (string.IsNullOrWhiteSpace(ProjectDirectory))
+        if (string.IsNullOrWhiteSpace(ProjectDirectory) || string.IsNullOrWhiteSpace(projectFilePath))
         {
             return false;
         }
 
-        var root = ProjectDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        return projectFilePath.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        if (AvailableProjectFiles.Contains(projectFilePath))
+        {
+            return true;
+        }
+
+        try
+        {
+            var fullProject = Path.GetFullPath(projectFilePath);
+            var fullRoot = Path.GetFullPath(ProjectDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            return fullProject.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     /// <summary>The project to build: the picked one when it belongs to the selected folder, else the first discovered.</summary>
@@ -1155,7 +1172,9 @@ private string _projectDirectory = string.Empty;
     private string _adbInstallationNote = string.Empty;
 
     [RelayCommand(CanExecute = nameof(CanRefreshEmulators))]
-    private async Task RefreshEmulatorsAsync()
+    private async Task RefreshEmulatorsAsync() => await RefreshEmulatorsInternalAsync(setBusy: true);
+
+    private async Task RefreshEmulatorsInternalAsync(bool setBusy)
     {
         if (OperatingSystem.IsBrowser())
         {
@@ -1165,7 +1184,11 @@ private string _projectDirectory = string.Empty;
 
         try
         {
-            IsBusy = true;
+            if (setBusy)
+            {
+                IsBusy = true;
+            }
+
             var emulators = await _publisherService.DiscoverEmulatorsAsync(CancellationToken.None);
             AvailableEmulators.Clear();
             foreach (var emulator in emulators)
@@ -1187,11 +1210,17 @@ private string _projectDirectory = string.Empty;
         catch (Exception ex)
         {
             StatusMessage = "Emulator discovery failed.";
-            await _desktopInteractionService.ShowErrorAsync("Discover emulators", ex.Message);
+            if (setBusy)
+            {
+                await _desktopInteractionService.ShowErrorAsync("Discover emulators", ex.Message);
+            }
         }
         finally
         {
-            IsBusy = false;
+            if (setBusy)
+            {
+                IsBusy = false;
+            }
         }
     }
 
@@ -1463,6 +1492,11 @@ private string _projectDirectory = string.Empty;
             if (!string.IsNullOrWhiteSpace(metadata.TargetFramework))
             {
                 TargetFramework = metadata.TargetFramework;
+                if (metadata.TargetFramework.Contains("android", StringComparison.OrdinalIgnoreCase) && !IsAndroidPlatform)
+                {
+                    PublishPlatform = PublisherService.AndroidPlatform;
+                    return;
+                }
             }
 
             if (IsAndroidPlatform && !RuntimeIdentifier.Contains("android", StringComparison.OrdinalIgnoreCase))
@@ -2221,6 +2255,14 @@ private string _projectDirectory = string.Empty;
 
     private static bool IsSameAndroidTarget(AndroidDeviceInfo left, AndroidDeviceInfo right)
     {
+        if (left.IsEmulator && right.IsEmulator)
+        {
+            if (string.Equals(left.Name, right.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
         return string.Equals(left.Serial, right.Serial, StringComparison.OrdinalIgnoreCase)
             && string.Equals(left.Name, right.Name, StringComparison.OrdinalIgnoreCase)
             && string.Equals(left.Type, right.Type, StringComparison.OrdinalIgnoreCase);
