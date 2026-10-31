@@ -68,6 +68,27 @@ public sealed class ArtifactLocatorTests
     }
 
     [Test]
+    public async Task FindBestApk_PrefersSelectedProject_OverAnotherProjectsSignedApk()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), $"dnap-artifacts-{Guid.NewGuid():N}"));
+        try
+        {
+            var selected = new FileInfo(Path.Combine(root.FullName, "com.example.selected.apk"));
+            var other = new FileInfo(Path.Combine(root.FullName, "com.example.other-Signed.apk"));
+            await File.WriteAllTextAsync(selected.FullName, "selected");
+            await File.WriteAllTextAsync(other.FullName, "other");
+
+            var result = ArtifactLocator.FindBestApk(root.FullName, "Selected", "com.example.selected");
+
+            await Assert.That(result?.FullName).IsEqualTo(selected.FullName);
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Test]
     public async Task FindBestUniversalApk_PrefersSignedApkAcrossRoots()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), $"dnap-artifacts-{Guid.NewGuid():N}"));

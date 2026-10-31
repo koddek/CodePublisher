@@ -69,28 +69,48 @@ public static class ArtifactLocator
     {
         var score = 0;
         var fileName = artifact.Name;
+        var stem = Path.GetFileNameWithoutExtension(fileName);
+
+        // The selected project's own package must beat another project's package in the same
+        // output folder, even when the other one is signed and this one is not. A package id is
+        // the strongest signal because Android names artifacts after it; the project name is the
+        // fallback for desktop and library artifacts.
+        if (!string.IsNullOrWhiteSpace(packageId))
+        {
+            var id = packageId.Trim();
+            if (stem.StartsWith(id, StringComparison.OrdinalIgnoreCase))
+            {
+                score += 1500;
+            }
+            else if (fileName.Contains(id, StringComparison.OrdinalIgnoreCase))
+            {
+                score += 750;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(projectName))
+        {
+            var name = projectName.Trim();
+            if (stem.StartsWith(name, StringComparison.OrdinalIgnoreCase))
+            {
+                score += 1000;
+            }
+            else if (fileName.Contains(name, StringComparison.OrdinalIgnoreCase))
+            {
+                score += 500;
+            }
+        }
+
         if (fileName.EndsWith("-Signed.apk", StringComparison.OrdinalIgnoreCase)
             || fileName.EndsWith("-Signed.aab", StringComparison.OrdinalIgnoreCase))
         {
             score += 100;
         }
 
-        if (!string.IsNullOrWhiteSpace(projectName)
-            && fileName.Contains(projectName.Trim(), StringComparison.OrdinalIgnoreCase))
-        {
-            score += 50;
-        }
-
-        if (!string.IsNullOrWhiteSpace(packageId)
-            && fileName.Contains(packageId.Trim(), StringComparison.OrdinalIgnoreCase))
-        {
-            score += 40;
-        }
-
         if (fileName.EndsWith("-debug.apk", StringComparison.OrdinalIgnoreCase)
             || fileName.EndsWith("-debug.aab", StringComparison.OrdinalIgnoreCase))
         {
-            score -= 10;
+            score -= 50;
         }
 
         return score;

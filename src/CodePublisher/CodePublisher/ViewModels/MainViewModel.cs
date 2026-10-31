@@ -77,7 +77,8 @@ public partial class MainViewModel : ViewModelBase
     private bool _isAssigningAutomaticOutputDirectory;
     private bool _isOutputDirectoryManualOverride;
     private bool _isNormalizingPublishSettings;
-    private bool _isReloadingMetadata;
+    private bool _isApplyingProjectSelection;
+    private int _projectMetadataGeneration;
 
     /// <summary>Every .csproj found under the selected folder, so a source root with several projects can be picked from.</summary>
     public ObservableCollection<string> AvailableProjectFiles { get; } = [];
@@ -273,13 +274,14 @@ public partial class MainViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsDeviceWatchStatusVisible))]
     private string _publishPlatform = PublisherService.AndroidPlatform;
 
-[ObservableProperty]
-[NotifyCanExecuteChangedFor(nameof(ReloadProjectMetadataCommand))]
-[NotifyCanExecuteChangedFor(nameof(PublishCommand))]
-[NotifyCanExecuteChangedFor(nameof(InstallLatestApkCommand))]
-[NotifyPropertyChangedFor(nameof(HasProjectSelection))]
-[NotifyPropertyChangedFor(nameof(IsPackageIdVisible))]
-private string _projectDirectory = string.Empty;
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ReloadProjectMetadataCommand))]
+    [NotifyCanExecuteChangedFor(nameof(PublishCommand))]
+    [NotifyCanExecuteChangedFor(nameof(InstallLatestApkCommand))]
+    [NotifyPropertyChangedFor(nameof(HasProjectSelection))]
+    [NotifyPropertyChangedFor(nameof(IsPackageIdVisible))]
+    [NotifyPropertyChangedFor(nameof(IsPackageIdReadOnly))]
+    private string _projectDirectory = string.Empty;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ProjectVersion))]
@@ -294,6 +296,7 @@ private string _projectDirectory = string.Empty;
     private bool _isProjectInternalVersionSupported;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsPackageIdReadOnly))]
     private string _selectedProjectFile = string.Empty;
 
     [ObservableProperty]
@@ -599,6 +602,11 @@ private string _projectDirectory = string.Empty;
 
     public bool HasProjectSelection => !string.IsNullOrWhiteSpace(ProjectDirectory);
 
+    /// <summary>The selected project's file name without extension, used to pick its artifacts.</summary>
+    internal string SelectedProjectName => string.IsNullOrWhiteSpace(SelectedProjectFile)
+        ? string.Empty
+        : Path.GetFileNameWithoutExtension(SelectedProjectFile);
+
     public string AppDisplayVersion { get; } =
         typeof(MainViewModel).Assembly.GetName().Version?.ToString(3) is { Length: > 0 } version
             ? $"v{version}"
@@ -632,6 +640,12 @@ private string _projectDirectory = string.Empty;
     public bool IsIosActionsVisible => IsIosPublishOptionsVisible;
 
     public bool IsPackageIdVisible => true;
+
+    /// <summary>
+    /// The Deploy tabs show the identifier of the selected project. A project-less session may
+    /// type one for Uninstall, Launch, and Inspect, which work on an installed app alone.
+    /// </summary>
+    public bool IsPackageIdReadOnly => !string.IsNullOrWhiteSpace(SelectedProjectFile);
 
     public bool ShowAndroidPackageFormatsTogether => IsAndroidPlatform && IncludeAab;
 
@@ -747,32 +761,86 @@ private string _projectDirectory = string.Empty;
         }
     }
 
+    /// <summary>
+    /// The project-derived state has one owner: this pair of handlers plus
+    /// <see cref="ApplyProjectMetadata"/>. Any change to the selected folder, the selected project,
+    /// or the platform clears the previous project's values and loads the new project once. A
+    /// generation counter drops the result of a load that a newer selection has superseded, so a
+    /// slow first load can never overwrite the project the user picked while it was running.
+    /// </summary>
     partial void OnProjectDirectoryChanged(string value)
     {
-        _projectOutputLayout = null;
-        ProjectOutputLayoutSummary = string.Empty;
-        SetAutomaticOutputDirectory(string.Empty);
+        // Invalidate a load that is still running for the previous folder.
+        _projectMetadataGeneration++;
         RefreshAvailableProjectFiles();
-        if (!string.IsNullOrWhiteSpace(SelectedProjectFile) && !IsProjectFileUnderSelectedDirectory(SelectedProjectFile))
+
+        var selection = SelectedProjectFile;
+        if (string.IsNullOrWhiteSpace(selection) || !IsProjectFileUnderSelectedDirectory(selection))
         {
-            SelectedProjectFile = AvailableProjectFiles.FirstOrDefault() ?? string.Empty;
+            selection = AvailableProjectFiles.FirstOrDefault() ?? string.Empty;
         }
+
+        // The folder change owns the selection. Set it without letting the selection handler
+        // start a second load, then load exactly once below.
+        _isApplyingProjectSelection = true;
+        try
+        {
+            SelectedProjectFile = selection;
+        }
+        finally
+        {
+            _isApplyingProjectSelection = false;
+        }
+
+        ResetProjectDerivedState();
         UpdateGooglePlayContext();
+
+        if (!string.IsNullOrWhiteSpace(selection))
+        {
+            _ = ReloadProjectMetadataAsync();
+        }
     }
 
     partial void OnSelectedProjectFileChanged(string value)
     {
-        // Picking another discovered project reloads its metadata; the reload assigns the same
-        // value back, which fires no further change.
-        if (_isReloadingMetadata || string.IsNullOrWhiteSpace(value) || !File.Exists(value))
+        if (_isApplyingProjectSelection)
         {
             return;
         }
 
-        if (IsProjectFileUnderSelectedDirectory(value))
+        if (string.IsNullOrWhiteSpace(value) || !File.Exists(value))
         {
-            _ = ReloadProjectMetadataAsync();
+            // A pending load for the old selection must not land on the empty selection.
+            _projectMetadataGeneration++;
+            return;
         }
+
+        if (!IsProjectFileUnderSelectedDirectory(value))
+        {
+            return;
+        }
+
+        // The user picked a different project. Its identity, versions, and output folder are
+        // derived from that project, so clear the previous project's values before loading.
+        _projectMetadataGeneration++;
+        ResetProjectDerivedState();
+        UpdateGooglePlayContext();
+        _ = ReloadProjectMetadataAsync();
+    }
+
+    /// <summary>
+    /// Clears every value the view model derives from the opened project. No value from the
+    /// previous project may survive a selection change and be mistaken for the new project's.
+    /// </summary>
+    private void ResetProjectDerivedState()
+    {
+        _projectOutputLayout = null;
+        ProjectOutputLayoutSummary = string.Empty;
+        PackageId = string.Empty;
+        ProjectDisplayVersion = string.Empty;
+        ProjectInternalVersion = string.Empty;
+        IsProjectInternalVersionSupported = GetDefaultInternalVersionSupport(PublishPlatform);
+        SetAutomaticOutputDirectory(string.Empty);
     }
 
     private void RefreshAvailableProjectFiles()
@@ -845,6 +913,13 @@ private string _projectDirectory = string.Empty;
         UpdateGooglePlayContext();
     }
 
+    partial void OnPackageIdChanged(string value)
+    {
+        // The Deploy and Google Play tabs read the same package id. Keep them in step when a
+        // metadata load assigns it or the user edits it by hand.
+        UpdateGooglePlayContext();
+    }
+
     partial void OnPublishPlatformChanged(string value)
     {
         IsProjectInternalVersionSupported = GetDefaultInternalVersionSupport(value);
@@ -853,6 +928,15 @@ private string _projectDirectory = string.Empty;
         StartDeviceWatch();
 
         ApplyPlatformProfiles(value);
+
+        // The identifier and the output layout are platform-specific. Clear them before the
+        // reload so the previous platform's values are never shown as this platform's.
+        _projectMetadataGeneration++;
+        PackageId = string.Empty;
+        ProjectDisplayVersion = string.Empty;
+        ProjectInternalVersion = string.Empty;
+        _projectOutputLayout = null;
+        ProjectOutputLayoutSummary = string.Empty;
 
         if (!_isOutputDirectoryManualOverride)
         {
@@ -1466,88 +1550,131 @@ private string _projectDirectory = string.Empty;
     [RelayCommand(CanExecute = nameof(CanReloadProjectMetadata))]
     private async Task ReloadProjectMetadataAsync()
     {
+        var generation = ++_projectMetadataGeneration;
+        var projectFilePath = ResolveProjectFilePath();
+        if (string.IsNullOrWhiteSpace(projectFilePath))
+        {
+            return;
+        }
+
         try
         {
-            _isReloadingMetadata = true;
             var metadata = await _publisherService.LoadProjectMetadataAsync(
-                ProjectDirectory, Configuration, TargetFramework, RuntimeIdentifier, PublishPlatform, ResolveProjectFilePath());
-            SelectedProjectFile = metadata.ProjectFilePath;
-            _projectOutputLayout = metadata.OutputLayout;
-            ProjectOutputLayoutSummary = $"{metadata.OutputLayout.Description} Automatic destination: {metadata.DefaultOutputDirectory}";
+                ProjectDirectory, Configuration, TargetFramework, RuntimeIdentifier, PublishPlatform, projectFilePath);
 
-            if (!_isOutputDirectoryManualOverride)
+            // A newer selection started while this load was running. Its metadata is the truth;
+            // discard this result instead of letting it overwrite the newer project.
+            if (generation != _projectMetadataGeneration)
             {
-                SetAutomaticOutputDirectory(metadata.DefaultOutputDirectory);
-            }
-
-            if (!string.IsNullOrWhiteSpace(metadata.PackageId))
-            {
-                PackageId = metadata.PackageId;
+                return;
             }
 
-            ProjectDisplayVersion = metadata.DisplayVersion ?? string.Empty;
-            ProjectInternalVersion = metadata.InternalVersion ?? string.Empty;
-            IsProjectInternalVersionSupported = metadata.SupportsInternalVersion;
-
-            if (!string.IsNullOrWhiteSpace(metadata.TargetFramework))
-            {
-                TargetFramework = metadata.TargetFramework;
-                if (metadata.TargetFramework.Contains("android", StringComparison.OrdinalIgnoreCase) && !IsAndroidPlatform)
-                {
-                    PublishPlatform = PublisherService.AndroidPlatform;
-                    return;
-                }
-            }
-
-            if (IsAndroidPlatform && !RuntimeIdentifier.Contains("android", StringComparison.OrdinalIgnoreCase))
-            {
-                RuntimeIdentifier = "android-arm64";
-            }
-
-            if (IsMacOsPlatform)
-            {
-                RuntimeIdentifier = TargetFramework.Contains("maccatalyst", StringComparison.OrdinalIgnoreCase)
-                    ? "maccatalyst-arm64"
-                    : "osx-arm64";
-            }
-            else if (string.Equals(PublishPlatform, PublisherService.WindowsPlatform, StringComparison.Ordinal))
-            {
-                if (!RuntimeIdentifier.StartsWith("win-", StringComparison.OrdinalIgnoreCase))
-                {
-                    RuntimeIdentifier = "win-x64";
-                }
-            }
-            else if (string.Equals(PublishPlatform, PublisherService.IosPlatform, StringComparison.Ordinal))
-            {
-                if (!RuntimeIdentifier.StartsWith("ios-", StringComparison.OrdinalIgnoreCase))
-                {
-                    RuntimeIdentifier = "ios-arm64";
-                }
-            }
-            else if (string.Equals(PublishPlatform, PublisherService.LinuxPlatform, StringComparison.Ordinal))
-            {
-                if (!RuntimeIdentifier.StartsWith("linux-", StringComparison.OrdinalIgnoreCase))
-                {
-                    RuntimeIdentifier = "linux-x64";
-                }
-            }
-            else if (IsNuGetPlatform && !string.Equals(RuntimeIdentifier, "any", StringComparison.OrdinalIgnoreCase))
-            {
-                RuntimeIdentifier = "any";
-            }
-
-            StatusMessage = "Project metadata loaded. Review the command preview before publishing.";
-        UpdateGooglePlayContext();
+            ApplyProjectMetadata(metadata);
         }
         catch (Exception ex)
         {
-            SelectedProjectFile = string.Empty;
+            if (generation != _projectMetadataGeneration)
+            {
+                return;
+            }
+
             StatusMessage = "Could not load project metadata.";
             await _desktopInteractionService.ShowErrorAsync("Project metadata", ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Applies one metadata snapshot to every derived field. This is the only place project
+    /// identity, versions, output layout, and the automatic output folder are written.
+    /// </summary>
+    private void ApplyProjectMetadata(ProjectMetadata metadata)
+    {
+        // The load can resolve a different file than the one that triggered it (for example, the
+        // first discovered project when no selection existed). Assign it without starting a
+        // second load for the same file.
+        _isApplyingProjectSelection = true;
+        try
+        {
+            SelectedProjectFile = metadata.ProjectFilePath;
+        }
         finally
         {
-            _isReloadingMetadata = false;
+            _isApplyingProjectSelection = false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(metadata.TargetFramework)
+            && !string.Equals(TargetFramework, metadata.TargetFramework, StringComparison.OrdinalIgnoreCase))
+        {
+            TargetFramework = metadata.TargetFramework;
+        }
+
+        // An Android project makes the whole app Android context, including the emulator list
+        // and the Deploy tab. The platform change reloads the metadata with the Android
+        // properties, so let that load apply the identity and the output layout.
+        if (metadata.TargetFramework?.Contains("android", StringComparison.OrdinalIgnoreCase) == true
+            && !IsAndroidPlatform)
+        {
+            PublishPlatform = PublisherService.AndroidPlatform;
+            return;
+        }
+
+        _projectOutputLayout = metadata.OutputLayout;
+        ProjectOutputLayoutSummary = $"{metadata.OutputLayout.Description} Automatic destination: {metadata.DefaultOutputDirectory}";
+
+        if (!_isOutputDirectoryManualOverride)
+        {
+            SetAutomaticOutputDirectory(metadata.DefaultOutputDirectory);
+        }
+
+        // Always assign, including an empty value: a project without an identifier must not
+        // inherit the previous project's identifier.
+        PackageId = metadata.PackageId ?? string.Empty;
+        ProjectDisplayVersion = metadata.DisplayVersion ?? string.Empty;
+        ProjectInternalVersion = metadata.InternalVersion ?? string.Empty;
+        IsProjectInternalVersionSupported = metadata.SupportsInternalVersion;
+
+        ApplyPlatformRuntimeDefaults();
+
+        StatusMessage = "Project metadata loaded. Review the command preview before publishing.";
+        UpdateGooglePlayContext();
+    }
+
+    private void ApplyPlatformRuntimeDefaults()
+    {
+        if (IsAndroidPlatform && !RuntimeIdentifier.Contains("android", StringComparison.OrdinalIgnoreCase))
+        {
+            RuntimeIdentifier = "android-arm64";
+        }
+        else if (IsMacOsPlatform)
+        {
+            RuntimeIdentifier = TargetFramework.Contains("maccatalyst", StringComparison.OrdinalIgnoreCase)
+                ? "maccatalyst-arm64"
+                : "osx-arm64";
+        }
+        else if (string.Equals(PublishPlatform, PublisherService.WindowsPlatform, StringComparison.Ordinal))
+        {
+            if (!RuntimeIdentifier.StartsWith("win-", StringComparison.OrdinalIgnoreCase))
+            {
+                RuntimeIdentifier = "win-x64";
+            }
+        }
+        else if (string.Equals(PublishPlatform, PublisherService.IosPlatform, StringComparison.Ordinal))
+        {
+            if (!RuntimeIdentifier.StartsWith("ios-", StringComparison.OrdinalIgnoreCase))
+            {
+                RuntimeIdentifier = "ios-arm64";
+            }
+        }
+        else if (string.Equals(PublishPlatform, PublisherService.LinuxPlatform, StringComparison.Ordinal))
+        {
+            if (!RuntimeIdentifier.StartsWith("linux-", StringComparison.OrdinalIgnoreCase))
+            {
+                RuntimeIdentifier = "linux-x64";
+            }
+        }
+        else if (IsNuGetPlatform && !string.Equals(RuntimeIdentifier, "any", StringComparison.OrdinalIgnoreCase))
+        {
+            RuntimeIdentifier = "any";
         }
     }
 
@@ -1597,6 +1724,11 @@ private string _projectDirectory = string.Empty;
 
         try
         {
+            // The publish command always writes to a concrete folder. When metadata has not set
+            // one yet, resolve the same folder the command will use so Open publish folder and
+            // Install APK point at the package that was just produced.
+            EnsurePublishOutputDirectory();
+
             var success = await Task.Run(async () =>
             {
                 return await _publisherService.PublishAsync(
@@ -1635,6 +1767,21 @@ private string _projectDirectory = string.Empty;
     private bool CanPublish()
     {
         return !IsBusy && HasProjectSelection;
+    }
+
+    /// <summary>
+    /// Resolves the publish folder the command will use when the UI has no output folder yet,
+    /// so the post-publish folder and install actions always know where the package landed.
+    /// </summary>
+    internal void EnsurePublishOutputDirectory()
+    {
+        if (!string.IsNullOrWhiteSpace(OutputDirectory))
+        {
+            return;
+        }
+
+        var bundle = _publisherService.BuildPublishCommandBundle(CreateConfiguration(), ResolveProjectFilePath());
+        SetAutomaticOutputDirectory(bundle.OutputDirectory);
     }
 
     private async Task<bool> ConfirmWorkloadRestoreAsync(string question)
@@ -1707,11 +1854,14 @@ private string _projectDirectory = string.Empty;
     {
         try
         {
-            var folders = ResolvePublishArtifactFolders();
-            foreach (var folder in folders.Distinct(StringComparer.OrdinalIgnoreCase))
+            var folder = ResolvePublishArtifactFolder();
+            if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
             {
-                _publisherService.OpenPublishFolder(folder);
+                StatusMessage = "Publish folder not found. Publish the selected project first.";
+                return;
             }
+
+            _publisherService.OpenPublishFolder(folder);
         }
         catch (Exception ex)
         {
@@ -1720,68 +1870,37 @@ private string _projectDirectory = string.Empty;
     }
 
     /// <summary>
-    /// For Android, open the single folder that actually holds the published APK/AAB rather than a
-    /// parent folder the user would have to dig through. Falls back to the configured output folder
-    /// when no package has been published yet or the platform is not Android.
+    /// The one folder the published package is in: the packed .nupkg folder on the NuGet
+    /// platform, the folder holding the best APK/AAB for Android, and the configured output
+    /// folder for every other platform. The selected project's name and package id decide which
+    /// artifact is the project's own when the output folder holds several projects' packages.
     /// </summary>
-    internal IReadOnlyList<string> ResolvePublishArtifactFolders()
+    internal string ResolvePublishArtifactFolder()
     {
-        // On the NuGet platform the artifact is the .nupkg, so open the NuGet package folder
-        // (the packed artifact's folder when a pack has run), not the app publish output.
         if (IsNuGetPlatform)
         {
             if (!string.IsNullOrWhiteSpace(NuGet.PackedPackagePath)
                 && Path.GetDirectoryName(NuGet.PackedPackagePath) is { Length: > 0 } packedFolder
                 && Directory.Exists(packedFolder))
             {
-                return [packedFolder];
+                return packedFolder;
             }
 
-            if (!string.IsNullOrWhiteSpace(NuGet.OutputDirectory) && Directory.Exists(NuGet.OutputDirectory))
-            {
-                return [NuGet.OutputDirectory.Trim()];
-            }
+            return NuGet.OutputDirectory?.Trim() ?? string.Empty;
         }
 
         var outputDirectory = OutputDirectory;
-        if (IsAndroidPlatform && !string.IsNullOrWhiteSpace(outputDirectory) && Directory.Exists(outputDirectory))
-        {
-            var configuration = CreateConfiguration();
-            var apk = ArtifactLocator.FindBestApk(outputDirectory, configuration.ProjectName, configuration.PackageId);
-            var aab = ArtifactLocator.FindBestAab(outputDirectory, configuration.ProjectName, configuration.PackageId);
-
-            var distinct = new List<string>();
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var artifact in new[] { apk, aab })
-            {
-                if (artifact?.Directory?.FullName is { Length: > 0 } dir && seen.Add(dir))
-                {
-                    distinct.Add(dir);
-                }
-            }
-
-            if (distinct.Count > 0)
-            {
-                return distinct;
-            }
-        }
-
-        return string.IsNullOrWhiteSpace(outputDirectory) ? [] : new[] { outputDirectory .Trim() };
-    }
-
-    private string ResolvePublishArtifactFolder()
-    {
-        var outputDirectory = OutputDirectory;
-        if (!IsAndroidPlatform || string.IsNullOrWhiteSpace(outputDirectory) || !Directory.Exists(outputDirectory))
+        if (!IsAndroidPlatform
+            || string.IsNullOrWhiteSpace(outputDirectory)
+            || !Directory.Exists(outputDirectory))
         {
             return outputDirectory;
         }
 
-        var configuration = CreateConfiguration();
         var packageFolder = ArtifactLocator.FindBestPackageFolder(
             outputDirectory,
-            configuration.ProjectName,
-            configuration.PackageId);
+            SelectedProjectName,
+            PackageId);
 
         return packageFolder?.FullName ?? outputDirectory;
     }
@@ -2237,12 +2356,18 @@ private string _projectDirectory = string.Empty;
 
     private bool TryValidatePublishedApkExists()
     {
-        if (Directory.EnumerateFiles(OutputDirectory, "*.apk", SearchOption.AllDirectories).Any())
+        var apk = ArtifactLocator.FindBestApk(OutputDirectory, SelectedProjectName, PackageId);
+        if (apk is not null)
         {
             return true;
         }
 
-        ReportPreflightFailure("Install APK", "No APK found in the publish folder. Publish first, then retry.");
+        var target = string.IsNullOrWhiteSpace(SelectedProjectName)
+            ? "the selected project"
+            : SelectedProjectName;
+        ReportPreflightFailure(
+            "Install APK",
+            $"No APK for {target} found in {OutputDirectory}. Publish the selected project first, then retry.");
         return false;
     }
 
@@ -2334,9 +2459,7 @@ private string _projectDirectory = string.Empty;
             KeyAlias = KeyAlias,
             KeystorePassword = KeystorePassword,
             KeyPassword = KeyPassword,
-            ProjectName = string.IsNullOrWhiteSpace(SelectedProjectFile)
-                ? string.Empty
-                : Path.GetFileNameWithoutExtension(SelectedProjectFile)
+            ProjectName = SelectedProjectName
         };
     }
 
@@ -2355,7 +2478,6 @@ private string _projectDirectory = string.Empty;
         try
         {
             var bundle = _publisherService.BuildPublishCommandBundle(CreateConfiguration(), ResolveProjectFilePath());
-            SelectedProjectFile = bundle.ProjectFilePath;
             CommandPreview = bundle.PreviewText;
             KnownGoodBaselineCommand = bundle.BaselinePreviewText;
         }

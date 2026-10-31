@@ -137,12 +137,11 @@ public sealed class NuGetPlatformTests
 
             // After a pack, the button opens the folder that holds the .nupkg.
             viewModel.NuGet.PackedPackagePath = packagePath;
-            var folders = viewModel.ResolvePublishArtifactFolders();
+            var folder = viewModel.ResolvePublishArtifactFolder();
 
             using (Assert.Multiple())
             {
-                await Assert.That(folders.Count()).IsEqualTo(1);
-                await Assert.That(folders[0]).IsEqualTo(nupkgs);
+                await Assert.That(folder).IsEqualTo(nupkgs);
                 await Assert.That(viewModel.OpenPublishFolderCommand.CanExecute(null)).IsTrue();
             }
         }

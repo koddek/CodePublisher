@@ -157,29 +157,59 @@ public sealed partial class NuGetViewModel : ObservableObject
     /// <summary>Called when the project selection or its metadata changes in the main view model.</summary>
     public void UpdateContext(string projectDirectory, string projectFile, string packageId, string version)
     {
-        _projectDirectory = projectDirectory ?? string.Empty;
-        if (!string.IsNullOrWhiteSpace(projectFile))
+        var nextDirectory = projectDirectory ?? string.Empty;
+        var nextProjectFile = projectFile ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(nextProjectFile))
         {
-            ProjectFile = projectFile;
+            // The main view model has no project to hand over (startup or a cleared selection).
+            // Leave the NuGet workspace's own fields alone.
+            RefreshPackPreview();
+            return;
         }
 
-        if (!string.IsNullOrWhiteSpace(packageId))
+        var directoryChanged = !string.Equals(_projectDirectory, nextDirectory, StringComparison.Ordinal);
+        var projectChanged = !string.Equals(ProjectFile, nextProjectFile, StringComparison.Ordinal);
+        var contextChanged = projectChanged || directoryChanged;
+
+        _projectDirectory = nextDirectory;
+        ProjectFile = nextProjectFile;
+
+        // Manual edits survive while the same project stays selected; a new project replaces
+        // them, including with an empty value when the new project does not declare one.
+        if (contextChanged || string.IsNullOrWhiteSpace(PackageId))
         {
-            PackageId = packageId;
+            PackageId = packageId ?? string.Empty;
         }
 
-        if (!string.IsNullOrWhiteSpace(version))
+        if (contextChanged || string.IsNullOrWhiteSpace(PackageVersion))
         {
-            PackageVersion = version;
+            PackageVersion = version ?? string.Empty;
         }
 
-        if (string.IsNullOrWhiteSpace(OutputDirectory) && !string.IsNullOrWhiteSpace(_projectDirectory))
+        // A package packed from the previous project must not be offered for push as this
+        // project's package after the selection changes.
+        if (contextChanged)
         {
-            OutputDirectory = Path.Combine(_projectDirectory, "nupkgs");
+            ClearPackedPackage();
+        }
+
+        if (contextChanged || string.IsNullOrWhiteSpace(OutputDirectory))
+        {
+            OutputDirectory = string.IsNullOrWhiteSpace(_projectDirectory)
+                ? string.Empty
+                : Path.Combine(_projectDirectory, "nupkgs");
         }
 
         RefreshPackPreview();
         TryAutoDetectOwner();
+    }
+
+    private void ClearPackedPackage()
+    {
+        PackedPackagePath = string.Empty;
+        PackedPackageLabel = string.Empty;
+        ValidationSummary = string.Empty;
+        ValidationIssues.Clear();
     }
 
     partial void OnSelectedFeedChanged(NuGetFeedTarget value)
@@ -359,12 +389,9 @@ public sealed partial class NuGetViewModel : ObservableObject
 
     private void ApplyPackOutcome(NuGetPackOutcome outcome)
     {
-        ValidationIssues.Clear();
+        ClearPackedPackage();
         if (outcome.Package is null)
         {
-            PackedPackagePath = string.Empty;
-            PackedPackageLabel = string.Empty;
-            ValidationSummary = string.Empty;
             return;
         }
 
