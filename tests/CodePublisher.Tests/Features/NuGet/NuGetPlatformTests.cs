@@ -82,7 +82,7 @@ public sealed class NuGetPlatformTests
     }
 
     [Test]
-    public async Task SelectingNuGetPlatform_SwitchesEveryTabToNuGetContext()
+    public async Task SelectingNuGetPlatform_SwitchesTheWorkspaceToNuGet()
     {
         var viewModel = CreateViewModel();
 
@@ -91,13 +91,10 @@ public sealed class NuGetPlatformTests
         using (Assert.Multiple())
         {
             await Assert.That(viewModel.IsNuGetPlatform).IsTrue();
-            // App-publish build options, Android signing card, crash logs, and the device-files
-            // fallback all hide; the NuGet deploy card shows on a desktop session.
-            await Assert.That(viewModel.IsAppBuildOptionsVisible).IsFalse();
-            await Assert.That(viewModel.IsPlatformSigningCardVisible).IsFalse();
-            await Assert.That(viewModel.IsCrashLogsCardVisible).IsFalse();
-            await Assert.That(viewModel.IsDeviceFilesFallbackVisible).IsFalse();
-            await Assert.That(viewModel.IsNuGetDeployCardVisible).IsTrue();
+            await Assert.That(string.Join(",", viewModel.NavItems.Select(item => item.Section)))
+                .IsEqualTo("Project,NuGet,Output");
+            await Assert.That(viewModel.NavItems.Any(item => item.Section == PublishSection.Deploy)).IsFalse();
+            await Assert.That(viewModel.NavItems.Any(item => item.Section == PublishSection.Build)).IsFalse();
         }
     }
 
@@ -161,9 +158,8 @@ public sealed class NuGetPlatformTests
         using (Assert.Multiple())
         {
             await Assert.That(viewModel.IsNuGetPlatform).IsFalse();
-            await Assert.That(viewModel.IsAppBuildOptionsVisible).IsTrue();
-            await Assert.That(viewModel.IsCrashLogsCardVisible).IsTrue();
-            await Assert.That(viewModel.IsNuGetDeployCardVisible).IsFalse();
+            await Assert.That(string.Join(",", viewModel.NavItems.Select(item => item.Section)))
+                .IsEqualTo("Project,Build,Signing,Deploy,GooglePlay,Output");
         }
     }
 }

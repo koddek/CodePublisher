@@ -30,12 +30,12 @@ It is built with Avalonia and currently supports Android, macOS, Windows, and iO
 - Detect real iPhone and iPad targets with `xcrun devicectl` (macOS, Xcode 15+) and install, launch, or stop a signed build on one
 - Uninstall, launch, or close the app through `adb`: **Close app** stops every process *and* removes the app from Recents (the app switcher), so the app is really gone instead of only stopped. The installed app and its data are always kept
 - Discover available Android emulators and launch the one you want
-- Keep the device list live instead of refreshing by hand: while the Platform, Deploy, or Device Files section is open, a phone that is plugged in, authorized, or unplugged, and an emulator you start, appear and get selected automatically — and starting an emulator reports when it comes online
+- Keep the device list live instead of refreshing by hand: while the Deploy section is open, a phone that is plugged in, authorized, or unplugged, and an emulator you start, appear and get selected automatically — and starting an emulator reports when it comes online
 - Capture the app window to clipboard or disk with a visible countdown
 - Hear a short alert when a task finishes — publish, deploy actions, device file transfers, and clipboard copies — and mute it from the speaker button in the header
 - Pack the selected project into a NuGet package from the NuGet section (`dotnet pack`), with a live command preview
 - Validate the packed .nupkg offline (no install needed): archive safety, nuspec identity + SemVer version, well-formed dependency groups, and a CLR-header check that every `lib/**/*.dll` is a real managed assembly; then test-install it from a local feed into a throwaway consumer project that must build
-- Push the package to NuGet.org or GitHub Packages from the NuGet section or the Deploy section, with the API key held in memory for the session only and masked in every preview
+- Push the package to NuGet.org or GitHub Packages from the NuGet tab, with the API key held in memory for the session only and masked in every preview
 - Auto-detect the GitHub owner from the project's repository URL or git remote, and reuse an API key already configured on the machine (`gh auth token`, `GH_TOKEN`/`GITHUB_TOKEN`, `NUGET_API_KEY`) via "Detect owner & key"
 - List the versions already hosted on the selected feed and delete one from there (`dotnet nuget delete`)
 - Publish Android App Bundles to Google Play from a dedicated Google Play workspace
@@ -81,13 +81,12 @@ dotnet run --project src/CodePublisher/CodePublisher.Browser/CodePublisher.Brows
 
 1. Pick the .NET project directory.
 2. Review the detected `.csproj`, package id, and target framework.
-3. Choose platform (`Android`, `macOS`, `Windows`, `iOS`, `Linux`, or `NuGet`) and set the publish options for that slice. Every tab is context-aware: with `NuGet` selected, only NuGet cards show, and the header **Publish** button packs the `.nupkg`.
-4. Confirm the command preview looks correct.
-5. Configure Android signing and the Google Play upload key from the Signing workspace.
-6. Publish and watch the live output panel.
-7. Open the output folder, or deploy to a real device or emulator from the Platform and Deploy sections.
-8. In the NuGet section, pack the project into a .nupkg, test it against a local feed, and push it to NuGet.org or GitHub Packages from the NuGet or Deploy section.
-8. Use Device Files to browse the selected Android device's public folders, send files to it, and save files from it.
+3. Choose the platform in the sticky context strip (`Android`, `macOS`, `Windows`, `iOS`, `Linux`, or `NuGet`). The tab list follows that choice: Android shows Project, Build, Signing, Deploy, Google Play, and Output; iOS and desktop show Project, Build, Deploy, and Output; NuGet shows Project, NuGet, and Output.
+4. Confirm the command preview looks correct in Output.
+5. Configure Android signing and the Google Play upload key from the Signing tab.
+6. Publish and watch the live output in the Output tab.
+7. Open the publish folder, or install, launch, and inspect the app from Deploy. Deploy also holds the device files browser, Wi-Fi debugging, and crash logs.
+8. In the NuGet tab, pack the project into a .nupkg, test it against a local feed, and push it to NuGet.org or GitHub Packages.
 
 ## Project structure
 
@@ -203,8 +202,8 @@ The app is already useful for Android, macOS, Windows, and iOS publish flows, pl
 - The browser host uses Avalonia's software renderer, synchronizes its canvas backing store after startup, and disables desktop-only device discovery, elevated processes, file browsing, and Google OAuth in browser mode.
 - The browser host links the native SkiaSharp library, so it needs the `wasm-tools` workload for the emscripten toolchain: run `dotnet workload install wasm-tools` before building it. Without that, the app fails at startup with `System.DllNotFoundException: libSkiaSharp`.
 - The master-detail view narrows its navigation, stacks header actions, wraps form groups, and uses compact icon controls for low-emphasis actions at smaller window sizes.
-- `Signing` and `Google Play` are adjacent master-detail destinations; routine status stays inline, while modal alerts are reserved for errors and confirmations with a title and vertically centered details.
-- The navigation reads Project, Platform, Build, Signing, Google Play, NuGet, Deploy, Device Files, Output, Log, so build output and the log stay side by side.
+- `Signing` and `Google Play` are separate destinations, with `Deploy` between them; routine status stays inline, while modal alerts are reserved for errors and confirmations with a title and vertically centered details.
+- Navigation is generated from the selected platform by `WorkspaceNavigation`: at most six tabs, grouped as Prepare, Ship, and Inspect. A card that does not apply to the platform is absent instead of showing a disabled explanation.
 - Task alerts are played by one shared `AlertSoundService`; the header speaker button mutes them, and alerts that arrive within its coalesce window sound once.
 - Release verification uses `dotnet restore -p:Configuration=Release`, a Release solution build, and the TUnit suite; no live Google Play or device calls are made by tests.
 

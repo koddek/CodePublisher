@@ -1,13 +1,13 @@
 using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Templates;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
-using Avalonia.VisualTree;
 using CodePublisher.Features.Publishing.Capture;
 using CodePublisher.Services;
 using CodePublisher.ViewModels;
@@ -96,14 +96,9 @@ public partial class MainView : UserControl
         masterDetail.ColumnDefinitions[1].Width = new GridLength(1, GridUnitType.Star);
 
         var stackedHeader = width < 980;
-        if (this.FindControl<StackPanel>("HeaderIdentity") is { } headerIdentity)
-        {
-            headerIdentity.Width = stackedHeader ? Math.Max(220, width - 32) : double.NaN;
-            headerIdentity.MaxWidth = stackedHeader ? double.PositiveInfinity : 640;
-        }
-
         if (this.FindControl<StackPanel>("HeaderActions") is { } headerActions)
         {
+            DockPanel.SetDock(headerActions, stackedHeader ? Dock.Bottom : Dock.Right);
             headerActions.Orientation = Avalonia.Layout.Orientation.Horizontal;
             headerActions.HorizontalAlignment = stackedHeader
                 ? Avalonia.Layout.HorizontalAlignment.Left
@@ -118,7 +113,9 @@ public partial class MainView : UserControl
 
         if (this.FindControl<StackPanel>("DetailContent") is { } detailContent)
         {
-            detailContent.Margin = new Thickness(width < 760 ? 12 : 20);
+            var detailMargin = width < 760 ? 12 : 20;
+            detailContent.Margin = new Thickness(detailMargin);
+            detailContent.Width = Math.Max(200, Math.Min(1120, width - navigationWidth - (detailMargin * 2) - 16));
         }
 
         if (this.FindControl<TextBlock>("StatusMessage") is { } statusMessage)
@@ -126,19 +123,12 @@ public partial class MainView : UserControl
             statusMessage.MaxWidth = width < 620 ? Math.Max(100, width - 170) : 700;
         }
 
-        if (this.FindControl<TextBlock>("ConfigureHeader") is { } configureHeader)
-        {
-            configureHeader.IsVisible = width >= 620;
-        }
-
         if (this.FindControl<ListBox>("NavListBox") is { } navList)
         {
-            var showLabels = width >= 900;
-            foreach (var label in navList.GetVisualDescendants()
-                         .OfType<TextBlock>()
-                         .Where(label => label.Classes.Contains("nav-label")))
+            var templateKey = width >= 900 ? "NavItemFullTemplate" : "NavItemCompactTemplate";
+            if (this.TryFindResource(templateKey, out var template) && template is IDataTemplate navTemplate)
             {
-                label.IsVisible = showLabels;
+                navList.ItemTemplate = navTemplate;
             }
 
             navList.Margin = new Thickness(width < 620 ? 4 : 8, 0, width < 620 ? 4 : 8, 8);
@@ -166,8 +156,8 @@ public partial class MainView : UserControl
         {
             if (this.FindControl<ScrollViewer>("DetailScrollViewer") is { } sv)
             {
-                // keep scrolled near bottom when log grows and Log section is visible
-                if (_viewModel?.IsLogSection == true)
+                // keep scrolled near bottom when log grows and the Output section is visible
+                if (_viewModel?.IsOutputSection == true)
                 {
                     sv.Offset = new Vector(sv.Offset.X, sv.Extent.Height);
                 }

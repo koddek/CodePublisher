@@ -60,6 +60,14 @@ public partial class MainViewModel
     [ObservableProperty]
     private bool _isWirelessManualVisible;
 
+    /// <summary>
+    /// Whether the whole Wi-Fi debugging setup lives under the one-line status in Deploy. The
+    /// pairing flows open it on their own, so a QR scan or a nearby pairing port lands on the form
+    /// it needs instead of hiding behind the collapsed line.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isWirelessPanelExpanded;
+
     private readonly Dictionary<string, string?> _pairedWirelessHosts = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly HashSet<string> _recentWirelessAddresses = new(StringComparer.OrdinalIgnoreCase);
@@ -436,6 +444,7 @@ public partial class MainViewModel
         if (peer.IsPairingService)
         {
             IsWirelessManualVisible = true;
+            IsWirelessPanelExpanded = true;
             WirelessSummary = $"{peer.Address} is the pairing port. Type the code shown on the device, then press Pair, " +
                 "then connect using the debugging port.";
             StatusMessage = "Pairing address filled in. Enter the code shown on the device.";
@@ -886,6 +895,7 @@ public partial class MainViewModel
             {
                 WirelessAddress = result.Address;
                 IsWirelessManualVisible = true;
+                IsWirelessPanelExpanded = true;
             }
 
             WirelessSummary = result.Message;

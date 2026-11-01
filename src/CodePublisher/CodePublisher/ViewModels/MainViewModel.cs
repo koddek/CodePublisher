@@ -100,6 +100,7 @@ public partial class MainViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(DeviceFilesHint))]
     [NotifyPropertyChangedFor(nameof(SelectedDeviceDetail))]
     [NotifyPropertyChangedFor(nameof(HasSelectedDeviceDetail))]
+    [NotifyPropertyChangedFor(nameof(ContextTargetText))]
     private AndroidDeviceInfo? _selectedDevice;
 
     /// <summary>
@@ -136,7 +137,7 @@ public partial class MainViewModel : ViewModelBase
         AdbInstallationNote = BuildAdbInstallationNote(publisherService);
         EmulatorStatus = publisherService.EmulatorStatusText;
         StatusMessage = "Select a .NET project folder to start building your publish command.";
-        SelectedNavItem = NavItems.FirstOrDefault();
+        RebuildNavigation();
         RefreshCommandPreview();
         if (!OperatingSystem.IsBrowser())
         {
@@ -237,23 +238,16 @@ public partial class MainViewModel : ViewModelBase
     [NotifyCanExecuteChangedFor(nameof(LaunchEmulatorCommand))]
     [NotifyPropertyChangedFor(nameof(IsAndroidPlatform))]
     [NotifyPropertyChangedFor(nameof(IsMacOsPlatform))]
-    [NotifyPropertyChangedFor(nameof(IsLinuxPlatform))]
     [NotifyCanExecuteChangedFor(nameof(OpenPublishFolderCommand))]
     [NotifyPropertyChangedFor(nameof(IsNuGetPlatform))]
-    [NotifyPropertyChangedFor(nameof(IsAppBuildOptionsVisible))]
-    [NotifyPropertyChangedFor(nameof(IsNuGetDeployCardVisible))]
-    [NotifyPropertyChangedFor(nameof(IsCrashLogsCardVisible))]
-    [NotifyPropertyChangedFor(nameof(IsDeviceFilesFallbackVisible))]
-    [NotifyPropertyChangedFor(nameof(IsPlatformSigningCardVisible))]
+    [NotifyPropertyChangedFor(nameof(ContextTargetText))]
     [NotifyPropertyChangedFor(nameof(IsAndroidActionsVisible))]
     [NotifyPropertyChangedFor(nameof(IsDeviceFilesAvailable))]
     [NotifyPropertyChangedFor(nameof(IosDeviceSupportNote))]
-    [NotifyPropertyChangedFor(nameof(IsDesktopActionsVisible))]
     [NotifyPropertyChangedFor(nameof(IsAndroidPublishOptionsVisible))]
     [NotifyPropertyChangedFor(nameof(IsMacOsPublishOptionsVisible))]
     [NotifyPropertyChangedFor(nameof(IsWindowsPublishOptionsVisible))]
     [NotifyPropertyChangedFor(nameof(IsIosPublishOptionsVisible))]
-    [NotifyPropertyChangedFor(nameof(IsLinuxPublishOptionsVisible))]
     [NotifyPropertyChangedFor(nameof(IsSigningCardVisible))]
     [NotifyPropertyChangedFor(nameof(IsKnownGoodBaselineVisible))]
     [NotifyPropertyChangedFor(nameof(ProjectInternalVersionLabel))]
@@ -279,8 +273,8 @@ public partial class MainViewModel : ViewModelBase
     [NotifyCanExecuteChangedFor(nameof(PublishCommand))]
     [NotifyCanExecuteChangedFor(nameof(InstallLatestApkCommand))]
     [NotifyPropertyChangedFor(nameof(HasProjectSelection))]
-    [NotifyPropertyChangedFor(nameof(IsPackageIdVisible))]
     [NotifyPropertyChangedFor(nameof(IsPackageIdReadOnly))]
+    [NotifyPropertyChangedFor(nameof(ContextProjectText))]
     private string _projectDirectory = string.Empty;
 
     [ObservableProperty]
@@ -297,6 +291,7 @@ public partial class MainViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsPackageIdReadOnly))]
+    [NotifyPropertyChangedFor(nameof(ContextProjectText))]
     private string _selectedProjectFile = string.Empty;
 
     [ObservableProperty]
@@ -328,6 +323,7 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(OpenPublishFolderCommand))]
     [NotifyCanExecuteChangedFor(nameof(InstallLatestApkCommand))]
+    [NotifyPropertyChangedFor(nameof(ContextOutputText))]
     private string _outputDirectory = string.Empty;
 
     [ObservableProperty]
@@ -550,6 +546,7 @@ public partial class MainViewModel : ViewModelBase
     [NotifyCanExecuteChangedFor(nameof(LaunchIosAppCommand))]
     [NotifyCanExecuteChangedFor(nameof(StopIosAppCommand))]
     [NotifyCanExecuteChangedFor(nameof(CopyFileToIosDeviceCommand))]
+    [NotifyPropertyChangedFor(nameof(ContextTargetText))]
     private string _selectedIosSimulator = string.Empty;
 
     [ObservableProperty]
@@ -618,14 +615,10 @@ public partial class MainViewModel : ViewModelBase
 
     public bool IsIosPlatform => string.Equals(PublishPlatform, PublisherService.IosPlatform, StringComparison.Ordinal);
 
-    public bool IsLinuxPlatform => string.Equals(PublishPlatform, PublisherService.LinuxPlatform, StringComparison.Ordinal);
-
     /// <summary>NuGet platform: the app publishes a package, not an app, so Publish packs a .nupkg.</summary>
     public bool IsNuGetPlatform => string.Equals(PublishPlatform, PublisherService.NuGetPlatform, StringComparison.Ordinal);
 
     public bool IsAndroidActionsVisible => IsAndroidPlatform;
-
-    public bool IsDesktopActionsVisible => IsMacOsPlatform;
 
     public bool IsAndroidPublishOptionsVisible => IsAndroidPlatform;
 
@@ -635,17 +628,66 @@ public partial class MainViewModel : ViewModelBase
 
     public bool IsIosPublishOptionsVisible => string.Equals(PublishPlatform, PublisherService.IosPlatform, StringComparison.Ordinal);
 
-    public bool IsLinuxPublishOptionsVisible => IsLinuxPlatform;
-
     public bool IsIosActionsVisible => IsIosPublishOptionsVisible;
-
-    public bool IsPackageIdVisible => true;
 
     /// <summary>
     /// The Deploy tabs show the identifier of the selected project. A project-less session may
     /// type one for Uninstall, Launch, and Inspect, which work on an installed app alone.
     /// </summary>
     public bool IsPackageIdReadOnly => !string.IsNullOrWhiteSpace(SelectedProjectFile);
+
+    /// <summary>The project name shown in the sticky context strip.</summary>
+    public string ContextProjectText
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(SelectedProjectFile))
+            {
+                return Path.GetFileNameWithoutExtension(SelectedProjectFile);
+            }
+
+            if (!string.IsNullOrWhiteSpace(ProjectDirectory))
+            {
+                return Path.GetFileName(ProjectDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            }
+
+            return "No project selected";
+        }
+    }
+
+    /// <summary>The target shown in the sticky context strip. Deploy owns the pickers.</summary>
+    public string ContextTargetText
+    {
+        get
+        {
+            if (IsNuGetPlatform)
+            {
+                return "Package";
+            }
+
+            if (IsAndroidPlatform)
+            {
+                return SelectedDevice?.DisplayName ?? "No device selected";
+            }
+
+            if (IsIosPlatform)
+            {
+                if (!string.IsNullOrWhiteSpace(SelectedIosSimulator))
+                {
+                    return SelectedIosSimulator;
+                }
+
+                return SelectedIosDevice?.DisplayName ?? "No target selected";
+            }
+
+            return "This computer";
+        }
+    }
+
+    /// <summary>The output folder shown in the sticky context strip.</summary>
+    public string ContextOutputText => string.IsNullOrWhiteSpace(OutputDirectory)
+        ? "No output folder"
+        : OutputDirectory;
 
     public bool ShowAndroidPackageFormatsTogether => IsAndroidPlatform && IncludeAab;
 
@@ -682,10 +724,6 @@ public partial class MainViewModel : ViewModelBase
 
     public string ReadyToRunDisabledReason => PublishOptionPolicy.ReadyToRunDisabledReason(PublishAot, PublishPlatform, TargetFramework, RuntimeIdentifier);
 
-    public string PackageIdLabel => "Package ID";
-
-    public string PackageIdDescription => "The unique identifier for your application.";
-
     public string ProjectVersion => ProjectDisplayVersion;
 
     public string AppVersion => ProjectInternalVersion;
@@ -714,40 +752,35 @@ public partial class MainViewModel : ViewModelBase
 
     private void OnSectionEntered(PublishSection section)
     {
-        // The Android target list keeps itself current while a section that shows targets is open, and
-        // stops polling as soon as the user moves somewhere that cannot use a device.
-        if (section is PublishSection.Platform or PublishSection.Deploy or PublishSection.DeviceFiles)
+        // Deploy is the only workspace that shows a target, so it owns the live device watch.
+        // The watch stops as soon as the user moves somewhere that cannot use a device.
+        if (section == PublishSection.Deploy)
         {
             StartDeviceWatch();
+
+            if (!IsBusy)
+            {
+                if (IsAndroidPlatform && _publisherService.AdbPath is not null && AvailableAndroidDevices.Count == 0)
+                {
+                    _ = RefreshDevicesAsync();
+                }
+
+                if (IsIosPlatform && _publisherService.XcrunPath is not null && AvailableIosSimulators.Count == 0)
+                {
+                    _ = RefreshIosSimulatorsAsync();
+                }
+
+                if (IsIosPlatform)
+                {
+                    _ = AutoDiscoverIosDevicesAsync();
+                }
+
+                _ = LoadDeviceFilesFromSectionAsync();
+            }
         }
         else
         {
             StopDeviceWatch();
-        }
-
-        // Keep device/simulator lists fresh when entering the sections that use them.
-        // Only auto-discover when idle and the backing tool exists so section entry never throws.
-        if (section is PublishSection.Platform or PublishSection.Deploy or PublishSection.DeviceFiles && !IsBusy)
-        {
-            if (IsAndroidPlatform && _publisherService.AdbPath is not null && AvailableAndroidDevices.Count == 0)
-            {
-                _ = RefreshDevicesAsync();
-            }
-
-            if (IsIosPlatform && _publisherService.XcrunPath is not null && AvailableIosSimulators.Count == 0)
-            {
-                _ = RefreshIosSimulatorsAsync();
-            }
-
-            if (IsIosPlatform)
-            {
-                _ = AutoDiscoverIosDevicesAsync();
-            }
-
-            if (section == PublishSection.DeviceFiles)
-            {
-                _ = LoadDeviceFilesFromSectionAsync();
-            }
         }
     }
 
@@ -755,7 +788,7 @@ public partial class MainViewModel : ViewModelBase
     partial void OnSelectedDeviceChanged(AndroidDeviceInfo? value)
     {
         OnPropertyChanged(nameof(DeviceFilesHint));
-        if (IsDeviceFilesSection)
+        if (IsDeploySection)
         {
             _ = LoadDeviceFilesFromSectionAsync();
         }
@@ -928,6 +961,7 @@ public partial class MainViewModel : ViewModelBase
         StartDeviceWatch();
 
         ApplyPlatformProfiles(value);
+        RebuildNavigation();
 
         // The identifier and the output layout are platform-specific. Clear them before the
         // reload so the previous platform's values are never shown as this platform's.

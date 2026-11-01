@@ -17,6 +17,7 @@ public partial class MainViewModel
     [NotifyCanExecuteChangedFor(nameof(InstallIosDeviceAppCommand))]
     [NotifyCanExecuteChangedFor(nameof(LaunchIosDeviceAppCommand))]
     [NotifyCanExecuteChangedFor(nameof(StopIosDeviceAppCommand))]
+    [NotifyPropertyChangedFor(nameof(ContextTargetText))]
     private IosDeviceInfo? _selectedIosDevice;
 
     public string IosDeviceSupportNote

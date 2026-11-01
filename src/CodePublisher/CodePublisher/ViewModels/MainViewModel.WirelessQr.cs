@@ -88,6 +88,8 @@ public partial class MainViewModel
             return;
         }
 
+        IsWirelessPanelExpanded = true;
+
         // A fresh invitation replaces any previous one: the phone only accepts the code it just scanned.
         StopWirelessQrPairing();
         try

@@ -431,3 +431,28 @@ Scope: "Test package" now validates the artifact in-process without installing i
   CHECK: dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj -- --disable-logo --progress off
   EXPECT: the scan button is enabled for a device target and for a desktop target, it is disabled only while a scan runs, and a missing package id is reported when the scan is pressed instead of leaving a dead button.
   EVIDENCE: The first version of the button depended on the package id in its enable state, and the package id is read from the project after the project is chosen. The command was never told to check again, so the button stayed disabled for the whole session. The scan now follows the rule of the other deploy actions: the button is enabled for the platform, and the package id is checked when the scan is pressed, with the message that says it is required and why. `MainViewModelCrashLogsTests` covers the enabled state for a device target, the enabled state for a desktop target, and the disabled state while a scan runs, and it fails when the notification that re-checks the button is removed. `AndroidCrashLogServiceTests` covers the missing package id and the missing device. 342 tests pass.
+
+## Workspace reflow increment: context-aware tabs
+
+OWNS: src/CodePublisher/CodePublisher/ViewModels/**, src/CodePublisher/CodePublisher/Views/MainView.axaml, src/CodePublisher/CodePublisher/Views/MainView.axaml.cs, src/CodePublisher/CodePublisher/Styles/AppStyles.axaml, src/CodePublisher/CodePublisher/Features/Workspace/**, tests/CodePublisher.Tests/**, src/AGENTS.md, src/CodePublisher/CodePublisher/Features/AGENTS.md
+
+Scope: Replace the ten flat tabs with a platform-driven workspace of at most six tabs, merge duplicated device, signing, NuGet, and output surfaces, and give every tab one screenshot action and a sticky project/platform/target/output strip.
+
+- [x] W1: One pure policy owns the tab list for every platform.
+  CHECK: dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj -- --disable-logo --progress off
+  EXPECT: WorkspaceNavigationTests passes for Android, iOS, desktop, and NuGet tab lists, group starts, and fallback sections; whole suite passes.
+  EVIDENCE: WorkspaceNavigationTests passes all 6 tests (Android, iOS, desktop platforms, NuGet, fallback for every platform, and platform switching). Full suite 539/539 tests passed.
+
+- [x] W2: The app builds with the reflowed XAML and no removed section is referenced.
+  CHECK: dotnet build CodePublisher.slnx --no-restore
+  EXPECT: Build succeeded with 0 warnings and 0 errors; no reference to Platform, DeviceFiles, or Log sections remains in src.
+  EVIDENCE: Solution builds with 0 Warning(s) and 0 Error(s) on all targets (Core, CodePublisher, Desktop, Tests, Browser WASM). Git grep confirms zero references to IsPlatformSection, IsDeviceFilesSection, IsLogSection, or the removed PublishSection members in src.
+
+- [x] W3: Switching platform keeps the selected tab valid.
+  CHECK: dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj -- --disable-logo --progress off
+  EXPECT: an integration test switches from Android Signing to desktop and lands on a visible tab; switching to NuGet lands on NuGet; whole suite passes.
+  EVIDENCE: WorkspaceNavigationTests.SwitchingPlatform_MovesOffAHiddenTab verifies switching from Android Signing to desktop moves to Deploy, and to NuGet moves to NuGet tab; whole suite passes (539/539 passed).
+
+- [x] W4: Duplicated surfaces have one home.
+  MANUAL: Review MainView.axaml: one platform selector (context strip), one Android device picker (Deploy), one keystore workspace (Signing), one NuGet feed (NuGet tab), one live log (Output), one screenshot button (context strip).
+  EVIDENCE: MainView.axaml verified: sticky context strip hosts the single platform selector, project name, target display, output folder, and screenshot action; Deploy consolidates device selection, emulator discovery, wireless debugging, device files, and crash logs; Signing houses keystore management and Google Play upload key; NuGet tab houses package creation, feeds, and validation; Output consolidates live log output and command previews.
