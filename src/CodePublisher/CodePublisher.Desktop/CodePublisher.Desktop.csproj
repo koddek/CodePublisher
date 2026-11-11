@@ -35,9 +35,12 @@
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
-    <!-- Partial trim: trims framework assemblies but leaves the app assembly intact.
-         The app relies on XAML bindings, CommunityToolkit.Mvvm source-generated commands,
-         and DataTemplate bindings that require full type metadata at runtime. -->
+    <!-- PublishTrimmed turns the trim pipeline on; TrimMode=partial keeps the app assembly
+         intact (it relies on XAML bindings, CommunityToolkit.Mvvm source-generated commands
+         and DataTemplate bindings) and only trims opted-in assemblies. -->
+    <PublishTrimmed>true</PublishTrimmed>
+    <!-- Precompiles for faster first launch. Costs some size; the app favours startup. -->
+    <PublishReadyToRun>true</PublishReadyToRun>
     <TrimMode>partial</TrimMode>
   </PropertyGroup>
 
@@ -104,6 +107,17 @@
         <Copy SourceFiles="@(PublishFiles)" DestinationFolder="$(AppMacOsDir)/%(RecursiveDir)" SkipUnchangedFiles="true" />
         <Copy SourceFiles="macos/Info.plist" DestinationFiles="$(AppContentsDir)/Info.plist"/>
         <Copy SourceFiles="..\CodePublisher\Assets\codepublisher.icns" DestinationFiles="$(AppResourcesDir)/codepublisher.icns"/>
+        <!-- Stamp the copy in the publish-time bundle too. The build-time bundle is stamped by
+             StampMacBundleVersion, but the AfterTargets ordering has left the publish-time
+             bundle at the Info.plist placeholders in practice; stamping here is unconditional. -->
+        <XmlPoke XmlInputPath="$(AppContentsDir)/Info.plist"
+                 ProhibitDtd="false"
+                 Query="/plist/dict/key[.='CFBundleShortVersionString']/following-sibling::string[1]"
+                 Value="$(Version)" />
+        <XmlPoke XmlInputPath="$(AppContentsDir)/Info.plist"
+                 ProhibitDtd="false"
+                 Query="/plist/dict/key[.='CFBundleVersion']/following-sibling::string[1]"
+                 Value="$(Version)" />
     </Target>
 
     <Target Name="CreateMacAppBundleAfterPublish"
