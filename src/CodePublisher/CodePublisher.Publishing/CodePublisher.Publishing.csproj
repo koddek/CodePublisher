@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net11.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <AssemblyName>CodePublisher.Publishing</AssemblyName>
+        <PackageId>CodePublisher.Publishing</PackageId>
+        <RootNamespace>CodePublisher</RootNamespace>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\CodePublisher.Core\CodePublisher.Core.csproj" />
+        <ProjectReference Include="..\CodePublisher.Platforms.Android\CodePublisher.Platforms.Android.csproj" />
+        <ProjectReference Include="..\CodePublisher.Platforms.Apple\CodePublisher.Platforms.Apple.csproj" />
+        <ProjectReference Include="..\CodePublisher.Platforms.Mac\CodePublisher.Platforms.Mac.csproj" />
+        <ProjectReference Include="..\CodePublisher.Platforms.Windows\CodePublisher.Platforms.Windows.csproj" />
+        <ProjectReference Include="..\CodePublisher.Platforms.Linux\CodePublisher.Platforms.Linux.csproj" />
+        <ProjectReference Include="..\CodePublisher.Platforms.NuGet\CodePublisher.Platforms.NuGet.csproj" />
+    </ItemGroup>
+</Project>

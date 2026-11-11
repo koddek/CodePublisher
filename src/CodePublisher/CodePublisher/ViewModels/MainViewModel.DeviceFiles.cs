@@ -257,9 +257,12 @@ public partial class MainViewModel
         {
             DeviceFiles.Clear();
             HasDeviceFiles = false;
-            DeviceFilesSummary = "Could not list this folder.";
+            // A folder the device does not have yet is routine data, not a modal-worthy error.
+            // The actionable first line ("Folder not found on the device: ...") is shown inline;
+            // the raw ls output stays in the exception for the log if it is needed.
+            var firstLine = ex.Message.Split('\n', 2)[0].Trim();
+            DeviceFilesSummary = firstLine.Length > 0 ? firstLine : "Could not list this folder.";
             StatusMessage = "Device file listing failed.";
-            await _desktopInteractionService.ShowErrorAsync("Device files", ex.Message);
         }
         finally
         {

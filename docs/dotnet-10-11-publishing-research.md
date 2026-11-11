@@ -1,12 +1,14 @@
 # .NET 10 and .NET 11 Publishing Analysis
 
-Reviewed: 2026-09-25
+Reviewed: 2026-11-11
 
 ## Decision
 
-Keep the production target on .NET 10 LTS (`net10.0`). Pin the repository SDK to the .NET 10 feature band with `global.json` while .NET 11 is still a release candidate. .NET 11 RC1 is go-live, but it is not GA; the official schedule still targets November 2026. The application should be validated on .NET 11 in an isolated branch or a separate SDK selection after GA, Avalonia/workload compatibility is confirmed, and the full test and publish matrix is rerun.
+The repository moved to the .NET 11 line after .NET 11 GA (2026-11-10, SDK 11.0.100). `global.json` pins the .NET 11 SDK feature band, every production project targets `net11.0`, and the test suite runs on `net11.0`. Avalonia stays on the latest stable line it supports (12.1.6; the pinned SkiaSharp 3.119.4 / HarfBuzzSharp 8.3.1.3 are the versions Avalonia.Skia is compiled against).
 
-Do not retarget this Avalonia application to .NET 11 as part of the current stabilization increment. The publisher can inspect and publish multi-targeted `net11.0` projects once the .NET 11 SDK and workloads are installed, but its safe no-project defaults remain `net10.0`.
+User projects targeting `net10.0`, `net9.0`, `net8.0`, and `net11.0` remain supported publish targets. The publish command builders gate settings on the target framework's major version: the Mono-only Android AOT properties (`RunAOTCompilation`, `AndroidEnableProfiledAot`, `PublishReadyToRun`) are emitted only for `net10.0-android` and earlier. On `net11.0-android` the .NET 11 SDK stops the build with error XA1044 when either Mono property is set at any value, so the app omits them entirely and leaves ReadyToRun to the CoreCLR default (partial R2R when trimming is enabled).
+
+The browser host was removed in the .NET 11 line (see "The browser host is blocked" below).
 
 ## What “one SDK” means
 
@@ -21,20 +23,41 @@ Details:
 - .NET for Android and .NET for Apple platforms still ship as workloads, and the project SDK is still `Microsoft.NET.Sdk` (with `Microsoft.NET.Sdk.WebAssembly` for the browser host).
 - Blazor WebAssembly is explicitly not affected; WASM continues to use Mono. Avalonia and Uno Platform also rely on Mono-derived paths for browser and mobile hosting, so Avalonia mobile follows its own compatibility timeline.
 - NativeAOT on Android is "actively underway" and on iOS/Mac Catalyst builds on the existing Apple ahead-of-time compilation; neither is a shipping feature to depend on in .NET 11.
-- Community startup/size regressions exist for larger Android apps (dotnet/android#10588, #10914), and `UseMonoRuntime=true` is the temporary opt-out through .NET 11 servicing.
-- For this repository, the practical SDK change is SDK selection and publish tooling, not a MAUI runtime migration.
+- Community startup/size regressions exist for larger Android apps (dotnet/android#10588, #10914). Mono is gone in .NET 11 for Android (`UseMonoRuntime=true` is rejected with NETSDK1242); the migration path is CoreCLR with default partial ReadyToRun.
+- For this repository, the practical SDK change is SDK selection and publish tooling, not a MAUI runtime migration of the published projects.
+
+## .NET 11 verification on this machine
+
+Verified 2026-11-11 with SDK 11.0.100 (dotnetup), `maui-android 11.0.0/11.0.100`, `maui-ios 11.0.0/11.0.100`, `maui-maccatalyst 11.0.0/11.0.100`, `wasm-tools 11.0.100/11.0.100`:
+
+- A plain `net11.0-android` project builds and publishes with `-r android-arm64 -p:SelfContained=true -p:AndroidLinkMode=SdkOnly -p:PublishTrimmed=true` produced `com.scratch.apktest-Signed.apk` and `-Signed.aab` in the `-o` folder; the app's baseline command publishes the APK alone.
+- The app's pre-upgrade Android command (`-p:RunAOTCompilation=false -p:AndroidEnableProfiledAot=false`) reproduces **error XA1044** on `net11.0-android`: "The MSBuild property 'RunAOTCompilation' is not compatible with the CoreCLR runtime." After the upgrade the generated command omits both properties on `net11.0` and keeps them for `net10.0-android`, and the publish succeeds.
+- On `.NET 11` Android, `RunAOTCompilation` and `AndroidEnableProfiledAot` configure the Mono AOT pipeline, which no longer exists. `AndroidEnableProfiledAot=false` is not an escape hatch; removing the property is the only valid state. `$(UseMonoRuntime)=true` is rejected with NETSDK1242.
+- ReadyToRun on `net11.0-android` requires trimming: without `PublishTrimmed=true`, the build prints `warning XA0119: ReadyToRun has been disabled because trimming is disabled`.
+- Android `net11.0` defaults to CoreCLR with default partial ReadyToRun and packaged PGO. NativeAOT on Android remains experimental and is not offered by this app. Android API 24 is the minimum.
+- `net11.0-ios` builds for `iossimulator-arm64`. The minimum `SupportedOSPlatformVersion` is 15.0 (the .NET 11 workloads reject lower). The iOS 27 SDK additionally requires a `UIApplicationSceneManifest` in Info.plist (error MT7199) or `ValidateSceneManifest=false` for validation-only scenarios.
+- `net11.0-maccatalyst` builds for `maccatalyst-arm64`. The minimum `SupportedOSPlatformVersion` is 17.0.
+- The iOS and Catalyst device builds still require Xcode and signing/provisioning; the app emits `ArchiveOnBuild`/`BuildIpa` for device RIDs and a plain `build` for simulator RIDs.
+- A Release build of an Android app without an RID produced both `.aab` and `.apk`; with `-r android-arm64` the APK/AAB are copied into the `-o` folder the way the desktop RIDs behave.
+
+## The browser host is blocked
+
+The `.NET 11` wasm-tools workload bundles an Emscripten toolchain whose LLVM (through LLVM 23) no longer emits the `saveSetjmp` / `testSetjmp` symbols that the prebuilt SkiaSharp WebAssembly static libraries reference. Linking `dotnet.native.wasm` fails with `undefined symbol: saveSetjmp`. Avalonia has tracked the same problem (AvaloniaUI/Avalonia#21700: "Emscripten/LLVM upgrade for Net11 preview 6", which moved to Emscripten 5.0.6 and will bump again to the Emscripten release backed by LLVM 23) and notes that `libSkiaSharp.a` and `libHarfBuzzSharp.a` need to be recompiled with the new toolchain. No Avalonia or SkiaSharp release on NuGet ships those assets yet (latest stable Avalonia is 12.1.6; SkiaSharp stable line is 4.155/4.156, and Avalonia.Skia is compiled against SkiaSharp 3.119.4).
+
+The browser host was therefore removed from the .NET 11 line by decision on 2026-11-11. It stays in git history and should be restored when Avalonia ships WebAssembly assets built for the .NET 11 Emscripten toolchain (expected in a later 12.x release). Until then, `net10.0-browser` is the last published configuration of the host.
 
 ## Current project baseline
 
 | Area | Current state |
 | --- | --- |
-| App target | `net10.0` |
-| Desktop host | `net10.0`, `Microsoft.NET.Sdk`, Avalonia 12.1.2 |
-| Browser host | `net10.0-browser`, `Microsoft.NET.Sdk.WebAssembly` |
-| Tests | `net10.0`, TUnit executable, 70 tests passing in Release on macOS osx-arm64 |
-| SDK selected locally | 10.0.401; `global.json` selects the latest .NET 10 feature band |
-| Android/iOS | .NET 10 workloads plus Android SDK/JDK/Xcode requirements |
-| Publish profiles | In-app `PlatformProfiles`, not MSBuild `.pubxml` files |
+| App target | `net11.0` |
+| Desktop host | `net11.0`, `Microsoft.NET.Sdk`, Avalonia 12.1.6 |
+| Browser host | **Removed** (blocked; see "The browser host is blocked") |
+| Tests | `net11.0`, TUnit 1.83.0 executable, 545 tests passing in Release on macOS osx-arm64 |
+| SDK selected | 11.0.100; `global.json` selects the latest .NET 11 feature band |
+| Android/iOS | .NET 11 workloads (`maui-android`, `maui-ios`, `maui-maccatalyst` 11.0.0/11.0.100) plus Android SDK/JDK/Xcode requirements |
+| Publish profiles | In-app platform libraries (`Features/Publishing` per platform), not MSBuild `.pubxml` files |
+| Project layout | Per-platform libraries (`CodePublisher.Platforms.*`) composed by `CodePublisher.Publishing` over the `CodePublisher.Core` kernel |
 
 ## .NET 10 features relevant to this app
 
@@ -51,7 +74,7 @@ Details:
 | NuGet package pruning | Smaller dependency graphs for `net10.0` projects | Reduces restored framework-provided package references in newer SDKs |
 | MSBuild/.NET task alignment | Custom tasks can run under the CLI and newer Visual Studio MSBuild | No custom MSBuild task is currently shipped |
 
-## .NET 11 RC1 features relevant to this app
+## .NET 11 features relevant to this app
 
 | Feature | Benefit | Risk/adoption note |
 | --- | --- | --- |
@@ -101,9 +124,12 @@ NativeAOT is already a native executable; do not combine it with the single-file
 | NativeAOT + trimmed | AOT implies trimming | The graph keeps trimming on. The SDK fails the build with "PublishTrimmed is implied by native compilation and cannot be disabled." when trimming is explicitly off |
 | NativeAOT + single-file | Redundant | The graph turns single-file off; the SDK skips the single-file bundler under AOT without an error |
 | Single-file + no app host | Invalid | The graph turns the app host on; the SDK fails with NETSDK1098 |
-| Android RunAOT + `AndroidLinkMode=None` | Invalid | The graph switches the link mode to SdkOnly; the SDK fails with XA1030 without trimming |
-| Android RunAOT + `PublishTrimmed=false` | Invalid (`XA1030`) | Android trimming follows the linker, so the link mode rule settles it |
+| Android RunAOT + `AndroidLinkMode=None` | Invalid (`XA1030`) on .NET 10 and earlier | The graph switches the link mode to SdkOnly; the SDK fails without trimming |
+| Android RunAOT on .NET 11 | Invalid (`XA1044`) | The Mono AOT pipeline is gone; `net11.0-android` strips `RunAOTCompilation` and `AndroidEnableProfiledAot` before the command is emitted |
+| .NET 11 Android + trimming disabled | ReadyToRun disabled (`XA0119`) | `PublishTrimmed=true` (or a link mode that implies it) is required for partial R2R |
 | Android D8 + ProGuard | Invalid (`XA1011`) | Profile falls back to R8/D8; legacy direct values are rejected |
+| iOS + `PublishTrimmed=false` | Invalid | The Apple workload forces trimming; `TrimMode=copy` is the supported opt-out |
+| Non-RID Release Android | Both `aab` and `apk` by default | `AndroidPackageFormats` defaults to `aab;apk` for Release; this app always sends the selected formats explicitly |
 | iOS simulator + archive/IPA | Invalid for the simulator path | Command uses `build` and omits archive/IPA options |
 | MacCatalyst + R2R/AOT/single-file | Not applicable | Command emits explicit false values; policy explains the reason |
 | iOS BuildIpa without ArchiveOnBuild | Incomplete | The graph turns archiving on, because the .ipa is packaged from the archive |
@@ -115,7 +141,7 @@ NativeAOT is already a native executable; do not combine it with the single-file
 | Windows desktop | FDD, SCD, trim, R2R, AOT, single-file | Win64/WinArm64; NativeAOT needs the MSVC C++ toolchain; AOT is not cross-OS |
 | Linux desktop/ARM | FDD, SCD, trim, R2R, AOT, single-file | Use the correct libc and RID; `linux-arm64` is the Raspberry Pi 64-bit direction |
 | macOS desktop | FDD, SCD, trim, R2R, AOT, single-file, app bundle | Sign/notarize with Xcode tools; universal binaries require separate per-architecture publishes plus `lipo` |
-| Android | APK/AAB, D8/R8, trimming, RunAOT | `net10.0-android`, Android workload, JDK, Android SDK, and `adb` for deployment |
+| Android | APK/AAB, D8/R8, trimming, RunAOT (Mono/`net10.0-android` and earlier only); CoreCLR partial R2R (net11.0-android) | `net10.0-android`/`net11.0-android`, Android workload, JDK, Android SDK, and `adb` for deployment |
 | iOS/Mac Catalyst | Archive/IPA, linker/trimming, Apple compilation | Xcode version must match the Apple workload; device builds need signing/provisioning |
 | Browser/WebAssembly | `Microsoft.NET.Sdk.WebAssembly` and `wasm-tools` | Separate from desktop publish; no file browsing, elevated processes, or device actions |
 | IoT/embedded | Usually Linux ARM64/RISC-V-class SCD or FDD deployments | .NET IoT Libraries (`System.Device.Gpio`, `Iot.Device.Bindings`) are separate; this app has no hardware profile |
@@ -143,12 +169,13 @@ NativeAOT is already a native executable; do not combine it with the single-file
 
 ## Stability recommendation
 
-- Default release path: .NET 10 LTS + self-contained + single-file for desktop distribution; keep trimming off until the app has a clean trim run and a startup smoke test.
+- Default release path: .NET 11 self-contained + single-file for desktop distribution; keep trimming off until the app has a clean trim run and a startup smoke test.
 - Use ReadyToRun for a startup-sensitive desktop build after comparing output size and first-launch behavior.
-- Treat NativeAOT as an opt-in profile, not the default. It now publishes without application-owned warnings and launches cleanly, but only when the publish is allowed to restore ILCompiler; verify the output has no managed entry assembly.
-- Keep Android `LinkMode=None` as the conservative baseline, use R8, and let the policy force trimming when RunAOT is selected. Test AAB and APK separately.
+- Treat NativeAOT as an opt-in profile, not the default. On .NET 11, AOT publish skips the full `Build` target (`UseOptimizedPublish`); verify the output has no managed entry assembly. It publishes without application-owned warnings and launches cleanly, but only when the publish is allowed to restore ILCompiler.
+- For `net11.0-android`, ship `AndroidLinkMode=SdkOnly` with `PublishTrimmed=true` (the baseline profile) or `None` for a fast test loop; the app forces neither. RunAOT and ProfiledAOT no longer exist; ReadyToRun comes with trimming by default.
+- Test AAB and APK separately. The `.NET 11` Android workload supports `android-arm`, `android-arm64`, and `android-x64` (minimum API 24).
 - Keep iOS signing and Android SDK/JDK setup explicit; do not claim device/store success without the corresponding toolchain and credentials.
-- After .NET 11 GA, create a separate upgrade validation pass: restore with the .NET 11 SDK, install matching workloads, build the solution, run the TUnit suite, publish each supported desktop RID, run browser smoke, and test Android/iOS on real devices. Measure startup and package size against the .NET 10 baseline rather than assuming an improvement.
+- The .NET 11 upgrade validation pass ran on 2026-11-11: restore, solution Release build, 545-test TUnit suite, scratch publishes of `net11.0-android` (APK + AAB), `net10.0-android` (fallback Mono flags intact), `net11.0-ios` (simulator), `net11.0-maccatalyst`, and a desktop NativeAOT publish. Remaining manual items: real iOS/Android device deploys, Google Play submission, and a startup/size comparison against the .NET 10 baseline.
 
 ## Verification commands
 
@@ -159,18 +186,30 @@ dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj --conf
 
 # NativeAOT: no --no-restore, and no -p:PublishSingleFile (NativeAOT is already native).
 dotnet publish src/CodePublisher/CodePublisher.Desktop/CodePublisher.Desktop.csproj \
-  -c Release -f net10.0 -r osx-arm64 -p:PublishAot=true -p:PublishSingleFile=false \
+  -c Release -f net11.0 -r osx-arm64 -p:PublishAot=true -p:PublishSingleFile=false \
   -o "${TMPDIR:-/tmp}/dnap-aot"
 test ! -f "${TMPDIR:-/tmp}/dnap-aot/CodePublisher.Desktop.dll"
 
 # Trimming smoke: the only expected warning is third-party Avalonia.DesignerSupport IL2104.
 dotnet publish src/CodePublisher/CodePublisher.Desktop/CodePublisher.Desktop.csproj \
-  -c Release -f net10.0 -r osx-arm64 -p:PublishTrimmed=true -o "${TMPDIR:-/tmp}/dnap-trim"
+  -c Release -f net11.0 -r osx-arm64 -p:PublishTrimmed=true -o "${TMPDIR:-/tmp}/dnap-trim"
+
+# net11.0-android scratch publish (observed output: Signed APK and AAB in the -o folder):
+dotnet publish Scratch.csproj -f net11.0-android -c Release -r android-arm64 \
+  -p:SelfContained=true -p:AndroidLinkMode=SdkOnly -p:PublishTrimmed=true -o <dir>
 ```
 
 The test suite does not call live Google Play, OAuth, Android devices, or iOS devices. Those require user credentials, platform tooling, and physical/emulated devices and remain manual validation items.
 
 ## Official sources
+
+- [.NET for Android build properties](https://learn.microsoft.com/en-us/dotnet/android/building-apps/build-properties) — CoreCLR default in .NET 11, XA1044, minimum API 24, `ApplicationArtifact`, `GetApplicationArtifacts`.
+- [.NET 11 Announcing](https://devblogs.microsoft.com/dotnet/announcing-dotnet-11/) — GA status, NativeAOT CLI host, MSBuild server default, smaller SDK installers.
+- [What's new in .NET 11](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/overview) and [What's new in the .NET 11 SDK](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-11/sdk) — SDK features, minimum OS/architecture requirements, container tooling.
+- [Breaking change: AOT publish skips full Build target](https://learn.microsoft.com/en-us/dotnet/core/compatibility/sdk/11/aot-publish-skips-full-build) — `UseOptimizedPublish` in .NET 11 RC2.
+- [.NET for Android error XA1044](https://learn.microsoft.com/en-us/dotnet/android/messages/xa1044) and [XA1030](https://learn.microsoft.com/en-us/dotnet/android/messages/xa1030) — Mono-only AOT properties on CoreCLR.
+- [.NET Target Framework Monikers / iOS build properties](https://learn.microsoft.com/en-us/dotnet/ios/building-apps/build-properties) — iOS 15.0+ and Mac Catalyst 17.0+ minimums, scene manifest requirement.
+- [Avalonia issue #21700](https://github.com/AvaloniaUI/Avalonia/issues/21700) — the browser-host block.
 
 - [.NET 11 download and release-candidate status](https://dotnet.microsoft.com/en-us/download/dotnet/11.0)
 - [How Android handles app updates](https://developer.android.com/google/play/app-updates) — the update rules: same application ID, same signing certificate (or a proof of rotation), and a version code at least as high as the installed one.

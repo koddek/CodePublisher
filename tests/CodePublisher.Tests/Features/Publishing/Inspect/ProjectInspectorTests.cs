@@ -21,7 +21,7 @@ public sealed class ProjectInspectorTests
             using (Assert.Multiple())
             {
                 await Assert.That(found?.FullName).IsEqualTo(projectFile.FullName);
-                await Assert.That(output).IsEqualTo(Path.Combine(root.FullName, "bin", "Release", "net10.0", "linux-x64"));
+                await Assert.That(output).IsEqualTo(Path.Combine(root.FullName, "bin", "Release", "net10.0", "linux-x64", "publish"));
             }
         }
         finally

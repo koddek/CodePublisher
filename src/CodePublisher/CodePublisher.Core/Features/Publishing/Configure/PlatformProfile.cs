@@ -1,0 +1,28 @@
+namespace CodePublisher.Features.Publishing.Configure;
+
+public sealed record PlatformProfile(
+    string TargetFramework,
+    string RuntimeIdentifier,
+    bool SelfContained,
+    bool PublishTrimmed,
+    bool PublishAot,
+    bool PublishReadyToRun,
+    bool PublishSingleFile,
+    bool UseAppHost,
+    bool CreateMacAppBundle,
+    bool CreateWindowsExecutable,
+    bool BuildIpa,
+    bool ArchiveOnBuild,
+    bool RunAotCompilation,
+    bool EnableProfiledAot,
+    string AndroidLinkMode,
+    string AndroidLinkTool,
+    string AndroidDexTool,
+    bool CreateMappingFile,
+    bool EnableMultiDex,
+    bool UseAapt2,
+    bool EnableDesugar,
+    bool IncludeApk,
+    bool IncludeAab,
+    string SignMode,
+    string Configuration);

@@ -57,7 +57,7 @@ public sealed class ProjectOutputLayoutResolverTests
             using (Assert.Multiple())
             {
                 await Assert.That(layout.UsesCentralizedArtifacts).IsFalse();
-                await Assert.That(layout.DefaultOutputDirectory).IsEqualTo(Path.Combine(root.FullName, "bin", "Release", "net10.0", "linux-x64"));
+                await Assert.That(layout.DefaultOutputDirectory).IsEqualTo(Path.Combine(root.FullName, "bin", "Release", "net10.0", "linux-x64", "publish"));
                 await Assert.That(layout.Description).Contains("could not evaluate");
             }
         }

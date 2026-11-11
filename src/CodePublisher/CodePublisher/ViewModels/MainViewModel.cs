@@ -304,7 +304,7 @@ public partial class MainViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(PublishAotDisabledReason))]
     [NotifyPropertyChangedFor(nameof(IsPublishTrimmedEnabled))]
     [NotifyPropertyChangedFor(nameof(PublishTrimmedDisabledReason))]
-    private string _targetFramework = "net10.0-android";
+    private string _targetFramework = "net11.0-android";
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(PublishCommand))]
@@ -1873,6 +1873,19 @@ public partial class MainViewModel : ViewModelBase
         if (output.Contains("NETSDK1042", StringComparison.OrdinalIgnoreCase))
         {
             return "Publish failed: target framework mismatch. Check Target Framework in the Build section against the project file.";
+        }
+
+        // The Mono AOT cross-toolchain ships shell wrappers that expand unquoted paths; a .NET SDK
+        // installed into a path with spaces (dotnetup defaults to "~/Library/Application Support/dotnetup")
+        // makes the wrapper invoke e.g. "/Users/<you>/Library/as", which does not exist. The fix is a
+        // space-free SDK root or avoiding Mono AOT on this machine.
+        if (output.Contains("No such file or directory", StringComparison.OrdinalIgnoreCase)
+            && (output.Contains("aarch64-linux-android-as", StringComparison.OrdinalIgnoreCase)
+                || output.Contains("mono-aot-cross", StringComparison.OrdinalIgnoreCase)
+                || output.Contains("binutils", StringComparison.OrdinalIgnoreCase)))
+        {
+            return "Publish failed in the Mono AOT toolchain: the .NET SDK is installed at a path with spaces, and the Android AOT assembler cannot handle spaces in the install path (e.g. \"aarch64-linux-android-as: line 5: /Library/as: No such file or directory\"). " +
+                "Fix it one of three ways: reinstall the .NET SDK into a space-free path (`dotnetup install --install-path ~/.dotnet --set-default-install`), turn off RunAOTCompilation in the Build tab (trimming still applies), or publish `net11.0-android`, where the Mono AOT pipeline no longer exists.";
         }
 
         if (Regex.IsMatch(output, @"error XA\d{4}", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))

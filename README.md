@@ -53,7 +53,7 @@ MAUI Android publish commands can become long and easy to get wrong, especially 
 
 ### Requirements
 
-- .NET 10 SDK (the repository `global.json` pins the .NET 10 feature band)
+- .NET 11 SDK (the repository `global.json` pins the .NET 11 feature band)
 - Android SDK command-line tools
 - `adb` available on `PATH` for device and emulator actions (Android platform-tools 30.0.0 or newer for `adb pair` and `adb mdns`)
 - Android `emulator` tool available on `PATH` or in the default SDK install location for AVD discovery and launch
@@ -64,7 +64,6 @@ MAUI Android publish commands can become long and easy to get wrong, especially 
 ```bash
 dotnet build CodePublisher.slnx
 dotnet run --project src/CodePublisher/CodePublisher.Desktop/CodePublisher.Desktop.csproj
-dotnet run --project src/CodePublisher/CodePublisher.Browser/CodePublisher.Browser.csproj
 ```
 
 ## Commands
@@ -74,7 +73,6 @@ dotnet run --project src/CodePublisher/CodePublisher.Browser/CodePublisher.Brows
 | `dotnet restore CodePublisher.slnx` | Restore NuGet packages |
 | `dotnet build CodePublisher.slnx` | Build the solution |
 | `dotnet run --project src/CodePublisher/CodePublisher.Desktop/CodePublisher.Desktop.csproj` | Launch the desktop app |
-| `dotnet run --project src/CodePublisher/CodePublisher.Browser/CodePublisher.Browser.csproj` | Launch the browser host |
 | `dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj` | Run the TUnit test suite |
 
 ### Main workflow
@@ -104,38 +102,30 @@ CodePublisher/
 ├── CodePublisher.slnx
 └── src/
     └── CodePublisher/
-        ├── CodePublisher.Core/       # UI-free domain layer
+        ├── CodePublisher.Core/       # UI-free kernel: models, option graph engine, project inspection
         │   ├── Models/
         │   ├── Services/
         │   └── Features/
-        │       ├── GooglePlay/
-        │       │   ├── Authentication/
-        │       │   ├── Releases/
-        │       │   ├── Services/
-        │       │   ├── Setup/
-        │       │   ├── Signing/
-        │       │   ├── State/
-        │       │   └── Tracks/
-        │       ├── Publishing/
-        │       │   ├── Artifacts/
-        │       │   ├── Build/
-        │       │   ├── Configure/
-        │       │   ├── Inspect/
-        │       │   └── Process/
-        │       ├── Deployment/
-        │       │   ├── Android/
-        │       │   ├── CrashLogs/
-        │       │   └── Ios/
-        │       └── Shared/
+        │       ├── Publishing/         # Configure (state, values, engine), Inspect, Artifacts, Build, Process
+        │       ├── Deployment/CrashLogs/
+        │       └── Shared/             # Process, tools
         ├── CodePublisher/            # Avalonia app: views and view models
-        ├── CodePublisher.Browser/
+        ├── CodePublisher.Publishing/ # Composition root: PublisherService, option graph, command dispatch
+        ├── CodePublisher.Platforms.Android/   # Android: options, rules, adb deploy, Google Play, signing
+        ├── CodePublisher.Platforms.Apple/     # Apple: iOS and Mac Catalyst options, deploy, crash logs
+        ├── CodePublisher.Platforms.Mac/       # macOS desktop options and the .app bundle builder
+        ├── CodePublisher.Platforms.Windows/   # Windows options and command
+        ├── CodePublisher.Platforms.Linux/     # Linux options and command
+        ├── CodePublisher.Platforms.NuGet/     # NuGet pack/validate/push workflow
         └── CodePublisher.Desktop/
 ```
 
-The `CodePublisher.Core` library carries the publish option graph, the publish command
-builder, the deployment services, and the Google Play API client. It has no Avalonia dependency,
-so every rule in it is testable without a window. The app project holds the views, the view
-models, and the Avalonia-bound adapters, and references the library.
+Each publish platform owns its options, rules, command builder, defaults, and deployment
+integration in its own library, so a change aimed at one platform cannot bleed into another.
+`CodePublisher.Core` is the UI-free kernel: models, the publish-option graph engine, project
+inspection, and the process runner. `CodePublisher.Publishing` composes the libraries and owns
+the orchestration (`PublisherService`). The app project holds the views, the view models, and
+the Avalonia-bound adapters. Every rule in these libraries is testable without a window.
 
 ## GitHub Actions
 
@@ -189,7 +179,7 @@ The app is already useful for Android, macOS, Windows, and iOS publish flows, pl
 ## Development notes
 
 - The SDK and publishing profile analysis, including .NET 10/.NET 11 compatibility, platform matrices, and tested publish combinations, is recorded in [docs/dotnet-10-11-publishing-research.md](docs/dotnet-10-11-publishing-research.md).
-- The repository pins the supported .NET 10 LTS SDK line with `global.json`; .NET 11 RC tooling is not selected accidentally while it is still a release candidate.
+- The repository builds on the .NET 11 SDK line with `global.json`. Projects targeting `net10.0`, `net9.0`, `net8.0`, and `net11.0` are supported publish targets, and the publish command builders gate settings by the target framework's major version (for example, the Mono-only Android AOT knobs are emitted only for `net10.0-android` and earlier).
 - Google Play publishing requires an existing Play app and a public Google Desktop OAuth client ID. The client secret is never needed or stored by the desktop OAuth flow.
 - The Google Play setup card can set the client ID, Java home, and Android SDK path for this app process, save supported values for future launches, remove them, open Google Cloud credentials, and open setup help. Each setup row includes step-by-step acquisition guidance and an official source link. On macOS, **Save** updates `~/.zprofile`; open a new terminal or restart the app to load it. On Linux, use **Use now** because this app does not modify shell startup files. Environment values are never written to the app database.
 - The Google Play account card stays at the top of the release workspace; upload-key controls are grouped under Signing and link back from the App card.
@@ -199,8 +189,7 @@ The app is already useful for Android, macOS, Windows, and iOS publish flows, pl
 - The publish options are related by one declarative graph, so the UI, the normalizer, and the command builder cannot disagree. Native AOT always trims — the .NET SDK fails the build with "PublishTrimmed is implied by native compilation and cannot be disabled." when trimming is off — so the graph keeps trimming on under AOT. ReadyToRun and single-file are mutually exclusive with AOT, trimming needs a self-contained publish, Android ahead-of-time compilation needs the linker, and the .ipa needs the archive.
 - Google Play signs its downloads with the app signing key, not the upload key. A build signed with the upload key can never be replaced by a Play Store update, because Android only accepts an update when the signing certificate matches. The app compares the certificate of a local build with the one on the device, and reports the Play app signing certificate where the API exposes it.
 - Google Play serves the highest version code a user is eligible for across every track, and never downgrades. Moving a device off a testing line therefore needs the release removed from that line *and* a production version code at least as high as the one on the device. Internal testing is exclusive: an internal tester receives only that track's version code, even when production is higher.
-- The browser host uses Avalonia's software renderer, synchronizes its canvas backing store after startup, and disables desktop-only device discovery, elevated processes, file browsing, and Google OAuth in browser mode.
-- The browser host links the native SkiaSharp library, so it needs the `wasm-tools` workload for the emscripten toolchain: run `dotnet workload install wasm-tools` before building it. Without that, the app fails at startup with `System.DllNotFoundException: libSkiaSharp`.
+- The browser host was removed in the .NET 11 line: the .NET 11 wasm-tools bundle an Emscripten toolchain whose LLVM no longer emits the `saveSetjmp`/`testSetjmp` symbols that the prebuilt SkiaSharp WebAssembly native assets reference, so linking fails. The browser host returns once Avalonia ships WebAssembly assets built for that toolchain (see the research notes).
 - The master-detail view narrows its navigation, stacks header actions, wraps form groups, and uses compact icon controls for low-emphasis actions at smaller window sizes.
 - `Signing` and `Google Play` are separate destinations, with `Deploy` between them; routine status stays inline, while modal alerts are reserved for errors and confirmations with a title and vertically centered details.
 - Navigation is generated from the selected platform by `WorkspaceNavigation`: at most six tabs, grouped as Prepare, Ship, and Inspect. A card that does not apply to the platform is absent instead of showing a disabled explanation.

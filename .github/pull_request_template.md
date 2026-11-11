@@ -1,6 +1,7 @@
 ## Summary
 
-- Describe the user-facing change.
+- Describe the user-facing change and why.
+- The publish platform(s) affected, if any: Android, Apple (iOS/Catalyst), macOS, Windows, Linux, NuGet.
 
 ## Verification
 

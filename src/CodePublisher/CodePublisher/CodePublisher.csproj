@@ -1,8 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <TargetFramework>net10.0</TargetFramework>
+        <TargetFramework>net11.0</TargetFramework>
         <Nullable>enable</Nullable>
-        <LangVersion>latest</LangVersion>
         <AssemblyName>CodePublisher</AssemblyName>
         <PackageId>CodePublisher</PackageId>
         <RootNamespace>CodePublisher</RootNamespace>
@@ -24,7 +23,6 @@
  <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
  </PackageReference>
  <PackageReference Include="CommunityToolkit.Mvvm"/>
- <PackageReference Include="QRCoder"/>
  <PackageReference Include="Avalonia.Skia"/>
  <PackageReference Include="SkiaSharp"/>
  <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies"/>
@@ -34,5 +32,12 @@
    <!-- The domain layer: publish policy, deployment, and the Google Play API client.
         It carries no Avalonia dependency, so it stays testable without a UI. -->
    <ProjectReference Include="..\CodePublisher.Core\CodePublisher.Core.csproj" />
+   <ProjectReference Include="..\CodePublisher.Publishing\CodePublisher.Publishing.csproj" />
+   <ProjectReference Include="..\CodePublisher.Platforms.Android\CodePublisher.Platforms.Android.csproj" />
+   <ProjectReference Include="..\CodePublisher.Platforms.Apple\CodePublisher.Platforms.Apple.csproj" />
+   <ProjectReference Include="..\CodePublisher.Platforms.Mac\CodePublisher.Platforms.Mac.csproj" />
+   <ProjectReference Include="..\CodePublisher.Platforms.Windows\CodePublisher.Platforms.Windows.csproj" />
+   <ProjectReference Include="..\CodePublisher.Platforms.Linux\CodePublisher.Platforms.Linux.csproj" />
+   <ProjectReference Include="..\CodePublisher.Platforms.NuGet\CodePublisher.Platforms.NuGet.csproj" />
  </ItemGroup>
 </Project>

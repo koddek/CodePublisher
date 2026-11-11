@@ -139,7 +139,7 @@ public sealed class PublishOptionPolicyTests
     [Test]
     [Arguments("r8", "d8", "")]
     [Arguments("proguard", "d8", "D8 requires the R8 code shrinker; ProGuard with D8 is no longer supported.")]
-    [Arguments("r8", "dx", "The .NET 10 Android workload supports D8; the legacy DX compiler is deprecated and is not a supported profile.")]
+    [Arguments("r8", "dx", "The .NET for Android workload supports D8; the legacy DX compiler is deprecated and is not a supported profile.")]
     public async Task AndroidToolValidation_RejectsUnsupportedCombinations(
         string linkTool,
         string dexTool,

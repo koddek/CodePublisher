@@ -6,11 +6,11 @@ namespace CodePublisher.Tests.Features.Publishing;
 public sealed class PlatformProfileTests
 {
     [Test]
-    [Arguments(PublisherService.AndroidPlatform, "net10.0-android", "android-arm64")]
-    [Arguments(PublisherService.MacOsPlatform, "net10.0", "osx-arm64")]
-    [Arguments(PublisherService.WindowsPlatform, "net10.0-windows", "win-x64")]
-    [Arguments(PublisherService.IosPlatform, "net10.0-ios", "ios-arm64")]
-    [Arguments(PublisherService.LinuxPlatform, "net10.0", "linux-x64")]
+    [Arguments(PublisherService.AndroidPlatform, "net11.0-android", "android-arm64")]
+    [Arguments(PublisherService.MacOsPlatform, "net11.0", "osx-arm64")]
+    [Arguments(PublisherService.WindowsPlatform, "net11.0-windows", "win-x64")]
+    [Arguments(PublisherService.IosPlatform, "net11.0-ios", "ios-arm64")]
+    [Arguments(PublisherService.LinuxPlatform, "net11.0", "linux-x64")]
     public async Task GetDefaults_ReturnsExpectedFrameworkAndRuntime(
         string platform,
         string expectedFramework,

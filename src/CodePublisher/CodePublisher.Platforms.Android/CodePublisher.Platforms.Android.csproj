@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net11.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <AssemblyName>CodePublisher.Platforms.Android</AssemblyName>
+        <PackageId>CodePublisher.Platforms.Android</PackageId>
+        <RootNamespace>CodePublisher</RootNamespace>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\CodePublisher.Core\CodePublisher.Core.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="QRCoder" />
+    </ItemGroup>
+</Project>

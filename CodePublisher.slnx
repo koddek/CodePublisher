@@ -1,5 +1,11 @@
 <Solution>
-  <Project Path="src/CodePublisher/CodePublisher.Browser/CodePublisher.Browser.csproj" />
+  <Project Path="src/CodePublisher/CodePublisher.Publishing/CodePublisher.Publishing.csproj" />
+  <Project Path="src/CodePublisher/CodePublisher.Platforms.NuGet/CodePublisher.Platforms.NuGet.csproj" />
+  <Project Path="src/CodePublisher/CodePublisher.Platforms.Linux/CodePublisher.Platforms.Linux.csproj" />
+  <Project Path="src/CodePublisher/CodePublisher.Platforms.Windows/CodePublisher.Platforms.Windows.csproj" />
+  <Project Path="src/CodePublisher/CodePublisher.Platforms.Mac/CodePublisher.Platforms.Mac.csproj" />
+  <Project Path="src/CodePublisher/CodePublisher.Platforms.Apple/CodePublisher.Platforms.Apple.csproj" />
+  <Project Path="src/CodePublisher/CodePublisher.Platforms.Android/CodePublisher.Platforms.Android.csproj" />
   <Project Path="src/CodePublisher/CodePublisher.Core/CodePublisher.Core.csproj" />
   <Project Path="src/CodePublisher/CodePublisher.Desktop/CodePublisher.Desktop.csproj" />
   <Project Path="src/CodePublisher/CodePublisher/CodePublisher.csproj" />

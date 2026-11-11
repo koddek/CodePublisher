@@ -56,7 +56,7 @@ public sealed class PublishCommandBuilderTests
         using (Assert.Multiple())
         {
             await Assert.That(command).Contains("-p:PublishTrimmed=true");
-            await Assert.That(command).Contains("-p:MtouchLink=None");
+            await Assert.That(command).Contains("-p:TrimMode=copy");
         }
     }
 

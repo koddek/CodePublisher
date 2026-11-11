@@ -3,7 +3,7 @@
         <OutputType>WinExe</OutputType>
         <!--If you are willing to use platform-specific APIs, use conditional compilation.
         See https://docs.avaloniaui.net/docs/guides/platforms/platform-specific-code/dotnet for more details.-->
-        <TargetFramework>net10.0</TargetFramework>
+        <TargetFramework>net11.0</TargetFramework>
         <Nullable>enable</Nullable>
         <AssemblyName>CodePublisher.Desktop</AssemblyName>
         <RootNamespace>CodePublisher.Desktop</RootNamespace>
@@ -58,6 +58,13 @@
         <TrimmerRootDescriptor Include="..\CodePublisher\Trimming\LinkerDescriptor.xml" />
         <TrimmerRootAssembly Include="CodePublisher" />
         <TrimmerRootAssembly Include="CodePublisher.Core" />
+        <TrimmerRootAssembly Include="CodePublisher.Publishing" />
+        <TrimmerRootAssembly Include="CodePublisher.Platforms.Android" />
+        <TrimmerRootAssembly Include="CodePublisher.Platforms.Apple" />
+        <TrimmerRootAssembly Include="CodePublisher.Platforms.Mac" />
+        <TrimmerRootAssembly Include="CodePublisher.Platforms.Windows" />
+        <TrimmerRootAssembly Include="CodePublisher.Platforms.Linux" />
+        <TrimmerRootAssembly Include="CodePublisher.Platforms.NuGet" />
     </ItemGroup>
 
     <Target Name="PrepareMacBundle" AfterTargets="Build" Condition="$([MSBuild]::IsOSPlatform('OSX'))">
@@ -127,10 +134,15 @@
     <Target Name="StampMacBundleVersion"
             AfterTargets="PrepareMacBundle;CreateMacAppBundleAfterPublish;CreateMacAppBundleAfterNativePublish"
             Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+        <!-- The plist carries a DOCTYPE, which the file format defines and the .NET SDK's
+             hardened XmlPoke rejects by default. The input is this repository's own Info.plist,
+             so accepting its DTD here is safe and keeps the stamping target working. -->
         <XmlPoke XmlInputPath="$(AppContentsDir)/Info.plist"
+                 ProhibitDtd="false"
                  Query="/plist/dict/key[.='CFBundleShortVersionString']/following-sibling::string[1]"
                  Value="$(Version)" />
         <XmlPoke XmlInputPath="$(AppContentsDir)/Info.plist"
+                 ProhibitDtd="false"
                  Query="/plist/dict/key[.='CFBundleVersion']/following-sibling::string[1]"
                  Value="$(Version)" />
     </Target>

@@ -356,7 +356,7 @@ public sealed class ReproMetadataTests
         {
             File.WriteAllText(
                 Path.Combine(root, "PublishApp.csproj"),
-                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0-android</TargetFramework><ApplicationId>com.example.publishapp</ApplicationId></PropertyGroup></Project>");
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net11.0-android</TargetFramework><ApplicationId>com.example.publishapp</ApplicationId></PropertyGroup></Project>");
 
             var viewModel = new MainViewModel(new PublisherService(), new DesktopInteractionService());
             viewModel.ProjectDirectory = root;
@@ -366,7 +366,7 @@ public sealed class ReproMetadataTests
             using (Assert.Multiple())
             {
                 await Assert.That(viewModel.OutputDirectory).IsNotEmpty();
-                await Assert.That(viewModel.OutputDirectory).Contains("net10.0-android");
+                await Assert.That(viewModel.OutputDirectory).Contains("net11.0-android");
                 await Assert.That(viewModel.OutputDirectory).Contains("android-arm64");
             }
         }

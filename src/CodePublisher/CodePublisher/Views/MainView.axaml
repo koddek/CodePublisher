@@ -194,7 +194,7 @@
                                     <TextBlock Text="TFM and RID default per platform; edit only if you know the target SDK." Classes="section-copy"/>
                                     <WrapPanel ItemSpacing="16" LineSpacing="12">
                                         <StackPanel MinWidth="140" MaxWidth="320" Spacing="8"
-                                                    ToolTip.Tip="Target Framework (TFM): specifies which .NET version and platform your app targets (e.g., net10.0-android, net10.0-ios). This determines available APIs and which SDK is used.">
+                                                    ToolTip.Tip="Target Framework (TFM): specifies which .NET version and platform your app targets (e.g., net11.0-android, net11.0-ios). This determines available APIs and which SDK is used.">
                                             <StackPanel Orientation="Horizontal" Spacing="4">
                                                 <TextBlock Text="Target framework" FontWeight="SemiBold" FontSize="13"/>
                                                 <Border Classes="option-info">
@@ -551,7 +551,7 @@
                                             <TextBox Text="{Binding GooglePlay.KeyPassword}" PasswordChar="●" PlaceholderText="Session only"/>
                                         </StackPanel>
                                     </WrapPanel>
-                                    <TextBlock Text="{Binding GooglePlay.SigningKey.Sha256Fingerprint}" Classes="section-copy" Margin="0"
+                                    <TextBlock Text="{Binding GooglePlay.SigningKey.Sha256Fingerprint, TargetNullValue=''}" Classes="section-copy" Margin="0"
                                                IsVisible="{Binding GooglePlay.HasSigningKey}" TextTrimming="CharacterEllipsis"/>
                                 </StackPanel>
                             </Border>
@@ -842,7 +842,7 @@
                                             <Border Classes="card" Padding="12" Background="{DynamicResource SurfaceColor}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,0,1" CornerRadius="8">
                                                 <StackPanel Spacing="10">
                                                     <TextBlock Text="Device options" FontSize="13" FontWeight="SemiBold"/>
-                                                    <TextBlock Text="{Binding SelectedWirelessDevice.DisplayName, StringFormat='Select what to do with {0}'}" Classes="section-copy" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                                    <TextBlock Text="{Binding SelectedWirelessDevice.DisplayName, StringFormat='Select what to do with {0}', TargetNullValue=''}" Classes="section-copy" TextWrapping="Wrap" Margin="0,0,0,8"/>
                                                     <ItemsControl ItemsSource="{Binding SelectedWirelessDeviceOptions}">
                                                         <ItemsControl.ItemTemplate>
                                                             <DataTemplate x:DataType="vm:WirelessDeviceOption">

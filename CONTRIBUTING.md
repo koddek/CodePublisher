@@ -12,7 +12,7 @@ Thanks for helping improve Code Publisher.
 
 ### Requirements
 
-- .NET 10 SDK
+- .NET 11 SDK
 - Android SDK command-line tools
 - `adb` on `PATH` if you want to use Android install or launch actions
 - Android `emulator` on `PATH` or installed in the default SDK location if you want AVD discovery and launch
@@ -27,7 +27,7 @@ dotnet run --project src/CodePublisher/CodePublisher.Desktop/CodePublisher.Deskt
 ## Pull requests
 
 - Describe the user-facing change and why it is needed.
-- Call out platform-specific impact if the change affects Android, macOS, Windows, or iOS differently.
+- Call out platform-specific impact if the change affects Android, Apple (iOS and Mac Catalyst), macOS, Windows, Linux, or the NuGet workflow differently. Note the owning platform library (`CodePublisher.Platforms.*`) where the change lives.
 - Include screenshots or command-output snippets when they make review easier.
 - If you changed publish behavior, mention one manual verification path you exercised.
 

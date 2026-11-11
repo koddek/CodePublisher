@@ -32,7 +32,7 @@ public static class ProjectInspector
     }
 
     private static readonly HashSet<string> SkippedDiscoveryFolders =
-        new(StringComparer.OrdinalIgnoreCase) { "bin", "obj", "node_modules", ".git", ".idea", ".vs", "artifacts", "packages" };
+        [with(StringComparer.OrdinalIgnoreCase), "bin", "obj", "node_modules", ".git", ".idea", ".vs", "artifacts", "packages"];
 
     /// <summary>
     /// Every .csproj under the directory, recursively, skipping build output folders. A source root
@@ -93,12 +93,27 @@ public static class ProjectInspector
         string targetFramework,
         string runtimeIdentifier)
     {
+        // The SDK's own default publish layout is bin/<configuration>/<tfm>/[<rid>/]publish. The
+        // APK/AAB/IPA the toolchain copies into $(PublishDir) lands there, not in the RID build
+        // folder above it; pointing the default at the RID folder puts the published packages next
+        // to the build intermediates and diverges from every other .NET publish.
+        if (!string.IsNullOrWhiteSpace(runtimeIdentifier))
+        {
+            return Path.Combine(
+                projectDirectory.FullName,
+                "bin",
+                configuration.Trim(),
+                targetFramework.Trim(),
+                runtimeIdentifier.Trim(),
+                "publish");
+        }
+
         return Path.Combine(
             projectDirectory.FullName,
             "bin",
             configuration.Trim(),
             targetFramework.Trim(),
-            runtimeIdentifier.Trim());
+            "publish");
     }
 
     public static void ValidateProjectTargetFramework(FileInfo projectFile, string targetFramework)
@@ -465,6 +480,22 @@ public static class ProjectInspector
                 yield return document;
             }
         }
+    }
+
+    /// <summary>
+    /// The major version of a target framework moniker (`net11.0-android` → 11), or -1 when the
+    /// moniker does not start with `netN`. Used to gate options that only exist on one major
+    /// version, e.g. the Mono-only Android AOT knobs that .NET 11 removed.
+    /// </summary>
+    public static int GetTargetFrameworkVersion(string? targetFramework)
+    {
+        if (string.IsNullOrWhiteSpace(targetFramework))
+        {
+            return -1;
+        }
+
+        var match = Regex.Match(targetFramework.Trim(), @"^net(?<version>\d+)\.\d+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        return match.Success && int.TryParse(match.Groups["version"].Value, out var major) ? major : -1;
     }
 
     private static bool IsTargetFrameworkForPlatform(string framework, string publishPlatform)

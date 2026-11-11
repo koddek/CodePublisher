@@ -26,7 +26,7 @@ public sealed class NuGetPlatformTests
 
         using (Assert.Multiple())
         {
-            await Assert.That(defaults.TargetFramework).IsEqualTo("net10.0");
+            await Assert.That(defaults.TargetFramework).IsEqualTo("net11.0");
             await Assert.That(defaults.RuntimeIdentifier).IsEqualTo("any");
             await Assert.That(defaults.Configuration).IsEqualTo("Release");
             await Assert.That(defaults.SelfContained).IsFalse();
