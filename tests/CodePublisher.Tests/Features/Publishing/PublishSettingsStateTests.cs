@@ -101,6 +101,62 @@ public sealed class PublishSettingsStateTests
     }
 
     [Test]
+    public async Task Normalize_ReflectsAutomaticReadyToRun_ForNet11AndroidRelease()
+    {
+        var state = new PublishSettingsState(
+            PublisherService.AndroidPlatform,
+            "net11.0-android",
+            "android-arm64",
+            SelfContained: true,
+            PublishAot: false,
+            PublishReadyToRun: false,
+            PublishSingleFile: false,
+            PublishTrimmed: false,
+            AndroidLinkMode: "SdkOnly",
+            AndroidLinkTool: "r8",
+            AndroidDexTool: "d8",
+            RunAotCompilation: false,
+            EnableProfiledAot: false,
+            IncludeApk: true,
+            IncludeAab: false,
+            Configuration: "Release");
+
+        var result = PublishSettingsPolicy.Normalize(state);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(result.PublishReadyToRun).IsTrue();
+            await Assert.That(result.PublishTrimmed).IsTrue();
+        }
+    }
+
+    [Test]
+    public async Task Normalize_LeavesAutomaticReadyToRunOff_ForDebug()
+    {
+        var state = new PublishSettingsState(
+            PublisherService.AndroidPlatform,
+            "net11.0-android",
+            "android-arm64",
+            SelfContained: true,
+            PublishAot: false,
+            PublishReadyToRun: false,
+            PublishSingleFile: false,
+            PublishTrimmed: false,
+            AndroidLinkMode: "SdkOnly",
+            AndroidLinkTool: "r8",
+            AndroidDexTool: "d8",
+            RunAotCompilation: false,
+            EnableProfiledAot: false,
+            IncludeApk: true,
+            IncludeAab: false,
+            Configuration: "Debug");
+
+        var result = PublishSettingsPolicy.Normalize(state);
+
+        await Assert.That(result.PublishReadyToRun).IsFalse();
+    }
+
+    [Test]
     public async Task Normalize_PreservesFullLinkMode_WhenTheUserSelectsIt()
     {
         // The Build tab offers None, SdkOnly and Full. Selecting Full is an "on" change for the

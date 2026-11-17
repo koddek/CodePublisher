@@ -25,10 +25,26 @@ public static class AndroidPublishPolicy
     /// </summary>
     public static bool IsReadyToRunEnabled() => false;
 
+    /// <summary>
+    /// Whether CoreCLR turns ReadyToRun on by itself. Verified with SDK 11.0.100: for a
+    /// net11.0-android Release publish, <c>PublishReadyToRun</c> evaluates to true whenever
+    /// <c>PublishTrimmed</c> is true, with no explicit property on the command line. Debug builds
+    /// and untrimmed builds leave it off. The app surfaces this as a checked but read-only option.
+    /// </summary>
+    public static bool IsReadyToRunAutomatic(string? targetFramework, string? configuration, bool publishTrimmed)
+        => ProjectInspector.GetTargetFrameworkVersion(targetFramework) >= 11
+            && publishTrimmed
+            && !string.Equals(configuration?.Trim(), "Debug", StringComparison.OrdinalIgnoreCase);
+
     public static string ReadyToRunDisabledReason(string? targetFramework)
         => ProjectInspector.GetTargetFrameworkVersion(targetFramework) >= 11
-            ? "Android on .NET 11 targets CoreCLR, which compiles partial ReadyToRun in Release builds when trimming is enabled. Turn on Link Mode (SdkOnly) to keep it; the switch is not applicable."
+            ? "ReadyToRun is on automatically: CoreCLR compiles partial ReadyToRun in trimmed Release builds. The SDK sets it, so it cannot be toggled here."
             : "ReadyToRun is not supported for Android — use RunAOT instead.";
+
+    public static string ReadyToRunAutomaticReason(string? targetFramework, string? configuration, bool publishTrimmed)
+        => IsReadyToRunAutomatic(targetFramework, configuration, publishTrimmed)
+            ? ReadyToRunDisabledReason(targetFramework)
+            : "ReadyToRun is off: CoreCLR only compiles partial ReadyToRun in trimmed Release builds. Turn on Link Mode (SdkOnly or Full) to get it.";
 
     /// <summary>
     /// Native Android AOT (PublishAot) selects the Experimental CoreCLR NativeAOT runtime in

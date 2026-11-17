@@ -11,8 +11,9 @@ public static class ApplePublishSettings
     {
         var buildIpa = state.BuildIpa;
         var archiveOnBuild = state.ArchiveOnBuild;
+        var readyToRun = ApplePublishPolicy.IsReadyToRunAutomatic(state.TargetFramework) || state.PublishReadyToRun;
 
-        return ApplyCommon(state, buildIpa, archiveOnBuild, createMacAppBundle: false);
+        return ApplyCommon(state with { PublishReadyToRun = readyToRun }, buildIpa, archiveOnBuild, createMacAppBundle: false);
     }
 
     /// <summary>
@@ -21,7 +22,14 @@ public static class ApplePublishSettings
     /// archive/IPA toggles are not.
     /// </summary>
     public static PublishSettingsState ApplyCatalyst(PublishSettingsState state)
-        => ApplyCommon(state, buildIpa: false, archiveOnBuild: false, createMacAppBundle: state.CreateMacAppBundle);
+    {
+        var readyToRun = ApplePublishPolicy.IsReadyToRunAutomatic(state.TargetFramework) || state.PublishReadyToRun;
+        return ApplyCommon(
+            state with { PublishReadyToRun = readyToRun },
+            buildIpa: false,
+            archiveOnBuild: false,
+            createMacAppBundle: state.CreateMacAppBundle);
+    }
 
     private static PublishSettingsState ApplyCommon(PublishSettingsState state, bool buildIpa, bool archiveOnBuild, bool createMacAppBundle)
         => state with

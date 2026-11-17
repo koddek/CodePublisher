@@ -9,9 +9,11 @@ namespace CodePublisher.Features.Publishing.Build;
 /// so it has its own commands here and the composition root dispatches the macOS-with-Catalyst
 /// platform entry to them.
 ///
-/// Trimming cannot be turned off on the Apple workload: <c>PublishTrimmed=false</c> is a build
-/// error there. To disable linking, set <c>TrimMode=copy</c> (the successor of the deprecated
-/// <c>MtouchLink=None</c>).
+/// The .NET 11 Apple workload runs CoreCLR and owns both trimming and ReadyToRun. Setting
+/// <c>PublishTrimmed</c> to any value is an error there, and <c>PublishReadyToRun=false</c> would
+/// turn off the whole-app precompilation the SDK enables by default. On .NET 11 the commands omit
+/// both properties and let the workload decide. On .NET 10 the Mono-era properties still apply, and
+/// <c>MtouchLink=None</c> is the documented way to relax linking.
 /// </summary>
 public static class ApplePublishCommands
 {
@@ -36,11 +38,11 @@ public static class ApplePublishCommands
             runtimeIdentifier,
             $"-p:SelfContained={ToLowerInvariant(configuration.SelfContained)}",
             "-p:UseAppHost=false",
-            "-p:PublishTrimmed=true",
             "-p:PublishAot=false",
-            "-p:PublishReadyToRun=false",
             "-p:PublishSingleFile=false"
         };
+
+        AddTrimmingAndReadyToRun(command, configuration);
 
         if (!string.IsNullOrWhiteSpace(customTrimProperty))
         {
@@ -61,9 +63,9 @@ public static class ApplePublishCommands
     }
 
     /// <summary>
-    /// Mac Catalyst: the Apple SDK in release clothing. Trimming is forced unless the project
-    /// opts out with <c>TrimMode=copy</c>, archiving is the .ipa-equivalent path, and the desktop
-    /// compiler flags (ReadyToRun, NativeAOT, single-file) never apply.
+    /// Mac Catalyst: the Apple SDK in release clothing. Trimming and ReadyToRun follow the
+    /// workload defaults on .NET 11; the desktop compiler flags (NativeAOT, single-file) never
+    /// apply.
     /// </summary>
     public static List<string> BuildCatalystCommand(
         string dotnetPath,
@@ -73,14 +75,9 @@ public static class ApplePublishCommands
     {
         var command = BuildAppleBase(dotnetPath, configuration, projectFilePath);
 
-        command.Add("-p:PublishTrimmed=true");
         command.Add("-p:PublishAot=false");
-        command.Add("-p:PublishReadyToRun=false");
         command.Add("-p:PublishSingleFile=false");
-        if (!configuration.PublishTrimmed)
-        {
-            command.Add("-p:TrimMode=copy");
-        }
+        AddTrimmingAndReadyToRun(command, configuration);
 
         if (!string.IsNullOrWhiteSpace(customTrimProperty))
         {
@@ -100,9 +97,8 @@ public static class ApplePublishCommands
         var runtimeIdentifier = configuration.RuntimeIdentifier.Trim();
         var isSimulatorRuntime = runtimeIdentifier.StartsWith("iossimulator-", StringComparison.OrdinalIgnoreCase);
 
-        var command = BuildDesktopBaselineStart(dotnetPath, configuration, projectFilePath);
+        var command = BuildAppleBaselineStart(dotnetPath, configuration, projectFilePath);
         command.Add("-p:UseAppHost=false");
-        command.Add("-p:PublishTrimmed=true");
         command.Add("-p:PublishSingleFile=false");
 
         if (!string.IsNullOrWhiteSpace(customTrimProperty))
@@ -127,10 +123,12 @@ public static class ApplePublishCommands
         string outputDirectory,
         string? customTrimProperty)
     {
-        var command = BuildDesktopBaselineStart(dotnetPath, configuration, projectFilePath);
-        command.Add("-p:PublishTrimmed=true");
+        var command = BuildAppleBaselineStart(dotnetPath, configuration, projectFilePath);
         command.Add("-p:PublishSingleFile=false");
-        command.Add("-p:TrimMode=copy");
+        if (ProjectInspector.GetTargetFrameworkVersion(configuration.TargetFramework) < 11)
+        {
+            command.Add("-p:TrimMode=copy");
+        }
 
         command.Add("-o");
         command.Add(outputDirectory);
@@ -155,12 +153,13 @@ public static class ApplePublishCommands
             $"-p:SelfContained={ToLowerInvariant(configuration.SelfContained)}"
         ];
 
-    private static List<string> BuildDesktopBaselineStart(
+    private static List<string> BuildAppleBaselineStart(
         string dotnetPath,
         PublishConfiguration configuration,
         string projectFilePath)
-        =>
-        [
+    {
+        var command = new List<string>
+        {
             dotnetPath,
             "publish",
             projectFilePath,
@@ -171,9 +170,41 @@ public static class ApplePublishCommands
             "-r",
             configuration.RuntimeIdentifier.Trim(),
             "-p:SelfContained=true",
-            "-p:PublishAot=false",
-            "-p:PublishReadyToRun=false"
-        ];
+            "-p:PublishAot=false"
+        };
+
+        // .NET 11 Apple precompiles with ReadyToRun by default; passing false would disable it.
+        if (ProjectInspector.GetTargetFrameworkVersion(configuration.TargetFramework) < 11)
+        {
+            command.Add("-p:PublishReadyToRun=false");
+        }
+
+        return command;
+    }
+
+    /// <summary>
+    /// Adds the trimming and ReadyToRun switches that differ by target framework. On .NET 11
+    /// neither property may be set: the workload owns both. On .NET 10 the Mono-era flags apply.
+    /// </summary>
+    private static void AddTrimmingAndReadyToRun(List<string> command, PublishConfiguration configuration)
+    {
+        if (ProjectInspector.GetTargetFrameworkVersion(configuration.TargetFramework) >= 11)
+        {
+            if (!configuration.PublishTrimmed)
+            {
+                command.Add("-p:MtouchLink=None");
+            }
+
+            return;
+        }
+
+        command.Add("-p:PublishTrimmed=true");
+        command.Add("-p:PublishReadyToRun=false");
+        if (!configuration.PublishTrimmed)
+        {
+            command.Add("-p:TrimMode=copy");
+        }
+    }
 
     private static string ToLowerInvariant(bool value) => value ? "true" : "false";
 }

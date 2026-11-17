@@ -83,6 +83,9 @@ public static class AndroidPublishCommands
             command.Add($"-p:AndroidEnableProfiledAot={ToLowerInvariant(configuration.EnableProfiledAot)}");
             command.Add("-p:PublishReadyToRun=false");
         }
+        // On net11.0-android no ReadyToRun property is emitted at all. CoreCLR turns partial R2R
+        // on by itself for a trimmed Release publish; passing PublishReadyToRun=false here would
+        // turn it off and contradict the checked, read-only option in the Build tab.
 
         AddTrimArgument(command, customTrimProperty, configuration.PublishTrimmed);
 

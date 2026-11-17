@@ -253,7 +253,10 @@
                                         </StackPanel>
                                         <StackPanel Orientation="Horizontal" Spacing="4"
                                                     ToolTip.Tip="{Binding PublishTrimmedDisabledReason, Converter={StaticResource OptionHelp}, ConverterParameter='Trimming (removing unused code) cuts the app size and can speed startup. The risk: reflection (code that finds types/methods by name) can call code that gets trimmed and then fail at runtime.'}">
-                                            <CheckBox Content="Publish trimmed" IsChecked="{Binding PublishTrimmed}" IsEnabled="{Binding IsPublishTrimmedEnabled}" Margin="0,4"/>
+                                            <CheckBox Content="Publish trimmed (automatic)" IsChecked="{Binding IsPublishTrimmedAutomatic}" IsEnabled="False" Margin="0,4"
+                                                      IsVisible="{Binding IsPublishTrimmedAutomatic}"/>
+                                            <CheckBox Content="Publish trimmed" IsChecked="{Binding PublishTrimmed}" IsEnabled="{Binding IsPublishTrimmedEnabled}" Margin="0,4"
+                                                      IsVisible="{Binding !IsPublishTrimmedAutomatic}"/>
                                             <Border Classes="option-info">
                                                 <TextBlock Text="i"/>
                                             </Border>
@@ -267,7 +270,10 @@
                                         </StackPanel>
                                         <StackPanel Orientation="Horizontal" Spacing="4"
                                                     ToolTip.Tip="{Binding ReadyToRunDisabledReason, Converter={StaticResource OptionHelp}, ConverterParameter='ReadyToRun (R2R): partially compiles code to native machine code when publishing. Improves startup vs JIT (Just-In-Time compilation, where code is compiled on first run), but makes the output larger and cannot be used with AOT.'}">
-                                            <CheckBox Content="ReadyToRun" IsChecked="{Binding PublishReadyToRun}" IsEnabled="{Binding IsReadyToRunCheckBoxEnabled}" Margin="0,4"/>
+                                            <CheckBox Content="ReadyToRun (automatic)" IsChecked="{Binding IsReadyToRunAutomatic}" IsEnabled="False" Margin="0,4"
+                                                      IsVisible="{Binding IsReadyToRunAutomatic}"/>
+                                            <CheckBox Content="ReadyToRun" IsChecked="{Binding PublishReadyToRun}" IsEnabled="{Binding IsReadyToRunCheckBoxEnabled}" Margin="0,4"
+                                                      IsVisible="{Binding !IsReadyToRunAutomatic}"/>
                                             <Border Classes="option-info">
                                                 <TextBlock Text="i"/>
                                             </Border>

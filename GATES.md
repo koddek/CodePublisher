@@ -118,3 +118,25 @@ ABANDON: G10 The .NET 11 wasm-tools bundle an Emscripten toolchain whose LLVM no
   CHECK: bash -c 'dotnet build CodePublisher.slnx --configuration Release --no-restore 2>&1 | grep -q "0 Warning(s)" && dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj --configuration Release --no-build -- --disable-logo --progress off 2>&1 | grep -q "succeeded: 558" && echo PLAY_GREEN_OK'
   EXPECT: PLAY_GREEN_OK
   EVIDENCE: automatic-evidence=v1; definition-sha256=ce360be49f1a9847c2b6d1a08cbca1417ee98f0326a211785b7ac8ffa3121b2b; exit=0; EXPECT=matched; output-sha256=13907dfa09940f484a074d2a9301a71a619d4c36e8152ae5a39e16face3f4cc5; output-bytes=14; shell=/bin/sh; cwd=/usr/local/repo/CodePublisher; path=1d1e1056edc2/32 entries
+
+## Per-platform .NET 11 option audit (2026-11-17)
+
+- [x] G23: .NET 11 Apple commands never emit the rejected PublishTrimmed property and let CoreCLR R2R stay on
+  CHECK: bash -c 'dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj --configuration Release --no-build -- --disable-logo --progress off --treenode-filter "/*/*/ApplePlatformNet11Tests/*" 2>&1 | grep -q "succeeded: 6" && echo APPLE_CMD_OK'
+  EXPECT: APPLE_CMD_OK
+  EVIDENCE: automatic-evidence=v1; definition-sha256=857a11b4ed9b7931d3b55258181949d8b295fca6d0b31ab23247b1e9854db7f5; exit=0; EXPECT=matched; output-sha256=6f7ff37836c6a82142bc1ca0358e84599c90a3d9a904dcfa4c9be2f0eb8e1970; output-bytes=13; shell=/bin/sh; cwd=/usr/local/repo/CodePublisher; path=1d1e1056edc2/32 entries
+
+- [x] G24: Apple option policy reports the automatic .NET 11 CoreCLR state for R2R and trimming
+  CHECK: bash -c 'dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj --configuration Release --no-build -- --disable-logo --progress off --treenode-filter "/*/*/ApplePlatformNet11Tests/*" 2>&1 | grep -q "succeeded: 6" && echo APPLE_POLICY_OK'
+  EXPECT: APPLE_POLICY_OK
+  EVIDENCE: automatic-evidence=v1; definition-sha256=3c15802f9b391f7046970803b0ac530f0d96b73a8fbc7367a32e6d48beb64ef1; exit=0; EXPECT=matched; output-sha256=241d0d602499065eb59cf4b3ab227b45212a2b2808df4a5046a211b993d87a58; output-bytes=16; shell=/bin/sh; cwd=/usr/local/repo/CodePublisher; path=1d1e1056edc2/32 entries
+
+- [x] G25: Desktop platforms keep manual R2R/AOT/single-file options with no automatic CoreCLR state
+  CHECK: bash -c 'dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj --configuration Release --no-build -- --disable-logo --progress off --treenode-filter "/*/*/DesktopNet11Tests/*" 2>&1 | grep -q "succeeded: 8" && echo DESKTOP_POLICY_OK'
+  EXPECT: DESKTOP_POLICY_OK
+  EVIDENCE: automatic-evidence=v1; definition-sha256=2ed1a4e10fc0e1873c21d6be296fd49ec789a687c5c6065d7883a3bef1d7d574; exit=0; EXPECT=matched; output-sha256=aa075a9d53e52614288d9a0de7baf225f91876e0eeed389dad4e87a2c59ba5a9; output-bytes=18; shell=/bin/sh; cwd=/usr/local/repo/CodePublisher; path=1d1e1056edc2/32 entries
+
+- [x] G26: The per-platform audit keeps the solution green with 579 passing tests
+  CHECK: bash -c 'dotnet build CodePublisher.slnx --configuration Release --no-restore 2>&1 | grep -q "0 Warning(s)" && dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj --configuration Release --no-build -- --disable-logo --progress off 2>&1 | grep -q "succeeded: 579" && echo PLATFORM_GREEN_OK'
+  EXPECT: PLATFORM_GREEN_OK
+  EVIDENCE: automatic-evidence=v1; definition-sha256=9dde6ac8e98ec0100baadbda3863be1f19b2331b82ceed5c63bbbd07abaabfef; exit=0; EXPECT=matched; output-sha256=18b02a688930ca3e67f6f0e891c4ea0df000173100d59415341f600081658efa; output-bytes=18; shell=/bin/sh; cwd=/usr/local/repo/CodePublisher; path=1d1e1056edc2/32 entries

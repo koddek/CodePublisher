@@ -30,4 +30,5 @@ public sealed record PublishSettingsState(
     bool CreateMappingFile = false,
     bool EnableMultiDex = false,
     bool UseAapt2 = true,
-    bool EnableDesugar = true);
+    bool EnableDesugar = true,
+    string Configuration = "Release");

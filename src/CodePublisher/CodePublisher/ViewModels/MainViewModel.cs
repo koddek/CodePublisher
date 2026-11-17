@@ -258,6 +258,7 @@ public partial class MainViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(PublishTrimmedDisabledReason))]
     [NotifyPropertyChangedFor(nameof(IsReadyToRunCheckBoxEnabled))]
     [NotifyPropertyChangedFor(nameof(ReadyToRunDisabledReason))]
+    [NotifyPropertyChangedFor(nameof(IsReadyToRunAutomatic))]
     [NotifyPropertyChangedFor(nameof(IsProfiledAotEnabled))]
     [NotifyPropertyChangedFor(nameof(ProfiledAotDisabledReason))]
     [NotifyPropertyChangedFor(nameof(IsPublishSingleFileEnabled))]
@@ -304,6 +305,8 @@ public partial class MainViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(PublishAotDisabledReason))]
     [NotifyPropertyChangedFor(nameof(IsPublishTrimmedEnabled))]
     [NotifyPropertyChangedFor(nameof(PublishTrimmedDisabledReason))]
+    [NotifyPropertyChangedFor(nameof(IsReadyToRunAutomatic))]
+    [NotifyPropertyChangedFor(nameof(IsPublishTrimmedAutomatic))]
     private string _targetFramework = "net11.0-android";
 
     [ObservableProperty]
@@ -318,6 +321,8 @@ public partial class MainViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(PublishCommand))]
+    [NotifyPropertyChangedFor(nameof(ReadyToRunDisabledReason))]
+    [NotifyPropertyChangedFor(nameof(IsReadyToRunAutomatic))]
     private string _configuration = "Release";
 
     [ObservableProperty]
@@ -357,6 +362,8 @@ public partial class MainViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(PublishTrimmedDisabledReason))]
     [NotifyPropertyChangedFor(nameof(IsPublishAotEnabled))]
     [NotifyPropertyChangedFor(nameof(PublishAotDisabledReason))]
+    [NotifyPropertyChangedFor(nameof(ReadyToRunDisabledReason))]
+    [NotifyPropertyChangedFor(nameof(IsReadyToRunAutomatic))]
     private bool _publishTrimmed;
 
     [ObservableProperty]
@@ -722,7 +729,13 @@ public partial class MainViewModel : ViewModelBase
 
     public bool IsUseAppHostEnabled => PublishOptionPolicy.IsUseAppHostEnabled(PublishPlatform);
 
-    public string ReadyToRunDisabledReason => PublishOptionPolicy.ReadyToRunDisabledReason(PublishAot, PublishPlatform, TargetFramework, RuntimeIdentifier);
+    public string ReadyToRunDisabledReason => PublishOptionPolicy.ReadyToRunDisabledReason(
+        PublishAot,
+        PublishPlatform,
+        TargetFramework,
+        RuntimeIdentifier,
+        Configuration,
+        PublishTrimmed);
 
     public string ProjectVersion => ProjectDisplayVersion;
 
@@ -1092,7 +1105,8 @@ public partial class MainViewModel : ViewModelBase
         CreateMappingFile,
         EnableMultiDex,
         UseAapt2,
-        EnableDesugar);
+        EnableDesugar,
+        Configuration);
 
     /// <summary>Tells the user what the option graph changed and what it can still offer.</summary>
     private void ReportPublishOptionChanges(PublishOptionResolution resolution)
@@ -2751,5 +2765,13 @@ public partial class MainViewModel : ViewModelBase
     }
 
     public bool IsReadyToRunEnabled => PublishOptionPolicy.IsReadyToRunEnabled(PublishAot, PublishPlatform, TargetFramework, RuntimeIdentifier);
+
+    /// <summary>True when the SDK sets ReadyToRun by itself (.NET 11 CoreCLR on mobile).</summary>
+    public bool IsReadyToRunAutomatic => PublishOptionPolicy.IsReadyToRunAutomatic(
+        PublishPlatform, TargetFramework, Configuration, PublishTrimmed);
+
+    /// <summary>True when the .NET 11 Apple workload owns trimming and MtouchLink controls it.</summary>
+    public bool IsPublishTrimmedAutomatic => PublishOptionPolicy.IsPublishTrimmedAutomatic(PublishPlatform, TargetFramework);
+
     public bool IsReadyToRunCheckBoxEnabled => IsEditorEnabled && IsReadyToRunEnabled;
 }

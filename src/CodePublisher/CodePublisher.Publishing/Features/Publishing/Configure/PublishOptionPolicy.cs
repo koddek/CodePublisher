@@ -27,21 +27,50 @@ public static class PublishOptionPolicy
         return DesktopPublishPolicy.IsReadyToRunEnabled(publishAot: false);
     }
 
+    /// <summary>
+    /// True when the SDK turns ReadyToRun on without a manual switch. This is a display concern:
+    /// the option is checked and disabled, and no ReadyToRun property is emitted for it.
+    /// </summary>
+    public static bool IsReadyToRunAutomatic(
+        string publishPlatform,
+        string? targetFramework,
+        string? configuration,
+        bool publishTrimmed)
+    {
+        if (string.Equals(publishPlatform, PublishPlatforms.Android, StringComparison.Ordinal))
+            return AndroidPublishPolicy.IsReadyToRunAutomatic(targetFramework, configuration, publishTrimmed);
+        if (string.Equals(publishPlatform, PublishPlatforms.Ios, StringComparison.Ordinal))
+            return ApplePublishPolicy.IsReadyToRunAutomatic(targetFramework);
+        if (string.Equals(publishPlatform, PublishPlatforms.MacOs, StringComparison.Ordinal)
+            && PublishPlatforms.IsMacCatalyst(targetFramework ?? string.Empty, string.Empty))
+            return ApplePublishPolicy.IsReadyToRunAutomatic(targetFramework);
+        return false;
+    }
+
+    /// <summary>True when the .NET 11 Apple workload sets PublishTrimmed and MtouchLink controls it.</summary>
+    public static bool IsPublishTrimmedAutomatic(string publishPlatform, string? targetFramework) =>
+        (string.Equals(publishPlatform, PublishPlatforms.Ios, StringComparison.Ordinal) ||
+         (string.Equals(publishPlatform, PublishPlatforms.MacOs, StringComparison.Ordinal)
+            && PublishPlatforms.IsMacCatalyst(targetFramework ?? string.Empty, string.Empty))) &&
+        ApplePublishPolicy.IsPublishTrimmedAutomatic(targetFramework);
+
     public static string ReadyToRunDisabledReason(
         bool publishAot,
         string publishPlatform,
         string? targetFramework = null,
-        string? runtimeIdentifier = null)
+        string? runtimeIdentifier = null,
+        string? configuration = null,
+        bool publishTrimmed = false)
     {
         if (publishAot)
             return "Disabled: AOT and ReadyToRun are mutually exclusive (dotnet/runtime#126598).";
         if (string.Equals(publishPlatform, PublishPlatforms.Android, StringComparison.Ordinal))
-            return AndroidPublishPolicy.ReadyToRunDisabledReason(targetFramework);
+            return AndroidPublishPolicy.ReadyToRunAutomaticReason(targetFramework, configuration, publishTrimmed);
         if (string.Equals(publishPlatform, PublishPlatforms.Ios, StringComparison.Ordinal))
-            return ApplePublishPolicy.ReadyToRunDisabledReason(publishPlatform);
+            return ApplePublishPolicy.ReadyToRunDisabledReason(publishPlatform, targetFramework);
         if (string.Equals(publishPlatform, PublishPlatforms.MacOs, StringComparison.Ordinal)
             && PublishPlatforms.IsMacCatalyst(targetFramework ?? string.Empty, runtimeIdentifier ?? string.Empty))
-            return ApplePublishPolicy.ReadyToRunDisabledReason(publishPlatform);
+            return ApplePublishPolicy.ReadyToRunDisabledReason(publishPlatform, targetFramework);
         return string.Empty;
     }
 
@@ -114,10 +143,10 @@ public static class PublishOptionPolicy
         if (!selfContained)
             return "Trimming requires a self-contained publish.";
         if (string.Equals(publishPlatform, PublishPlatforms.Ios, StringComparison.Ordinal))
-            return ApplePublishPolicy.PublishTrimmedDisabledReason(publishPlatform);
+            return ApplePublishPolicy.PublishTrimmedDisabledReason(publishPlatform, targetFramework);
         if (string.Equals(publishPlatform, PublishPlatforms.MacOs, StringComparison.Ordinal)
             && PublishPlatforms.IsMacCatalyst(targetFramework, runtimeIdentifier))
-            return ApplePublishPolicy.PublishTrimmedDisabledReason(publishPlatform);
+            return ApplePublishPolicy.PublishTrimmedDisabledReason(publishPlatform, targetFramework);
         return string.Empty;
     }
 

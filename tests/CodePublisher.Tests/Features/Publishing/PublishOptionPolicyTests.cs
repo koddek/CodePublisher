@@ -69,6 +69,39 @@ public sealed class PublishOptionPolicyTests
     }
 
     [Test]
+    [Arguments("net11.0-android", "Release", true, true)]
+    [Arguments("net11.0-android", "Debug", true, false)]
+    [Arguments("net11.0-android", "Release", false, false)]
+    [Arguments("net10.0-android", "Release", true, false)]
+    public async Task IsReadyToRunAutomatic_MatchesCoreClrReleaseTrimming(
+        string targetFramework,
+        string configuration,
+        bool publishTrimmed,
+        bool expected)
+    {
+        // SDK 11.0.100 evaluates PublishReadyToRun to true for a net11.0-android Release
+        // publish whenever PublishTrimmed is true. The checkbox reflects that SDK decision.
+        var result = PublishOptionPolicy.IsReadyToRunAutomatic(
+            PublisherService.AndroidPlatform, targetFramework, configuration, publishTrimmed);
+
+        await Assert.That(result).IsEqualTo(expected);
+    }
+
+    [Test]
+    public async Task ReadyToRunDisabledReason_ExplainsTheAutomaticCoreClrSetting()
+    {
+        var reason = PublishOptionPolicy.ReadyToRunDisabledReason(
+            publishAot: false,
+            publishPlatform: PublisherService.AndroidPlatform,
+            targetFramework: "net11.0-android",
+            runtimeIdentifier: "android-arm64",
+            configuration: "Release",
+            publishTrimmed: true);
+
+        await Assert.That(reason).Contains("on automatically");
+    }
+
+    [Test]
     public async Task IsReadyToRunEnabled_DisablesMacCatalyst()
     {
         var result = PublishOptionPolicy.IsReadyToRunEnabled(

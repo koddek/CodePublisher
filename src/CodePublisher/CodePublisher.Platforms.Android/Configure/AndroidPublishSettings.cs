@@ -25,8 +25,10 @@ public static class AndroidPublishSettings
         var enableDesugar = state.EnableDesugar;
 
         // Android trimming follows the linker: a linking mode turns the trimmer on, and the
-        // trimmer needs a self-contained publish.
+        // trimmer needs a self-contained publish. CoreCLR then turns partial ReadyToRun on by
+        // itself for a trimmed Release publish; no MSBuild property is emitted for it.
         var trimmed = state.SelfContained && AndroidPublishPolicy.IsAndroidAotEnabled(state.AndroidLinkMode);
+        var readyToRun = AndroidPublishPolicy.IsReadyToRunAutomatic(state.TargetFramework, state.Configuration, trimmed);
 
         // The APK is always built on Android: it is the fast artifact for local testing and
         // device deploys. Checking AAB adds the store bundle to the same publish, so a release
@@ -47,6 +49,7 @@ public static class AndroidPublishSettings
             AndroidLinkTool = androidLinkTool,
             AndroidDexTool = androidDexTool,
             PublishTrimmed = trimmed,
+            PublishReadyToRun = readyToRun,
             RunAotCompilation = runAot,
             EnableProfiledAot = profiledAot,
             CreateMappingFile = createMappingFile,
