@@ -33,5 +33,6 @@ dotnet run --project src/CodePublisher/CodePublisher.Desktop/CodePublisher.Deskt
 
 ## Release notes
 
-- Tag-based GitHub Actions builds are intended to produce desktop release archives.
+- Releases are annotated tags pushed by hand. No GitHub Actions run on pushes or tags.
+- Verify the build and the test suite locally before tagging; see the root README for the commands.
 - Keep release changes easy to audit: prefer one logical change per commit where practical.

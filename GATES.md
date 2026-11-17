@@ -5,9 +5,9 @@ OWNS: global.json, Directory.Build.props, Directory.Packages.props, Directory.Ve
 Scope: Move the whole repository (app, hosts, tests, tooling, docs) to the .NET 11 SDK and net11.0 family, bump NuGet packages to the latest compatible stable, adopt the C# 15 features that improve the implementation, split the publishing code into one isolated library per publish platform (Android, Apple for iOS+Mac Catalyst, macOS, Windows, Linux, NuGet) with a shared kernel and a composition root, keep net8/9/10 user projects publishable, and fix the Android publish output-directory handling and the errors that surface for net11 Android publishes.
 
 - [x] G1: .NET 11 is pinned and every production project targets net11.0 (tests may carry net10 TFMs as inspection data)
-  CHECK: bash -c 'grep -q "\"version\": \"11.0.100\"" global.json && ! grep -rn "net10\.0" --include="*.csproj" src && ! grep -rn "net10\.0-browser\|10.0.100\|10.0.x" global.json .github/workflows/*.yml Directory.Build.props Directory.Packages.props && echo NET11_PIN_OK'
+  CHECK: bash -c 'grep -q "\"version\": \"11.0.100\"" global.json && ! grep -rn "net10\.0" --include="*.csproj" src && ! grep -rn "net10\.0-browser\|10.0.100\|10.0.x" global.json Directory.Build.props Directory.Packages.props && echo NET11_PIN_OK'
   EXPECT: NET11_PIN_OK
-  EVIDENCE: automatic-evidence=v1; definition-sha256=083d90bb9edc3ec13b8d5d5348404b97b73f3a96f65e8497ccc9dc91e363ef77; exit=0; EXPECT=matched; output-sha256=c6abf1447575289b9db28ef0a786458a17ee854d00a64976ba5f07979d692047; output-bytes=13; shell=/bin/sh; cwd=/usr/local/repo/CodePublisher; path=de0ff8374eb0/32 entries
+  EVIDENCE: automatic-evidence=v1; definition-sha256=5392fb75be0332f97a73ad8677795dd802513c150b585a409aa39a8eb0a244f4; exit=0; EXPECT=matched; output-sha256=c6abf1447575289b9db28ef0a786458a17ee854d00a64976ba5f07979d692047; output-bytes=13; shell=/bin/sh; cwd=/usr/local/repo/CodePublisher; path=1d1e1056edc2/32 entries
 
 - [x] G2: Central package versions are on the latest stable line
   CHECK: python3 -c "import re,sys; t=open('Directory.Packages.props').read(); assert 'Include=\"Avalonia\" Version=\"12.1.6\"' in t; assert 'Include=\"TUnit\" Version=\"1.83.0\"' in t; assert 'Avalonia.Diagnostics\" Version=\"11.3.23\"' in t; assert 'SkiaSharp\" Version=\"3.119.4\"' in t; assert 'CommunityToolkit.Mvvm\" Version=\"8.4.2\"' in t; assert 'QRCoder\" Version=\"1.8.1\"' in t; assert 'AndroidX' not in t; print('PKGS_OK')"
@@ -53,10 +53,10 @@ Scope: Move the whole repository (app, hosts, tests, tooling, docs) to the .NET 
 - [ ] G10: Browser host builds and links the native SkiaSharp library on net11.0-browser
 ABANDON: G10 The .NET 11 wasm-tools bundle an Emscripten toolchain whose LLVM no longer emits the `saveSetjmp`/`testSetjmp` symbols referenced by SkiaSharp's prebuilt WebAssembly native assets, so the link fails (verified locally 2026-11-11; upstream AvaloniaUI/Avalonia#21700). The user decided to drop the browser host from the .NET 11 line on 2026-11-11 until Avalonia ships WebAssembly assets built for the new toolchain; the host stays in git history. Handoff: restore `CodePublisher.Browser` from git history and re-enable this gate when the compatible assets publish.
 
-- [x] G11: CI and release workflows pin 11.0.x; docs and DOX files describe the net11 reality
-  CHECK: bash -c 'grep -q "11.0.x" .github/workflows/ci.yml && grep -q "11.0.x" .github/workflows/release.yml && grep -q "net11.0" docs/dotnet-10-11-publishing-research.md && grep -q "Platforms.Android" src/AGENTS.md && ! grep -q "until the .NET 11 upgrade" src/AGENTS.md && echo DOX_OK'
+- [x] G11: No GitHub Actions workflows remain; docs and DOX files describe the net11 reality
+  CHECK: bash -c 'test ! -d .github/workflows && grep -q "net11.0" docs/dotnet-10-11-publishing-research.md && grep -q "Platforms.Android" src/AGENTS.md && ! grep -q "until the .NET 11 upgrade" src/AGENTS.md && echo DOX_OK'
   EXPECT: DOX_OK
-  EVIDENCE: automatic-evidence=v1; definition-sha256=4cfd727940d89a7aa8e908b58880dc8f4e333b758f089e23519cde1c7b7a306e; exit=0; EXPECT=matched; output-sha256=e220f07ce2ea4c5a2be24ca7b962c1514e154cec5fe518cc9f1b800085aabbb4; output-bytes=7; shell=/bin/sh; cwd=/usr/local/repo/CodePublisher; path=de0ff8374eb0/32 entries
+  EVIDENCE: automatic-evidence=v1; definition-sha256=e9a5b9b5386a4c6bc9be96ea0991ab7d5693dfc1b14c9502c03c08d9a4d1202e; exit=0; EXPECT=matched; output-sha256=e220f07ce2ea4c5a2be24ca7b962c1514e154cec5fe518cc9f1b800085aabbb4; output-bytes=7; shell=/bin/sh; cwd=/usr/local/repo/CodePublisher; path=1d1e1056edc2/32 entries
 
 - [x] G12: C# 15 is in effect via the net11.0 target framework on every project (no pinned LangVersion overrides)
   CHECK: bash -c 'test -z "$(grep -rn "<LangVersion>" --include="*.csproj" src tests)" && echo CSHARP_OK'

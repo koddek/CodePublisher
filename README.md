@@ -91,7 +91,7 @@ dotnet run --project src/CodePublisher/CodePublisher.Desktop/CodePublisher.Deskt
 ```text
 CodePublisher/
 ├── .github/
-│   └── workflows/
+│   └── ISSUE_TEMPLATE/
 ├── docs/
 │   └── codepublisher-icon.png
 ├── Directory.Build.props
@@ -127,14 +127,12 @@ inspection, and the process runner. `CodePublisher.Publishing` composes the libr
 the orchestration (`PublisherService`). The app project holds the views, the view models, and
 the Avalonia-bound adapters. Every rule in these libraries is testable without a window.
 
-## GitHub Actions
+## Releases
 
-This repository includes Actions workflows for:
-
-- CI validation on pushes and pull requests
-- cross-platform desktop publish packaging on version tags
-
-That gives the repo a solid starting point for sharing on GitHub without having to set up the basics later.
+There are no GitHub Actions workflows. Pushes and tags run no automation. A release is an
+annotated tag created locally and pushed, for example `git tag -a v0.12.4 -m "Code Publisher 0.12.4"`
+followed by `git push origin v0.12.4`. Build and test locally before tagging using the commands
+under [Development notes](#development-notes).
 
 ## Roadmap and wishlist
 
