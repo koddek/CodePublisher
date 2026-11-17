@@ -140,3 +140,20 @@ ABANDON: G10 The .NET 11 wasm-tools bundle an Emscripten toolchain whose LLVM no
   CHECK: bash -c 'dotnet build CodePublisher.slnx --configuration Release --no-restore 2>&1 | grep -q "0 Warning(s)" && dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj --configuration Release --no-build -- --disable-logo --progress off 2>&1 | grep -q "succeeded: 579" && echo PLATFORM_GREEN_OK'
   EXPECT: PLATFORM_GREEN_OK
   EVIDENCE: automatic-evidence=v1; definition-sha256=9dde6ac8e98ec0100baadbda3863be1f19b2331b82ceed5c63bbbd07abaabfef; exit=0; EXPECT=matched; output-sha256=18b02a688930ca3e67f6f0e891c4ea0df000173100d59415341f600081658efa; output-bytes=18; shell=/bin/sh; cwd=/usr/local/repo/CodePublisher; path=1d1e1056edc2/32 entries
+
+## Google Play state-holder adoption (2026-11-17)
+
+- [x] G27: Stage, status and sign-in are projected from the holder instead of duplicated in the view model
+  CHECK: python3 -c "p='src/CodePublisher/CodePublisher/Features/GooglePlay/GooglePlayViewModel.cs'; t=open(p).read(); assert 'public GooglePlayPublishStage Stage => _stateHolder.Current.Stage;' in t; assert 'public string StatusHeadline => _stateHolder.Current.StatusHeadline;' in t; assert 'public bool IsSignedIn => _stateHolder.Current.IsSignedIn;' in t; assert '_statusTone' not in t; assert 'private GooglePlayPublishStage _stage' not in t; print('STATE_HOLDER_OK')"
+  EXPECT: STATE_HOLDER_OK
+  EVIDENCE: automatic-evidence=v1; definition-sha256=962ad89a21a2d58b9b3544edb32e6c002d590d1f9999a984b71992adbf015e82; exit=0; EXPECT=matched; output-sha256=f6253da88de1bf027d241888d402b351cd80d10cd837330d7e69318778a7792c; output-bytes=16; shell=/bin/sh; cwd=/usr/local/repo/CodePublisher; path=1d1e1056edc2/32 entries
+
+- [x] G28: The holder notifies once per transition, supports a batched status change, and releases subscribers on dispose
+  CHECK: bash -c 'dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj --configuration Release --no-build -- --disable-logo --progress off --treenode-filter "/*/*/GooglePlayStateHolderTests/*" 2>&1 | grep -q "succeeded: 6" && echo HOLDER_TESTS_OK'
+  EXPECT: HOLDER_TESTS_OK
+  EVIDENCE: automatic-evidence=v1; definition-sha256=8748852907e71deceded345498e8f7d4211c54fd198882e0e43abf33afaa81a2; exit=0; EXPECT=matched; output-sha256=46992b2f86643d41c6b74e7d9183f80fcbcb3b1f4618269d15e6ae9a9e5d8fce; output-bytes=16; shell=/bin/sh; cwd=/usr/local/repo/CodePublisher; path=1d1e1056edc2/32 entries
+
+- [x] G29: The state-holder refactor keeps the solution green with 582 passing tests
+  CHECK: bash -c 'dotnet build CodePublisher.slnx --configuration Release --no-restore 2>&1 | grep -q "0 Warning(s)" && dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj --configuration Release --no-build -- --disable-logo --progress off 2>&1 | grep -q "succeeded: 582" && echo HOLDER_GREEN_OK'
+  EXPECT: HOLDER_GREEN_OK
+  EVIDENCE: automatic-evidence=v1; definition-sha256=0045eedf93b38494f070b388bb63a7d8e57fe65ff8de3f8bf4dd98c10e0652cc; exit=0; EXPECT=matched; output-sha256=1bfe7c103afaee0637c591a04cce2e5fdd127c55c03b7f34391de4631a5f6b35; output-bytes=16; shell=/bin/sh; cwd=/usr/local/repo/CodePublisher; path=1d1e1056edc2/32 entries

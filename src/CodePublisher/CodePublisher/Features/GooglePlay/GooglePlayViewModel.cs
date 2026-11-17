@@ -16,7 +16,7 @@ using CodePublisher.Services;
 
 namespace CodePublisher.Features.GooglePlay;
 
-public sealed partial class GooglePlayViewModel : ObservableObject
+public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
 {
     private readonly PublisherService _publisherService;
     private readonly DesktopInteractionService _desktopInteractionService;
@@ -29,8 +29,6 @@ public sealed partial class GooglePlayViewModel : ObservableObject
     private readonly GooglePlayStateHolder _stateHolder = new();
     private CancellationTokenSource? _operationCts;
     private GooglePlayProjectContext? _context;
-    private GooglePlayPublishStage _stage = GooglePlayPublishStage.Idle;
-    private GooglePlayStatusTone _statusTone = GooglePlayStatusTone.Info;
     private bool _isProductionSelected;
 
     [ObservableProperty]
@@ -66,14 +64,14 @@ public sealed partial class GooglePlayViewModel : ObservableObject
     [ObservableProperty]
     private string activity = "Connect a Google account to begin.";
 
-    [ObservableProperty]
-    private string statusHeadline = "Not connected";
+    /// <summary>Status text is owned by the state holder; the view model only projects it.</summary>
+    public string StatusHeadline => _stateHolder.Current.StatusHeadline;
 
-    [ObservableProperty]
-    private string statusDetail = "Your credentials stay in memory for this session.";
+    /// <summary>Status detail is owned by the state holder; the view model only projects it.</summary>
+    public string StatusDetail => _stateHolder.Current.StatusDetail;
 
-    [ObservableProperty]
-    private bool isSignedIn;
+    /// <summary>Sign-in state is owned by the state holder; the view model only projects it.</summary>
+    public bool IsSignedIn => _stateHolder.Current.IsSignedIn;
 
     public ObservableCollection<GooglePlayEnvironmentVariableViewModel> EnvironmentVariables { get; } = [];
 
@@ -141,6 +139,7 @@ public sealed partial class GooglePlayViewModel : ObservableObject
         _signingWorkflow = signingWorkflow;
         _environmentVariableService = environmentVariableService;
         _openSigning = openSigning;
+        _stateHolder.OnChange += NotifyStateChanged;
         RefreshEnvironmentVariables();
         RefreshEnvironmentStatus();
     }
@@ -307,12 +306,13 @@ public sealed partial class GooglePlayViewModel : ObservableObject
     public bool CanPublish => IsDesktopSession && IsProjectReady && IsSignedIn && SelectedAccount is not null && SelectedTrack is not null && !IsBusy && !string.IsNullOrWhiteSpace(ReleaseName) && HasSigningKey && !string.IsNullOrWhiteSpace(ReleaseNotes);
     public bool IsReleaseReady => !string.IsNullOrWhiteSpace(ReleaseName) && !string.IsNullOrWhiteSpace(ReleaseNotes);
     public bool IsProductionSelected => _isProductionSelected;
-    public GooglePlayStatusTone StatusTone => _statusTone;
-    public bool IsStatusSuccess => _statusTone == GooglePlayStatusTone.Success;
-    public bool IsStatusWarning => _statusTone == GooglePlayStatusTone.Warning;
-    public bool IsStatusError => _statusTone == GooglePlayStatusTone.Error;
-    public bool IsStatusInfo => _statusTone is GooglePlayStatusTone.Info or GooglePlayStatusTone.Progress;
-    public double ProgressValue => _stage switch
+    public GooglePlayStatusTone StatusTone => _stateHolder.Current.StatusTone;
+    public bool IsStatusSuccess => StatusTone == GooglePlayStatusTone.Success;
+    public bool IsStatusWarning => StatusTone == GooglePlayStatusTone.Warning;
+    public bool IsStatusError => StatusTone == GooglePlayStatusTone.Error;
+    public bool IsStatusInfo => StatusTone is GooglePlayStatusTone.Info or GooglePlayStatusTone.Progress;
+    public GooglePlayPublishStage Stage => _stateHolder.Current.Stage;
+    public double ProgressValue => Stage switch
     {
         GooglePlayPublishStage.Building => 20,
         GooglePlayPublishStage.Uploading => 55,
@@ -322,7 +322,6 @@ public sealed partial class GooglePlayViewModel : ObservableObject
         _ => 0
     };
     public bool IsProgressVisible => IsBusy;
-    public GooglePlayPublishStage Stage => _stage;
     public GooglePlaySigningKeyInfo? SigningKey => SigningKeyInfo;
 
     public string GoogleClientId => _environmentVariableService.GoogleClientId ?? string.Empty;
@@ -445,25 +444,40 @@ public sealed partial class GooglePlayViewModel : ObservableObject
         }
     }
 
-    private void SetStatus(string headline, string detail, GooglePlayStatusTone tone)
-    {
+    private void SetStatus(string headline, string detail, GooglePlayStatusTone tone) =>
         _stateHolder.SetStatus(headline, detail, tone);
-        StatusHeadline = headline;
-        StatusDetail = detail;
-        _statusTone = tone;
+
+    private void SetStage(GooglePlayPublishStage stage) =>
+        _stateHolder.SetStage(stage);
+
+    /// <summary>
+    /// The one place that reacts to a holder transition. Every projected property and its
+    /// dependents are refreshed here, so callers never fan out property-changed notifications.
+    /// </summary>
+    private void NotifyStateChanged()
+    {
+        OnPropertyChanged(nameof(StatusHeadline));
+        OnPropertyChanged(nameof(StatusDetail));
         OnPropertyChanged(nameof(StatusTone));
         OnPropertyChanged(nameof(IsStatusSuccess));
         OnPropertyChanged(nameof(IsStatusWarning));
         OnPropertyChanged(nameof(IsStatusError));
         OnPropertyChanged(nameof(IsStatusInfo));
-    }
-
-    private void SetStage(GooglePlayPublishStage stage)
-    {
-        _stage = stage;
-        _stateHolder.SetStage(stage);
         OnPropertyChanged(nameof(Stage));
         OnPropertyChanged(nameof(ProgressValue));
+        OnPropertyChanged(nameof(IsSignedIn));
+        OnPropertyChanged(nameof(ReadinessSummary));
+        OnPropertyChanged(nameof(CanPublish));
+        OnPropertyChanged(nameof(IsReadyToSubmit));
+        OnPropertyChanged(nameof(HasSigningKey));
+        OnPropertyChanged(nameof(IsUploadKeyRequired));
+        NotifyCommands();
+    }
+
+    public void Dispose()
+    {
+        _stateHolder.OnChange -= NotifyStateChanged;
+        _stateHolder.Dispose();
     }
 
     [RelayCommand(CanExecute = nameof(CanClearSession))]
@@ -510,7 +524,6 @@ public sealed partial class GooglePlayViewModel : ObservableObject
             var account = await _authenticationWorkflow.SignInAsync(cancellationToken);
             UpsertAccount(account);
             SelectedAccount = account;
-            IsSignedIn = true;
             await LoadTracksAsync(cancellationToken);
         }, "Connecting Google account");
     }
@@ -547,7 +560,6 @@ public sealed partial class GooglePlayViewModel : ObservableObject
             Accounts.Remove(SelectedAccount);
             SelectedAccount = Accounts.FirstOrDefault();
             Tracks.Clear();
-            IsSignedIn = SelectedAccount is not null;
         }
     }
 
@@ -678,10 +690,9 @@ public sealed partial class GooglePlayViewModel : ObservableObject
                 "RELEASE_LIFECYCLE_STATE_PUBLISHED" => GooglePlayPublishStage.Published,
                 "RELEASE_LIFECYCLE_STATE_IN_REVIEW" => GooglePlayPublishStage.InReview,
                 "RELEASE_LIFECYCLE_STATE_NOT_APPROVED" => GooglePlayPublishStage.Failed,
-                _ => _stage
+                _ => Stage
             };
-            SetStage(resolvedStage);
-            StatusHeadline = state switch
+            var headline = state switch
             {
                 "RELEASE_LIFECYCLE_STATE_PUBLISHED" => "Published",
                 "RELEASE_LIFECYCLE_STATE_IN_REVIEW" => "In review",
@@ -689,14 +700,15 @@ public sealed partial class GooglePlayViewModel : ObservableObject
                 "RELEASE_LIFECYCLE_STATE_APPROVED_NOT_PUBLISHED" => "Approved, waiting to publish",
                 _ => state.Replace("RELEASE_LIFECYCLE_STATE_", string.Empty).ToLowerInvariant()
             };
-            SetStatus(
-                StatusHeadline,
-                StatusHeadline == "Rejected"
+            _stateHolder.SetStageAndStatus(
+                resolvedStage,
+                headline,
+                headline == "Rejected"
                     ? "Google Play rejected the release. Open Play Console to view the policy reason."
                     : $"Current Google Play state: {state}",
-                StatusHeadline == "Rejected" ? GooglePlayStatusTone.Error :
-                StatusHeadline == "Published" ? GooglePlayStatusTone.Success :
-                StatusHeadline == "In review" ? GooglePlayStatusTone.Progress : GooglePlayStatusTone.Warning);
+                headline == "Rejected" ? GooglePlayStatusTone.Error :
+                headline == "Published" ? GooglePlayStatusTone.Success :
+                headline == "In review" ? GooglePlayStatusTone.Progress : GooglePlayStatusTone.Warning);
         }, "Checking Google Play status");
     }
 
@@ -1467,8 +1479,6 @@ public sealed partial class GooglePlayViewModel : ObservableObject
     partial void OnSelectedAccountChanged(GooglePlayAccountInfo? value)
     {
         _stateHolder.SetAccount(value);
-        IsSignedIn = value is not null;
-        OnPropertyChanged(nameof(IsSignedIn));
         OnPropertyChanged(nameof(ReadinessSummary));
         OnPropertyChanged(nameof(CanPublish));
         OnPropertyChanged(nameof(IsReadyToSubmit));

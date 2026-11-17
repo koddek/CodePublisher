@@ -28,6 +28,53 @@ public sealed class GooglePlayStateHolderTests
     }
 
     [Test]
+    public async Task OnChange_FiresOncePerCommand()
+    {
+        var holder = new GooglePlayStateHolder();
+        var changes = 0;
+        holder.OnChange += () => changes++;
+
+        holder.SetStage(GooglePlayPublishStage.Uploading);
+
+        await Assert.That(changes).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task SetStageAndStatus_NotifiesOnceForBothChanges()
+    {
+        var holder = new GooglePlayStateHolder();
+        var changes = 0;
+        holder.OnChange += () => changes++;
+
+        holder.SetStageAndStatus(
+            GooglePlayPublishStage.Published,
+            "Published",
+            "Current Google Play state: published",
+            GooglePlayStatusTone.Success);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(changes).IsEqualTo(1);
+            await Assert.That(holder.Current.Stage).IsEqualTo(GooglePlayPublishStage.Published);
+            await Assert.That(holder.Current.StatusHeadline).IsEqualTo("Published");
+            await Assert.That(holder.Current.StatusTone).IsEqualTo(GooglePlayStatusTone.Success);
+        }
+    }
+
+    [Test]
+    public async Task Dispose_RemovesSubscribers()
+    {
+        var holder = new GooglePlayStateHolder();
+        var changes = 0;
+        holder.OnChange += () => changes++;
+
+        holder.Dispose();
+        holder.SetStage(GooglePlayPublishStage.Uploading);
+
+        await Assert.That(changes).IsEqualTo(0);
+    }
+
+    [Test]
     public async Task ClearSession_RemovesAccountAndReleaseState()
     {
         var holder = new GooglePlayStateHolder();

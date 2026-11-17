@@ -3,10 +3,17 @@ using CodePublisher.Features.GooglePlay.Models;
 
 namespace CodePublisher.Features.GooglePlay.State;
 
-public sealed class GooglePlayStateHolder
+public sealed class GooglePlayStateHolder : IDisposable
 {
     private readonly object _gate = new();
     private GooglePlayStateSnapshot _snapshot = GooglePlayStateSnapshot.Empty;
+
+    /// <summary>
+    /// Raised once after any command changes the snapshot. The view model subscribes once and
+    /// refreshes every derived property from a single notification instead of each caller
+    /// fanning out property-changed notifications by hand.
+    /// </summary>
+    public event Action? OnChange;
 
     public GooglePlayStateSnapshot Current
     {
@@ -82,6 +89,22 @@ public sealed class GooglePlayStateHolder
         });
     }
 
+    /// <summary>
+    /// Applies a status check in one transition. Stage and status change together after a status
+    /// check, so the subscriber is notified once rather than twice.
+    /// </summary>
+    public void SetStageAndStatus(
+        GooglePlayPublishStage stage,
+        string headline,
+        string detail,
+        GooglePlayStatusTone tone) => Update(snapshot => snapshot with
+        {
+            Stage = stage,
+            StatusHeadline = headline,
+            StatusDetail = detail,
+            StatusTone = tone
+        });
+
     public void ResetRelease()
     {
         Update(snapshot => snapshot with
@@ -116,5 +139,13 @@ public sealed class GooglePlayStateHolder
         {
             _snapshot = transition(_snapshot);
         }
+
+        OnChange?.Invoke();
+    }
+
+    public void Dispose()
+    {
+        // Release every subscriber so a disposed holder cannot keep a view model alive.
+        OnChange = null;
     }
 }
