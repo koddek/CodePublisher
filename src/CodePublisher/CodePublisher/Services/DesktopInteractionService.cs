@@ -202,16 +202,20 @@ public sealed class DesktopInteractionService
         return result.Count > 0 ? result[0].TryGetLocalPath() : null;
     }
 
-    /// <summary>Picks one or more files, used when sending files to a device.</summary>
-    public async Task<IReadOnlyList<string>> PickFilesAsync(string title, string? startPath = null)
+    /// <summary>Picks one or more files, used when sending files to a device or adding store images.</summary>
+    public async Task<IReadOnlyList<string>> PickFilesAsync(
+        string title,
+        string? startPath = null,
+        IEnumerable<FilePickerFileType>? fileTypeFilter = null)
     {
         var folder = await TryGetFolderAsync(startPath);
+        var filter = fileTypeFilter?.ToList() ?? [new FilePickerFileType("All files") { Patterns = ["*.*"] }];
         var result = await Window.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
             Title = title,
             AllowMultiple = true,
             SuggestedStartLocation = folder,
-            FileTypeFilter = [new FilePickerFileType("All files") { Patterns = ["*.*"] }]
+            FileTypeFilter = filter
         });
 
         return result

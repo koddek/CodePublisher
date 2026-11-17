@@ -275,6 +275,47 @@
 
             <Border Classes="card">
                 <StackPanel Spacing="12">
+                    <TextBlock Text="Store listing images" Classes="section-title"/>
+                    <TextBlock Classes="section-copy" Margin="0"
+                               Text="Optional. Images upload with the next publish and appear on the store listing after Play review. Play requires JPEG or PNG; phone and tablet screenshots have their own slots."/>
+                    <TextBlock Text="{Binding StoreImageSummary}" Classes="section-copy" Margin="0"/>
+                    <WrapPanel ItemSpacing="8" LineSpacing="8">
+                        <Button Content="Add phone screenshots" Command="{Binding AddPhoneScreenshotsCommand}"
+                                IsEnabled="{Binding CanManageStoreImages}"/>
+                        <Button Content="Add other images" Command="{Binding AddStoreImagesCommand}"
+                                IsEnabled="{Binding CanManageStoreImages}"/>
+                    </WrapPanel>
+                    <ItemsControl ItemsSource="{Binding StoreImages}" IsVisible="{Binding HasStoreImages}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{DynamicResource InfoBannerBackgroundColor}" BorderBrush="{DynamicResource InfoBannerBorderColor}"
+                                        BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,8">
+                                    <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="6">
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding Label}" FontSize="12" FontWeight="SemiBold"/>
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Language" FontSize="11" Foreground="{DynamicResource TextSecondaryColor}"/>
+                                        <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Language}" PlaceholderText="en-US"/>
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="File" FontSize="11" Foreground="{DynamicResource TextSecondaryColor}"/>
+                                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding FileName}" FontSize="12" TextWrapping="Wrap"/>
+                                        <StackPanel Grid.Row="0" Grid.Column="2" Grid.RowSpan="3" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                            <Button Content="Change" Command="{Binding BrowseCommand}" ToolTip.Tip="{Binding Hint}"/>
+                                            <Button Content="Remove" Command="{Binding RemoveCommand}"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Signing key upgrades" FontSize="12" FontWeight="SemiBold"/>
+                        <TextBlock Classes="section-copy" Margin="0"
+                                   Text="The Play API rotates keys only for self-hosted Cloud KMS. Standard Play App Signing upgrades are done in Play Console."/>
+                        <Button Content="Open Play App Signing guide" Command="{Binding OpenAppSigningHelpCommand}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <Border Classes="card">
+                <StackPanel Spacing="12">
                     <TextBlock Text="Publish" Classes="section-title"/>
                     <TextBlock Text="{Binding Activity}" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondaryColor}"/>
                     <ProgressBar Value="{Binding ProgressValue}" IsVisible="{Binding IsProgressVisible}" Minimum="0" Maximum="100"/>

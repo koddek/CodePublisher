@@ -13,7 +13,7 @@ public static class IosProjectIdentifier
         string projectName,
         IReadOnlyDictionary<string, string>? evaluated)
     {
-        var evaluatedId = ProjectIdentifier.FromEvaluated(evaluated, "ApplicationId", "CFBundleIdentifier");
+        var evaluatedId = evaluated["ApplicationId", "CFBundleIdentifier"];
         if (!string.IsNullOrWhiteSpace(evaluatedId))
         {
             return evaluatedId;

@@ -16,7 +16,7 @@ public static class AndroidProjectIdentifier
         IReadOnlyDictionary<string, string>? evaluated)
     {
         // 1. MSBuild evaluated properties (ApplicationId / PackageName)
-        var evaluatedId = ProjectIdentifier.FromEvaluated(evaluated, "ApplicationId", "PackageName");
+        var evaluatedId = evaluated["ApplicationId", "PackageName"];
         if (!string.IsNullOrWhiteSpace(evaluatedId))
         {
             return evaluatedId;

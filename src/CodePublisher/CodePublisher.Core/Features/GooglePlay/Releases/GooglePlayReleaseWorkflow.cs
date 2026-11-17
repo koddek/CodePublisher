@@ -1,3 +1,4 @@
+using CodePublisher.Features.GooglePlay.Images;
 using CodePublisher.Features.GooglePlay.Models;
 using CodePublisher.Features.GooglePlay.Services;
 
@@ -21,7 +22,8 @@ public sealed class GooglePlayReleaseWorkflow
         IReadOnlyList<GooglePlayReleaseNote> releaseNotes,
         int rolloutPercentage,
         Action<string> writeOutput,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken,
+        IReadOnlyList<GooglePlayStoreImage>? storeImages = null) =>
         _apiService.PublishAsync(
             accountId,
             packageName,
@@ -31,7 +33,8 @@ public sealed class GooglePlayReleaseWorkflow
             releaseNotes,
             rolloutPercentage,
             writeOutput,
-            cancellationToken);
+            cancellationToken,
+            storeImages);
 
     public Task<string> GetReleaseStateAsync(
         string accountId,

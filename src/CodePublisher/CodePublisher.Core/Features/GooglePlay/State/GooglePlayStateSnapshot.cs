@@ -1,3 +1,4 @@
+using CodePublisher.Features.GooglePlay.Images;
 using CodePublisher.Features.GooglePlay.Models;
 
 namespace CodePublisher.Features.GooglePlay.State;
@@ -11,6 +12,7 @@ public sealed record GooglePlayStateSnapshot(
     int RolloutPercentage,
     string SigningKeyPath,
     string SigningKeyAlias,
+    IReadOnlyList<GooglePlayStoreImage> Images,
     bool IsSignedIn,
     GooglePlayPublishStage Stage,
     GooglePlayStatusTone StatusTone,
@@ -26,6 +28,7 @@ public sealed record GooglePlayStateSnapshot(
         100,
         string.Empty,
         string.Empty,
+        [],
         false,
         GooglePlayPublishStage.Idle,
         GooglePlayStatusTone.Info,

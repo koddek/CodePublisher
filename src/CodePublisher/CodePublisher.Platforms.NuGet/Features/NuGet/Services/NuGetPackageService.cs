@@ -15,7 +15,45 @@ public delegate Task<int> NuGetProcessRunner(
     CancellationToken cancellationToken,
     string? workingDirectory);
 
-public sealed record NuGetPackOutcome(bool Success, string Message, NuGetPackResult? Package);
+/// <summary>A pack attempt that failed before it produced a package.</summary>
+public sealed record NuGetPackFailed(string Message);
+
+/// <summary>A pack attempt that produced a package, valid or not. The validation report travels with it.</summary>
+public sealed record NuGetPackPacked(NuGetPackResult Package);
+
+/// <summary>
+/// The outcome of a pack. A union makes the two states explicit: an attempt either has a package
+/// or it has a failure message, never both and never neither. Consumers that only need the old
+/// flags can still read <see cref="Success"/>, <see cref="Message"/> and <see cref="Package"/>.
+/// </summary>
+public union NuGetPackOutcome(NuGetPackFailed, NuGetPackPacked)
+{
+    /// <summary>True when a package was produced and passed offline validation.</summary>
+    public bool Success => this is NuGetPackPacked packed && packed.Package.Validation.IsValid;
+
+    /// <summary>The one-line status shown in the NuGet workspace.</summary>
+    public string Message => this switch
+    {
+        NuGetPackFailed failed => failed.Message,
+        NuGetPackPacked packed when packed.Package.Validation.IsValid =>
+            $"Packed {Path.GetFileName(packed.Package.PackagePath)}.",
+        NuGetPackPacked packed =>
+            $"Packed {Path.GetFileName(packed.Package.PackagePath)}, but the package failed validation.",
+        null => "Pack did not produce a result.",
+    };
+
+    /// <summary>The produced package, or null when the attempt failed.</summary>
+    public NuGetPackResult? Package => this switch
+    {
+        NuGetPackPacked packed => packed.Package,
+        NuGetPackFailed => null,
+        null => null,
+    };
+
+    public static NuGetPackOutcome Failed(string message) => new NuGetPackFailed(message);
+
+    public static NuGetPackOutcome Packed(NuGetPackResult package) => new NuGetPackPacked(package);
+}
 
 /// <summary>A credential found on this machine, with where it came from. The token stays in memory only.</summary>
 public sealed record DetectedCredential(string Token, string Source);
@@ -104,7 +142,7 @@ public sealed class NuGetPackageService
     {
         if (string.IsNullOrWhiteSpace(projectFilePath) || !File.Exists(projectFilePath))
         {
-            return new NuGetPackOutcome(false, $"Project file not found: {projectFilePath}", null);
+            return NuGetPackOutcome.Failed($"Project file not found: {projectFilePath}");
         }
 
         Directory.CreateDirectory(outputDirectory);
@@ -144,7 +182,7 @@ public sealed class NuGetPackageService
                 Path.GetDirectoryName(projectFilePath)).ConfigureAwait(false);
             if (buildExitCode != 0)
             {
-                return new NuGetPackOutcome(false, $"Forced rebuild failed (exit code {buildExitCode}). See the live output.", null);
+                return NuGetPackOutcome.Failed($"Forced rebuild failed (exit code {buildExitCode}). See the live output.");
             }
 
             var repackArguments = NuGetCommandBuilder.BuildPackArguments(
@@ -163,21 +201,18 @@ public sealed class NuGetPackageService
 
         if (exitCode != 0)
         {
-            return new NuGetPackOutcome(false, $"dotnet pack failed (exit code {exitCode}). See the live output.", null);
+            return NuGetPackOutcome.Failed($"dotnet pack failed (exit code {exitCode}). See the live output.");
         }
 
         var packagePath = FindNewestNupkg(outputDirectory);
         if (packagePath is null)
         {
-            return new NuGetPackOutcome(false, $"dotnet pack succeeded but no .nupkg was found in {outputDirectory}.", null);
+            return NuGetPackOutcome.Failed($"dotnet pack succeeded but no .nupkg was found in {outputDirectory}.");
         }
 
         var validation = NuGetPackageValidator.Validate(packagePath);
         writeOutput(Environment.NewLine + $"=== Pack produced {Path.GetFileName(packagePath)} — {validation.Summary} ===" + Environment.NewLine);
-        return new NuGetPackOutcome(
-            validation.IsValid,
-            validation.IsValid ? $"Packed {Path.GetFileName(packagePath)}." : $"Packed {Path.GetFileName(packagePath)}, but the package failed validation.",
-            new NuGetPackResult(packagePath, validation));
+        return NuGetPackOutcome.Packed(new NuGetPackResult(packagePath, validation));
     }
 
     public NuGetValidationReport ValidatePackage(string packagePath) => NuGetPackageValidator.Validate(packagePath);

@@ -45,7 +45,7 @@ internal static class ProjectIdentifierResolver
     private static class DesktopProjectIdentifier
     {
         public static string? Resolve(FileInfo projectFile, IReadOnlyDictionary<string, string>? evaluated)
-            => ProjectIdentifier.FromEvaluated(evaluated, "PackageId", "ApplicationId")
+            => evaluated["PackageId", "ApplicationId"]
                 ?? ProjectInspector.ReadProperty(projectFile, "PackageId", "ApplicationId", "PackageName");
     }
 
@@ -56,7 +56,7 @@ internal static class ProjectIdentifierResolver
             string projectName,
             IReadOnlyDictionary<string, string>? evaluated)
         {
-            var genericId = ProjectIdentifier.FromEvaluated(evaluated, "PackageId", "ApplicationId", "CFBundleIdentifier")
+            var genericId = evaluated["PackageId", "ApplicationId", "CFBundleIdentifier"]
                 ?? ProjectInspector.ReadProperty(projectFile, "PackageId", "ApplicationId", "CFBundleIdentifier", "ApplicationIdentifier");
             if (!string.IsNullOrWhiteSpace(genericId))
             {

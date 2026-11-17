@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CodePublisher.Features.GooglePlay.Authentication;
+using CodePublisher.Features.GooglePlay.Images;
 using CodePublisher.Features.GooglePlay.Models;
 using CodePublisher.Features.GooglePlay.Releases;
 using CodePublisher.Features.GooglePlay.Services;
@@ -76,6 +77,15 @@ public sealed partial class GooglePlayViewModel : ObservableObject
 
     public ObservableCollection<GooglePlayEnvironmentVariableViewModel> EnvironmentVariables { get; } = [];
 
+    /// <summary>Optional store-listing images uploaded with the next release, in the order added.</summary>
+    public ObservableCollection<GooglePlayStoreImageViewModel> StoreImages { get; } = [];
+
+    public string StoreImageSummary => StoreImages.Count == 0
+        ? "No images selected. Screenshots and graphics are optional and are uploaded with the next publish."
+        : $"{StoreImages.Count} image(s) will be uploaded with the next publish and appear after review.";
+
+    public bool HasStoreImages => StoreImages.Count > 0;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSigningKey))]
     [NotifyPropertyChangedFor(nameof(IsReadyToSubmit))]
@@ -109,6 +119,8 @@ public sealed partial class GooglePlayViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(DisconnectCommand))]
     [NotifyCanExecuteChangedFor(nameof(PublishCommand))]
     [NotifyCanExecuteChangedFor(nameof(CheckStatusCommand))]
+    [NotifyCanExecuteChangedFor(nameof(AddPhoneScreenshotsCommand))]
+    [NotifyCanExecuteChangedFor(nameof(AddStoreImagesCommand))]
     private bool isBusy;
 
     internal GooglePlayViewModel(
@@ -354,6 +366,8 @@ public sealed partial class GooglePlayViewModel : ObservableObject
         SelectedAccount = null;
         SelectedTrack = null;
         ReleaseNotes = string.Empty;
+        StoreImages.Clear();
+        NotifyStoreImagesChanged();
         _stateHolder.ClearSession();
         KeystorePassword = string.Empty;
         KeyPassword = string.Empty;
@@ -390,6 +404,8 @@ public sealed partial class GooglePlayViewModel : ObservableObject
             ReleaseName = string.Empty;
             ReleaseNotes = string.Empty;
             ReleaseNotesLanguage = "en-US";
+            StoreImages.Clear();
+            NotifyStoreImagesChanged();
             _stateHolder.ResetRelease();
         }
         OnPropertyChanged(nameof(PackageId));
@@ -631,7 +647,8 @@ public sealed partial class GooglePlayViewModel : ObservableObject
                 [new GooglePlayReleaseNote(snapshot.NotesLanguage, snapshot.Notes)],
                 snapshot.RolloutPercentage,
                 message => Activity = message,
-                cancellationToken);
+                cancellationToken,
+                _stateHolder.Current.Images);
             SetStage(result.Stage);
             SetStatus(
                 result.Stage == GooglePlayPublishStage.Published ? "Published" : "In review",
@@ -782,7 +799,28 @@ public sealed partial class GooglePlayViewModel : ObservableObject
             return;
         }
 
-        var url = "https://play.google.com/console";
+        await OpenUrlAsync("https://play.google.com/console");
+    }
+
+    /// <summary>
+    /// Standard Play App Signing keys are upgraded in Play Console, not through the API: the
+    /// rotation endpoint only accepts self-hosted Cloud KMS keys. Open the official instructions
+    /// instead of offering an action that would fail for almost every app.
+    /// </summary>
+    [RelayCommand]
+    private async Task OpenAppSigningHelpAsync()
+    {
+        if (!IsDesktopSession)
+        {
+            SetStatus("Desktop app required", "Open the signing guide from the desktop app.", GooglePlayStatusTone.Warning);
+            return;
+        }
+
+        await OpenUrlAsync("https://support.google.com/googleplay/android-developer/answer/9842756");
+    }
+
+    private static Task OpenUrlAsync(string url)
+    {
         if (OperatingSystem.IsMacOS())
         {
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("open", url) { UseShellExecute = true });
@@ -796,7 +834,94 @@ public sealed partial class GooglePlayViewModel : ObservableObject
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("xdg-open", url) { UseShellExecute = true });
         }
 
-        await Task.CompletedTask;
+        return Task.CompletedTask;
+    }
+
+    public bool CanManageStoreImages => IsDesktopSession && !IsBusy;
+
+    /// <summary>The one-click path for the most common store asset.</summary>
+    [RelayCommand(CanExecute = nameof(CanManageStoreImages))]
+    private Task AddPhoneScreenshotsAsync() => PickAndAddStoreImagesAsync(GooglePlayStoreImageCatalog.Phone);
+
+    /// <summary>Any of the nine image slots the Play API accepts, chosen from a list.</summary>
+    [RelayCommand(CanExecute = nameof(CanManageStoreImages))]
+    private async Task AddStoreImagesAsync()
+    {
+        var labels = GooglePlayStoreImageCatalog.Types.Select(type => type.Label).ToArray();
+        var chosen = await _desktopInteractionService.PickFromListAsync("Which store images are you adding?", labels);
+        var type = GooglePlayStoreImageCatalog.Types.FirstOrDefault(item => string.Equals(item.Label, chosen, StringComparison.Ordinal));
+        if (type is not null)
+        {
+            await PickAndAddStoreImagesAsync(type.ImageType);
+        }
+    }
+
+    private async Task PickAndAddStoreImagesAsync(string imageType)
+    {
+        if (!CanManageStoreImages)
+        {
+            SetStatus("Desktop app required", "Choose store images from the desktop app.", GooglePlayStatusTone.Warning);
+            return;
+        }
+
+        var type = GooglePlayStoreImageCatalog.Describe(imageType);
+        if (type is null)
+        {
+            return;
+        }
+
+        var files = await _desktopInteractionService.PickFilesAsync(
+            $"Choose {type.Label}",
+            fileTypeFilter:
+            [
+                new Avalonia.Platform.Storage.FilePickerFileType("Images") { Patterns = ["*.png", "*.jpg", "*.jpeg"] }
+            ]);
+
+        foreach (var file in files)
+        {
+            StoreImages.Add(CreateStoreImageViewModel(new GooglePlayStoreImage(imageType, ReleaseNotesLanguage, file)));
+        }
+
+        if (files.Count > 0)
+        {
+            SyncStoreImages();
+            NotifyStoreImagesChanged();
+            SetStatus($"{type.Label} added", $"{files.Count} image(s) will go up with the next publish.", GooglePlayStatusTone.Success);
+        }
+    }
+
+    private GooglePlayStoreImageViewModel CreateStoreImageViewModel(GooglePlayStoreImage image) =>
+        new(image, BrowseStoreImageAsync, RemoveStoreImage, SyncStoreImages);
+
+    private async Task BrowseStoreImageAsync(GooglePlayStoreImageViewModel row)
+    {
+        var path = await _desktopInteractionService.PickFileAsync(
+            $"Replace {row.Label}",
+            row.Path,
+            [
+                new Avalonia.Platform.Storage.FilePickerFileType("Images") { Patterns = ["*.png", "*.jpg", "*.jpeg"] }
+            ]);
+
+        if (!string.IsNullOrWhiteSpace(path))
+        {
+            row.SetPath(path);
+        }
+    }
+
+    private void RemoveStoreImage(GooglePlayStoreImageViewModel row)
+    {
+        StoreImages.Remove(row);
+        SyncStoreImages();
+        NotifyStoreImagesChanged();
+    }
+
+    private void SyncStoreImages() =>
+        _stateHolder.SetImages(StoreImages.Select(row => row.Value).ToArray());
+
+    private void NotifyStoreImagesChanged()
+    {
+        OnPropertyChanged(nameof(StoreImageSummary));
+        OnPropertyChanged(nameof(HasStoreImages));
     }
 
     private async Task LoadTracksAsync(CancellationToken cancellationToken)

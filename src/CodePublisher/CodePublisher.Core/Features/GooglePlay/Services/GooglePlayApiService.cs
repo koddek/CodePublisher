@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using CodePublisher.Features.GooglePlay.Authentication;
+using CodePublisher.Features.GooglePlay.Images;
 using CodePublisher.Features.GooglePlay.Models;
 using CodePublisher.Features.GooglePlay.Tracks;
 
@@ -64,7 +65,8 @@ public sealed class GooglePlayApiService
         IReadOnlyList<GooglePlayReleaseNote> releaseNotes,
         int rolloutPercentage,
         Action<string>? reportProgress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyList<GooglePlayStoreImage>? storeImages = null)
     {
         if (rolloutPercentage is < 1 or > 100)
         {
@@ -76,7 +78,19 @@ public sealed class GooglePlayApiService
             throw new InvalidOperationException("At least one release note with a language and text is required.");
         }
 
-        return PublishCoreAsync(accountId, packageName, aabPath, trackId, releaseName, releaseNotes, rolloutPercentage, reportProgress, cancellationToken);
+        if (storeImages is not null)
+        {
+            foreach (var image in storeImages)
+            {
+                var error = GooglePlayStoreImageCatalog.Validate(image);
+                if (error is not null)
+                {
+                    throw new InvalidOperationException($"Store image {image.FileName}: {error}");
+                }
+            }
+        }
+
+        return PublishCoreAsync(accountId, packageName, aabPath, trackId, releaseName, releaseNotes, rolloutPercentage, reportProgress, cancellationToken, storeImages);
     }
 
     /// <summary>
@@ -441,7 +455,8 @@ public sealed class GooglePlayApiService
         IReadOnlyList<GooglePlayReleaseNote> releaseNotes,
         int rolloutPercentage,
         Action<string>? reportProgress,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken,
+        IReadOnlyList<GooglePlayStoreImage>? storeImages) =>
         ExecuteAsync(accountId, cancellationToken, async accessToken =>
         {
             reportProgress?.Invoke("Creating Google Play edit");
@@ -459,6 +474,11 @@ public sealed class GooglePlayApiService
                 releaseNotes,
                 rolloutPercentage,
                 cancellationToken);
+            if (storeImages is { Count: > 0 })
+            {
+                await UploadStoreImagesAsync(accessToken, packageName, edit, storeImages, reportProgress, cancellationToken);
+            }
+
             reportProgress?.Invoke("Validating release");
             using (var validateResponse = await SendAsync(
                        HttpMethod.Post,
@@ -594,6 +614,41 @@ public sealed class GooglePlayApiService
         await using var uploadStream = await uploadResponse.Content.ReadAsStreamAsync(cancellationToken);
         using var document = await JsonDocument.ParseAsync(uploadStream, cancellationToken: cancellationToken);
         return document.RootElement.GetProperty("versionCode").GetInt32();
+    }
+
+    /// <summary>The media-upload endpoint for one store-listing image in an open edit.</summary>
+    internal static string BuildStoreImageUploadUri(
+        string packageName,
+        string edit,
+        string language,
+        string imageType) =>
+        $"https://androidpublisher.googleapis.com/upload/androidpublisher/v3/applications/" +
+        $"{Uri.EscapeDataString(packageName)}/edits/{edit}/listings/{Uri.EscapeDataString(language)}/" +
+        $"{Uri.EscapeDataString(imageType)}?uploadType=media";
+
+    private async Task UploadStoreImagesAsync(
+        string accessToken,
+        string packageName,
+        string edit,
+        IReadOnlyList<GooglePlayStoreImage> images,
+        Action<string>? reportProgress,
+        CancellationToken cancellationToken)
+    {
+        foreach (var image in images)
+        {
+            reportProgress?.Invoke($"Uploading {GooglePlayStoreImageCatalog.Describe(image.ImageType)?.Label ?? image.ImageType} ({image.Language})");
+            using var content = new StreamContent(File.OpenRead(image.Path));
+            content.Headers.ContentType = new MediaTypeHeaderValue(GooglePlayStoreImageCatalog.MediaType(image.Path));
+            using var request = new HttpRequestMessage(
+                HttpMethod.Post,
+                BuildStoreImageUploadUri(packageName, edit, image.Language, image.ImageType))
+            {
+                Content = content
+            };
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            await EnsureSuccessAsync(response, $"Could not upload {image.FileName} as {image.ImageType} for {image.Language}", cancellationToken);
+        }
     }
 
     private async Task UpdateTrackAsync(

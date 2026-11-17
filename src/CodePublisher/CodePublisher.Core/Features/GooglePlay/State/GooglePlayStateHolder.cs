@@ -1,3 +1,4 @@
+using CodePublisher.Features.GooglePlay.Images;
 using CodePublisher.Features.GooglePlay.Models;
 
 namespace CodePublisher.Features.GooglePlay.State;
@@ -57,6 +58,9 @@ public sealed class GooglePlayStateHolder
         });
     }
 
+    public void SetImages(IReadOnlyList<GooglePlayStoreImage> images) =>
+        Update(snapshot => snapshot with { Images = [.. images] });
+
     public void SetSigningKey(string path, string alias)
     {
         Update(snapshot => snapshot with
@@ -86,7 +90,8 @@ public sealed class GooglePlayStateHolder
             ReleaseName = string.Empty,
             ReleaseNotes = string.Empty,
             ReleaseNotesLanguage = "en-US",
-            RolloutPercentage = 100
+            RolloutPercentage = 100,
+            Images = []
         });
     }
 
@@ -100,7 +105,8 @@ public sealed class GooglePlayStateHolder
             ReleaseName = string.Empty,
             ReleaseNotes = string.Empty,
             ReleaseNotesLanguage = "en-US",
-            RolloutPercentage = 100
+            RolloutPercentage = 100,
+            Images = []
         });
     }
 

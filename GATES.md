@@ -67,3 +67,54 @@ ABANDON: G10 The .NET 11 wasm-tools bundle an Emscripten toolchain whose LLVM no
   CHECK: bash -c 'test "$(git status --short | wc -l | tr -d " ")" -lt 120 && git status --short | grep -q . && echo STATUS_OK'
   EXPECT: STATUS_OK
   EVIDENCE: automatic-evidence=v1; definition-sha256=6c7518f0427f9b544a9d66c6d8f1e84e46015544a4329ee1c4fba0eb33d456ee; exit=0; EXPECT=matched; output-sha256=a2fbc8b0c90ec225a30dc4bd73d5aa4094daff8b1f7ff794bc68ce499ae76481; output-bytes=10; shell=/bin/sh; cwd=/usr/local/repo/CodePublisher; path=de0ff8374eb0/32 entries
+
+## Deep-review pass (2026-11-17)
+
+- [x] G14: Selecting Android Link Mode "Full" is preserved by the option resolver
+  CHECK: bash -c 'dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj --configuration Release --no-build -- --disable-logo --progress off --treenode-filter "/*/*/PublishSettingsStateTests/Normalize_PreservesFullLinkMode_WhenTheUserSelectsIt" 2>&1 | grep -q "succeeded: 1" && echo LINKMODE_FULL_OK'
+  EXPECT: LINKMODE_FULL_OK
+  EVIDENCE: automatic-evidence=v1; definition-sha256=2db9d2a7d3f471e53df6ea0a43e58706b349b0c553b58e4de055112c0dc78ee6; exit=0; EXPECT=matched; output-sha256=b799716aa2c15a91eb52e79bbdccc88676b8c32982d24deb73a25106718439dc; output-bytes=17; shell=/bin/sh; cwd=/usr/local/repo/CodePublisher; path=1d1e1056edc2/32 entries
+
+- [x] G15: NuGet versions are latest-compatible (TUnit 1.86.0; Avalonia 12.1.6; SkiaSharp 3.119.4 pinned to Avalonia.Skia's exact requirement)
+  CHECK: python3 -c "t=open('Directory.Packages.props').read(); assert 'Include=\"TUnit\" Version=\"1.86.0\"' in t; assert 'Include=\"Avalonia\" Version=\"12.1.6\"' in t; assert 'Include=\"SkiaSharp\" Version=\"3.119.4\"' in t; n=open('/Users/omoi/.nuget/packages/avalonia.skia/12.1.6/avalonia.skia.nuspec').read(); assert 'id=\"SkiaSharp\" version=\"3.119.4\"' in n; print('PKGS_LATEST_OK')"
+  EXPECT: PKGS_LATEST_OK
+  EVIDENCE: automatic-evidence=v1; definition-sha256=71fbb58012a753705f525642aa23846106e0582eabb2428af21753f5b28dbf3c; exit=0; EXPECT=matched; output-sha256=1a4d2f2f50f1d8ca96f6fbc18f68cf4481891a385a8026c507aa3acb2ef011e3; output-bytes=15; shell=/bin/sh; cwd=/usr/local/repo/CodePublisher; path=1d1e1056edc2/32 entries
+
+- [x] G16: Solution builds clean in Release and the whole suite passes on net11.0
+  CHECK: bash -c 'dotnet build CodePublisher.slnx --configuration Release --no-restore 2>&1 | grep -q "0 Warning(s)" && dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj --configuration Release --no-build -- --disable-logo --progress off 2>&1 | grep -q "succeeded: 554" && echo GREEN_OK'
+  EXPECT: GREEN_OK
+  EVIDENCE: automatic-evidence=v1; definition-sha256=7394cb374daa9596237839e7ed9af9d26da7bb6df08f6cb126f473f9f15178a4; exit=0; EXPECT=matched; output-sha256=937df390e57c1c5578ceef22634e1d927cf912b842bf48eaf7b1de54186c89c2; output-bytes=9; shell=/bin/sh; cwd=/usr/local/repo/CodePublisher; path=1d1e1056edc2/32 entries
+
+## C# 15 adoption pass (2026-11-17)
+
+- [x] G17: NuGet pack outcome is a C# 15 union with exhaustive, null-safe readers
+  CHECK: python3 -c "p='src/CodePublisher/CodePublisher.Platforms.NuGet/Features/NuGet/Services/NuGetPackageService.cs'; t=open(p).read(); assert 'public union NuGetPackOutcome(NuGetPackFailed, NuGetPackPacked)' in t; assert 'public bool Success => this is NuGetPackPacked' in t; assert t.count('null =>') >= 2; print('UNION_OK')"
+  EXPECT: UNION_OK
+  EVIDENCE: automatic-evidence=v1; definition-sha256=4ce9e28bc4138ad85c7fa78ab982f3a5c8c89b77ddcfed89d938ad96b054f406; exit=0; EXPECT=matched; output-sha256=2d1658d3a99ba69066c57ad36c63313cf0ad46e9fceb988c21079d4ac05207e1; output-bytes=9; shell=/bin/sh; cwd=/usr/local/repo/CodePublisher; path=1d1e1056edc2/32 entries
+
+- [x] G18: MSBuild property fallback lookup is a C# 15 extension indexer used by platform resolvers
+  CHECK: python3 -c "t=open('src/CodePublisher/CodePublisher.Core/Features/Publishing/Inspect/ProjectIdentifier.cs').read(); assert 'public static class EvaluatedPropertyLookup' in t; assert 'extension(IReadOnlyDictionary<string, string>? values)' in t; assert 'public string? this[params string[] names]' in t; a=open('src/CodePublisher/CodePublisher.Platforms.Android/Projects/AndroidProjectIdentifier.cs').read(); assert 'evaluated[\"ApplicationId\", \"PackageName\"]' in a; print('EXTINDEX_OK')"
+  EXPECT: EXTINDEX_OK
+  EVIDENCE: automatic-evidence=v1; definition-sha256=0d448dd0719ea4995158e08658420264a6baadf5cbd091f6299c96133b763f49; exit=0; EXPECT=matched; output-sha256=e0e9b39721c09e19362ee730f4148010d697d8575bcdae524489d74d7a38c995; output-bytes=12; shell=/bin/sh; cwd=/usr/local/repo/CodePublisher; path=1d1e1056edc2/32 entries
+
+- [x] G19: C# 15 refactors keep the solution green with 554 passing tests
+  CHECK: bash -c 'dotnet build CodePublisher.slnx --configuration Release --no-restore 2>&1 | grep -q "0 Warning(s)" && dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj --configuration Release --no-build -- --disable-logo --progress off 2>&1 | grep -q "succeeded: 554" && echo CS15_GREEN_OK'
+  EXPECT: CS15_GREEN_OK
+  EVIDENCE: automatic-evidence=v1; definition-sha256=859e4a0dadb18f73084063d530c3316654abaf45d5ac775ebfcd9bd9c359c8d1; exit=0; EXPECT=matched; output-sha256=37e1b855c2f2fa6a352ab9f5ffc5b295d11b87c7b7e03de52d96389afb12877a; output-bytes=14; shell=/bin/sh; cwd=/usr/local/repo/CodePublisher; path=1d1e1056edc2/32 entries
+
+## Google Play publishing pass (2026-11-17)
+
+- [x] G20: Store images upload into the publish edit with the exact API URL and media type
+  CHECK: bash -c 'dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj --configuration Release --no-build -- --disable-logo --progress off --treenode-filter "/*/*/GooglePlayStoreImageTests/*" 2>&1 | grep -q "succeeded: 4" && echo PLAY_IMAGES_OK'
+  EXPECT: PLAY_IMAGES_OK
+  EVIDENCE: automatic-evidence=v1; definition-sha256=27afbbbe057255ee9168dba705174a170c694d5b43b210c09b92e6e1ed6e367f; exit=0; EXPECT=matched; output-sha256=46c867bf4a9ed666eb29d1840d88b68762a8b1b590db0e25818c19cfe9b6bcbc; output-bytes=15; shell=/bin/sh; cwd=/usr/local/repo/CodePublisher; path=1d1e1056edc2/32 entries
+
+- [x] G21: Signing-key upgrade is a Console link, not a failing API command
+  CHECK: python3 -c "t=open('src/CodePublisher/CodePublisher/Features/GooglePlay/GooglePlayViewModel.cs').read(); assert 'OpenAppSigningHelpAsync' in t; assert 'rotateAppSigningKey' not in t; assert 'support.google.com/googleplay/android-developer/answer/9842756' in t; print('SIGNING_GUIDE_OK')"
+  EXPECT: SIGNING_GUIDE_OK
+  EVIDENCE: automatic-evidence=v1; definition-sha256=5563077e38868fe366fabffac8a662595614daecbe2664d88f3ce1996b8cd176; exit=0; EXPECT=matched; output-sha256=36d05de5259acf8bad4a066b1b453ee85e733145fec6bb8345d743e862ec5a22; output-bytes=17; shell=/bin/sh; cwd=/usr/local/repo/CodePublisher; path=1d1e1056edc2/32 entries
+
+- [x] G22: Google Play refactor keeps the solution green with 558 passing tests
+  CHECK: bash -c 'dotnet build CodePublisher.slnx --configuration Release --no-restore 2>&1 | grep -q "0 Warning(s)" && dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj --configuration Release --no-build -- --disable-logo --progress off 2>&1 | grep -q "succeeded: 558" && echo PLAY_GREEN_OK'
+  EXPECT: PLAY_GREEN_OK
+  EVIDENCE: automatic-evidence=v1; definition-sha256=ce360be49f1a9847c2b6d1a08cbca1417ee98f0326a211785b7ac8ffa3121b2b; exit=0; EXPECT=matched; output-sha256=13907dfa09940f484a074d2a9301a71a619d4c36e8152ae5a39e16face3f4cc5; output-bytes=14; shell=/bin/sh; cwd=/usr/local/repo/CodePublisher; path=1d1e1056edc2/32 entries

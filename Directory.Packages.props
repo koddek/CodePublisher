@@ -31,6 +31,6 @@
     <PackageVersion Include="SkiaSharp" Version="3.119.4" />
     <PackageVersion Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.119.4" />
     <!-- Test framework -->
-    <PackageVersion Include="TUnit" Version="1.83.0" />
+    <PackageVersion Include="TUnit" Version="1.86.0" />
   </ItemGroup>
 </Project>

@@ -51,8 +51,20 @@ public sealed class PublishOptionValues
     {
         if (option == PublishOptionId.AndroidLinkMode)
         {
-            // The link mode is a choice: "None" is the value that turns the linker off.
-            State = SetValue(option, newValue ? "SdkOnly" : "None");
+            // Link mode is a choice with three values: None (off), SdkOnly and Full. Both
+            // non-None values mean "on", so a user change that turns the linker on must keep
+            // the value the user picked. SdkOnly is only the default for a rule that turns the
+            // linker on implicitly (SetChoice in the resolver); writing it here would silently
+            // replace an explicit "Full" selection.
+            if (!newValue)
+            {
+                State = SetValue(option, "None");
+            }
+            else if (!IsOn(option))
+            {
+                State = SetValue(option, "SdkOnly");
+            }
+
             return;
         }
 

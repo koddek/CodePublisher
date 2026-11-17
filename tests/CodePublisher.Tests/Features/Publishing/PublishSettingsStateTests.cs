@@ -101,6 +101,37 @@ public sealed class PublishSettingsStateTests
     }
 
     [Test]
+    public async Task Normalize_PreservesFullLinkMode_WhenTheUserSelectsIt()
+    {
+        // The Build tab offers None, SdkOnly and Full. Selecting Full is an "on" change for the
+        // graph, but the resolver must keep the value the user picked instead of rewriting it
+        // to the SdkOnly default it uses when a rule turns the linker on implicitly.
+        var state = new PublishSettingsState(
+            PublisherService.AndroidPlatform,
+            "net10.0-android",
+            "android-arm64",
+            SelfContained: true,
+            PublishAot: false,
+            PublishReadyToRun: false,
+            PublishSingleFile: true,
+            PublishTrimmed: true,
+            AndroidLinkMode: "Full",
+            AndroidLinkTool: "r8",
+            AndroidDexTool: "d8",
+            RunAotCompilation: true,
+            EnableProfiledAot: false,
+            IncludeApk: true,
+            IncludeAab: false);
+
+        var result = PublishSettingsPolicy.Normalize(
+            state,
+            PublishOptionId.AndroidLinkMode,
+            changedValue: true);
+
+        await Assert.That(result.AndroidLinkMode).IsEqualTo("Full");
+    }
+
+    [Test]
     public async Task Normalize_AlwaysIncludesApk_WhenNoPackageFormatIsSelected()
     {
         var state = new PublishSettingsState(
