@@ -17,6 +17,10 @@ It is built with Avalonia and currently supports Android, macOS, Windows, and iO
 - Generate iOS publish commands with archive/IPA toggles
 - Toggle platform-specific publish settings including trimming, AOT, linker/shrinker, and cleanup behavior
 - Keep the publish options consistent with each other: turning on an option switches on the companion it needs, turning off a prerequisite turns off everything that relied on it, and two options that cannot be used together are never both on. An optional companion is offered rather than forced
+- Start every platform with a working Release profile: trimmed `SdkOnly` Android, simulator iOS, self-contained single-file desktop, and ordinary NuGet pack. Reset restores the full profile with cleanup off
+- Validate framework/RID pairs and migrated .NET 11 project properties before publish, with recovery guidance for removed Mono and Apple trim settings
+- Preserve unrelated files in the chosen output folder; recursive bin/obj cleanup is an explicit opt-in action
+- Keep the NuGet pack destination, command preview, validation results, and project selection in sync, including clearing the previous project when selection disappears
 - Preview the exact `dotnet publish` command before running it
 - Stream live publish output in the app
 - Open the folder that actually holds the published APK/AAB — never a parent you have to dig through
@@ -38,7 +42,8 @@ It is built with Avalonia and currently supports Android, macOS, Windows, and iO
 - Push the package to NuGet.org or GitHub Packages from the NuGet tab, with the API key held in memory for the session only and masked in every preview
 - Auto-detect the GitHub owner from the project's repository URL or git remote, and reuse an API key already configured on the machine (`gh auth token`, `GH_TOKEN`/`GITHUB_TOKEN`, `NUGET_API_KEY`) via "Detect owner & key"
 - List the versions already hosted on the selected feed and delete one from there (`dotnet nuget delete`)
-- Publish Android App Bundles to Google Play from a dedicated Google Play workspace
+- Publish Android App Bundles to Google Play through a guided four-step workspace: connect, choose a track, review release details, and publish
+- Move an existing release between internal, closed, open, and production tracks using its live name, notes, status, fraction, and version codes; ambiguous multi-release tracks hand off safely to Play Console
 - Configure the Google Desktop OAuth client ID directly in the app, with session-only or user-profile persistence and visible configured/not-configured status
 - Connect a personal Google account with browser OAuth, choose internal, closed, open, or production tracks, add release notes, and submit staged or full rollouts
 - Move a release between lines without opening the Play Console website: promote a tested build to production, remove a release from a testing line, halt a rollout, change the rollout percentage, or create a closed testing line
@@ -129,9 +134,11 @@ the Avalonia-bound adapters. Every rule in these libraries is testable without a
 
 ## Releases
 
+Code Publisher is not distributed as a NuGet package. No tag, downloads, or release is published yet; those wait until the user has tested the app. A later GitHub release may be empty or include platform-specific app downloads.
+
 There are no GitHub Actions workflows. Pushes and tags run no automation. A release is an
-annotated tag created locally and pushed, for example `git tag -a v0.12.4 -m "Code Publisher 0.12.4"`
-followed by `git push origin v0.12.4`. Build and test locally before tagging using the commands
+annotated tag created locally and pushed, for example `git tag -a v0.13.0 -m "Code Publisher 0.13.0"`
+followed by `git push origin v0.13.0`. Build and test locally before tagging using the commands
 under [Development notes](#development-notes).
 
 ## Roadmap and wishlist
@@ -170,7 +177,6 @@ Google Play app creation, legal declarations, Play App Signing enrollment, produ
 - Add iOS simulator discovery and launch
 - Add richer iOS signing/export profile support
 - Add Windows installer packaging presets
-- Add platform-specific validation so unsupported options are hidden or disabled automatically
 
 ## Current status
 

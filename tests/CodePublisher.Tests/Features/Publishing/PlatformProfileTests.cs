@@ -9,7 +9,7 @@ public sealed class PlatformProfileTests
     [Arguments(PublisherService.AndroidPlatform, "net11.0-android", "android-arm64")]
     [Arguments(PublisherService.MacOsPlatform, "net11.0", "osx-arm64")]
     [Arguments(PublisherService.WindowsPlatform, "net11.0-windows", "win-x64")]
-    [Arguments(PublisherService.IosPlatform, "net11.0-ios", "ios-arm64")]
+    [Arguments(PublisherService.IosPlatform, "net11.0-ios", "iossimulator-arm64")]
     [Arguments(PublisherService.LinuxPlatform, "net11.0", "linux-x64")]
     public async Task GetDefaults_ReturnsExpectedFrameworkAndRuntime(
         string platform,

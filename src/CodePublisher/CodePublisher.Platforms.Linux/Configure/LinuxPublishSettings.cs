@@ -1,13 +1,13 @@
 namespace CodePublisher.Features.Publishing.Configure;
 
 /// <summary>
-/// Normalizes the Linux share of a publish settings snapshot. Native AOT always trims; no bundle
-/// or launcher rename applies and every other platform's knobs are zeroed out.
+/// Normalizes the Linux share of a publish settings snapshot. No bundle or launcher rename applies;
+/// every other platform's knobs are zeroed out and the graph owns cross-option relationships.
 /// </summary>
 public static class LinuxPublishSettings
 {
     public static PublishSettingsState Apply(PublishSettingsState state)
-        => DesktopPublishSettings.Normalize(state) with
+        => state with
         {
             CreateWindowsExecutable = false,
             CreateMacAppBundle = false,

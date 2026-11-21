@@ -39,9 +39,11 @@ public sealed class GooglePlayTrackWorkflow
         string trackId,
         string releaseName,
         IReadOnlyList<string> versionCodes,
+        IReadOnlyList<GooglePlayReleaseNote> releaseNotes,
+        int? currentRolloutPercentage,
         Action<string>? reportProgress,
         CancellationToken cancellationToken) =>
-        _apiService.HaltReleaseAsync(accountId, packageName, trackId, releaseName, versionCodes, reportProgress, cancellationToken);
+        _apiService.HaltReleaseAsync(accountId, packageName, trackId, releaseName, versionCodes, releaseNotes, currentRolloutPercentage, reportProgress, cancellationToken);
 
     /// <summary>Changes the rollout of a release that is already on a track.</summary>
     public Task<GooglePlayPublishResult> UpdateRolloutAsync(
@@ -74,7 +76,8 @@ public sealed class GooglePlayTrackWorkflow
         string releaseName,
         IReadOnlyList<string> versionCodes,
         IReadOnlyList<GooglePlayReleaseNote> releaseNotes,
-        int rolloutPercentage,
+        string status,
+        int? rolloutPercentage,
         Action<string>? reportProgress,
         CancellationToken cancellationToken) =>
         _apiService.PromoteReleaseAsync(
@@ -85,6 +88,7 @@ public sealed class GooglePlayTrackWorkflow
             releaseName,
             versionCodes,
             releaseNotes,
+            status,
             rolloutPercentage,
             reportProgress,
             cancellationToken);

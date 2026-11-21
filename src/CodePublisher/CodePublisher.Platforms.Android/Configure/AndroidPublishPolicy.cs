@@ -18,10 +18,9 @@ public static class AndroidPublishPolicy
             : "RunAOT requires linking — set Link Mode to SdkOnly or Full first.";
 
     /// <summary>
-    /// ReadyToRun stays off for Android on every target framework this app emits: .NET 10 and
-    /// earlier use Mono (RunAOTCompilation is the AOT switch there), and .NET 11's CoreCLR compiles
-    /// partial ReadyToRun in Release builds when trimming is enabled — no MSBuild switch exists
-    /// for it other than turning trimming on.
+    /// ReadyToRun has no manual Android switch in this app: .NET 10 and earlier use Mono
+    /// (RunAOTCompilation is the AOT switch there), and .NET 11 CoreCLR compiles partial
+    /// ReadyToRun in trimmed Release builds. The app preserves the SDK's automatic setting.
     /// </summary>
     public static bool IsReadyToRunEnabled() => false;
 
@@ -108,4 +107,21 @@ public static class AndroidPublishPolicy
     /// </summary>
     public static bool SupportsMonoAot(string? targetFramework)
         => ProjectInspector.GetTargetFrameworkVersion(targetFramework) < 11;
+
+    public static void ValidateEvaluatedProperties(string? targetFramework, IReadOnlyDictionary<string, string>? evaluated)
+    {
+        if (SupportsMonoAot(targetFramework) || evaluated is null)
+        {
+            return;
+        }
+
+        foreach (var property in new[] { "RunAOTCompilation", "AndroidEnableProfiledAot" })
+        {
+            if (evaluated.TryGetValue(property, out var value) && !string.IsNullOrWhiteSpace(value))
+            {
+                throw new InvalidOperationException(
+                    $"`{property}` is set to `{value}` in the project or an imported props file. .NET 11 Android rejects this Mono-only property even when it is false (XA1044). Remove it from the project, then retry.");
+            }
+        }
+    }
 }

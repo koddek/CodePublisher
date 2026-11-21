@@ -79,6 +79,13 @@ public static class PublishCommandBuilder
 
     private static void ValidateOptions(PublishConfiguration configuration)
     {
+        var isNativeDesktop = configuration.PublishPlatform is PublishPlatforms.MacOs or PublishPlatforms.Windows or PublishPlatforms.Linux
+            && !PublishPlatforms.IsMacCatalyst(configuration.TargetFramework, configuration.RuntimeIdentifier);
+        if (isNativeDesktop && configuration.SelfContained && !configuration.UseAppHost)
+        {
+            throw new InvalidOperationException("A self-contained desktop publish requires the application host (NETSDK1067).");
+        }
+
         if (configuration.PublishAot && !configuration.SelfContained)
         {
             throw new InvalidOperationException("Native AOT requires a self-contained publish.");

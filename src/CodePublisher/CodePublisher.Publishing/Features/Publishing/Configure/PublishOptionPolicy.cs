@@ -47,7 +47,7 @@ public static class PublishOptionPolicy
         return false;
     }
 
-    /// <summary>True when the .NET 11 Apple workload sets PublishTrimmed and MtouchLink controls it.</summary>
+    /// <summary>True when the .NET 11 Apple workload owns trimming and TrimMode controls its granularity.</summary>
     public static bool IsPublishTrimmedAutomatic(string publishPlatform, string? targetFramework) =>
         (string.Equals(publishPlatform, PublishPlatforms.Ios, StringComparison.Ordinal) ||
          (string.Equals(publishPlatform, PublishPlatforms.MacOs, StringComparison.Ordinal)
@@ -73,6 +73,9 @@ public static class PublishOptionPolicy
             return ApplePublishPolicy.ReadyToRunDisabledReason(publishPlatform, targetFramework);
         return string.Empty;
     }
+
+    public static bool SupportsAndroidMonoAot(string? targetFramework)
+        => AndroidPublishPolicy.SupportsMonoAot(targetFramework);
 
     public static bool IsAndroidAotEnabled(string androidLinkMode)
         => AndroidPublishPolicy.IsAndroidAotEnabled(androidLinkMode);
@@ -176,6 +179,25 @@ public static class PublishOptionPolicy
 
     public static string AndroidToolValidationMessage(string androidLinkTool, string androidDexTool)
         => AndroidPublishPolicy.AndroidToolValidationMessage(androidLinkTool, androidDexTool);
+
+    public static void ValidateProjectProperties(
+        string publishPlatform,
+        string? targetFramework,
+        IReadOnlyDictionary<string, string>? evaluated)
+    {
+        if (string.Equals(publishPlatform, PublishPlatforms.Android, StringComparison.Ordinal))
+        {
+            AndroidPublishPolicy.ValidateEvaluatedProperties(targetFramework, evaluated);
+            return;
+        }
+
+        if (string.Equals(publishPlatform, PublishPlatforms.Ios, StringComparison.Ordinal)
+            || string.Equals(publishPlatform, PublishPlatforms.MacOs, StringComparison.Ordinal)
+                && PublishPlatforms.IsMacCatalyst(targetFramework ?? string.Empty, string.Empty))
+        {
+            ApplePublishPolicy.ValidateEvaluatedProperties(targetFramework, evaluated);
+        }
+    }
 
     public static bool IsPublishSingleFileEnabled(bool publishAot, string publishPlatform)
     {

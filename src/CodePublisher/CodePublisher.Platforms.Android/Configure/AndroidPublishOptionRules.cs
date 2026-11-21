@@ -12,6 +12,31 @@ public static class AndroidPublishOptionRules
     public static IReadOnlyList<PublishOptionRule> Rules { get; } =
     [
         new(
+            PublishOptionId.AndroidLinkMode,
+            PublishOptionRelation.Requires,
+            PublishOptionId.PublishTrimmed,
+            "Android linking runs the trimmer. Turn Link Mode off to disable trimming.",
+            Android),
+        new(
+            PublishOptionId.PublishTrimmed,
+            PublishOptionRelation.Requires,
+            PublishOptionId.AndroidLinkMode,
+            "Android trimming follows the linker. Set Link Mode to SdkOnly or Full first.",
+            Android,
+            ["SdkOnly", "Full"]),
+        new(
+            PublishOptionId.PublishTrimmed,
+            PublishOptionRelation.Requires,
+            PublishOptionId.SelfContained,
+            "Android trimming requires a self-contained publish.",
+            Android),
+        new(
+            PublishOptionId.RunAotCompilation,
+            PublishOptionRelation.Requires,
+            PublishOptionId.PublishTrimmed,
+            "Android RunAOT requires trimming. The SDK fails with XA1030 when trimming is off.",
+            Android),
+        new(
             PublishOptionId.RunAotCompilation,
             PublishOptionRelation.Requires,
             PublishOptionId.AndroidLinkMode,

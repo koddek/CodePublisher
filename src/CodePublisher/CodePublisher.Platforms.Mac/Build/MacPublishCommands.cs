@@ -29,10 +29,7 @@ public static class MacPublishCommands
         // PublishAot is honored only on native osx RIDs; the Windows/Linux RIDs take the same flag in their own builders.
         PublishCommandHelpers.AddBooleanProperty(command, "PublishAot", configuration.PublishAot && isNativeOsxRid);
 
-        if (configuration.UseAppHost)
-        {
-            command.Add("-p:UseAppHost=true");
-        }
+        PublishCommandHelpers.AddBooleanProperty(command, "UseAppHost", configuration.UseAppHost);
 
         return command;
     }

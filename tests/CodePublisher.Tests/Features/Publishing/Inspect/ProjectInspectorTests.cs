@@ -57,13 +57,14 @@ public sealed class ProjectInspectorTests
     {
         var configuration = CreateConfiguration(PublisherService.AndroidPlatform) with
         {
+            TargetFramework = "net10.0-android",
             RuntimeIdentifier = "linux-x64"
         };
 
         var exception = Assert.Throws<InvalidOperationException>(() =>
             ProjectInspector.ValidateRuntimeForPlatform(configuration));
 
-        await Assert.That(exception.Message).Contains("android-*");
+        await Assert.That(exception.Message).Contains("Android supports");
     }
 
     [Test]
@@ -111,6 +112,69 @@ public sealed class ProjectInspectorTests
         {
             root.Delete(recursive: true);
         }
+    }
+
+    [Test]
+    public async Task ValidateRuntimeForPlatform_RejectsRemovedAndroidX86OnNet11()
+    {
+        var configuration = CreateConfiguration(PublisherService.AndroidPlatform) with
+        {
+            TargetFramework = "net11.0-android",
+            RuntimeIdentifier = "android-x86"
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ProjectInspector.ValidateRuntimeForPlatform(configuration));
+
+        await Assert.That(exception.Message).Contains("android-x86");
+        ProjectInspector.ValidateRuntimeForPlatform(configuration with { TargetFramework = "net10.0-android" });
+    }
+
+    [Test]
+    [Arguments("android-arm")]
+    [Arguments("android-arm64")]
+    [Arguments("android-x64")]
+    public async Task ValidateRuntimeForPlatform_AcceptsSupportedNet11AndroidRuntimes(string runtimeIdentifier)
+    {
+        var configuration = CreateConfiguration(PublisherService.AndroidPlatform) with
+        {
+            TargetFramework = "net11.0-android",
+            RuntimeIdentifier = runtimeIdentifier
+        };
+
+        ProjectInspector.ValidateRuntimeForPlatform(configuration);
+        await Assert.That(configuration.RuntimeIdentifier).IsEqualTo(runtimeIdentifier);
+    }
+
+    [Test]
+    public async Task ValidateRuntimeForPlatform_RejectsCrossPlatformFramework()
+    {
+        var configuration = CreateConfiguration(PublisherService.WindowsPlatform) with
+        {
+            TargetFramework = "net11.0-ios",
+            RuntimeIdentifier = "win-x64"
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ProjectInspector.ValidateRuntimeForPlatform(configuration));
+
+        await Assert.That(exception.Message).Contains("does not match");
+    }
+
+    [Test]
+    [Arguments("linux-musl-arm")]
+    [Arguments("linux-bionic-x64")]
+    [Arguments("linux-bionic-arm64")]
+    public async Task ValidateRuntimeForPlatform_AcceptsAdditionalSupportedLinuxRuntimes(string runtimeIdentifier)
+    {
+        var configuration = CreateConfiguration(PublisherService.LinuxPlatform) with
+        {
+            TargetFramework = "net11.0",
+            RuntimeIdentifier = runtimeIdentifier
+        };
+
+        ProjectInspector.ValidateRuntimeForPlatform(configuration);
+        await Assert.That(configuration.RuntimeIdentifier).IsEqualTo(runtimeIdentifier);
     }
 
     private static DirectoryInfo CreateProjectDirectory()

@@ -227,7 +227,19 @@ public sealed class PublisherService
     {
         var bundle = BuildPublishCommandBundle(configuration);
         var projectDirectory = ProjectInspector.CreateProjectDirectory(configuration.ProjectDirectory);
-        var outputDirectory = new DirectoryInfo(bundle.OutputDirectory);
+        if (RequiresMobileWorkload(configuration.TargetFramework))
+        {
+            var evaluatedProperties = await ResolveProjectVersionsAsync(
+                new FileInfo(bundle.ProjectFilePath),
+                configuration.Configuration,
+                configuration.TargetFramework,
+                configuration.RuntimeIdentifier,
+                cancellationToken);
+            PublishOptionPolicy.ValidateProjectProperties(
+                configuration.PublishPlatform,
+                configuration.TargetFramework,
+                evaluatedProperties);
+        }
 
         writeOutput(Environment.NewLine + "=== Publish started ===" + Environment.NewLine);
         writeOutput(bundle.PreviewText + Environment.NewLine + Environment.NewLine);
@@ -237,7 +249,7 @@ public sealed class PublisherService
             writeOutput(bundle.BaselinePreviewText + Environment.NewLine + Environment.NewLine);
         }
 
-        await PrepareOutputFoldersAsync(configuration, projectDirectory, outputDirectory, writeOutput);
+        await PrepareOutputFoldersAsync(configuration, projectDirectory, writeOutput);
 
         var (exitCode, publishOutput) = await RunPublishAsync(bundle, configuration, writeOutput, cancellationToken);
 
@@ -343,15 +355,10 @@ public sealed class PublisherService
     private async Task PrepareOutputFoldersAsync(
         PublishConfiguration configuration,
         DirectoryInfo projectDirectory,
-        DirectoryInfo outputDirectory,
         Action<string> writeOutput)
     {
-        if (outputDirectory.Exists)
-        {
-            writeOutput($"Clearing output folder {outputDirectory.FullName}{Environment.NewLine}");
-            await TryDeleteDirectorySafelyAsync(outputDirectory.FullName, writeOutput);
-        }
-
+        // dotnet publish overwrites files it owns. Never recursively clear a user-selected output
+        // root: it may contain unrelated projects, previous releases, or files the user keeps there.
         var outputLayout = configuration.OutputLayout;
         var usesCentralizedArtifacts = outputLayout?.UsesCentralizedArtifacts == true;
 

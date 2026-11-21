@@ -37,9 +37,7 @@ public sealed class GooglePlayStateHolder : IDisposable
 
     public void SetTrack(GooglePlayTrackInfo? track, int rolloutPercentage)
     {
-        var normalizedRollout = track?.IsProduction == true
-            ? Math.Clamp(rolloutPercentage, 1, 100)
-            : 100;
+        var normalizedRollout = Math.Clamp(rolloutPercentage, 1, 100);
         Update(snapshot => snapshot with
         {
             Track = track,
@@ -59,9 +57,7 @@ public sealed class GooglePlayStateHolder : IDisposable
             ReleaseName = releaseName?.Trim() ?? string.Empty,
             ReleaseNotes = releaseNotes ?? string.Empty,
             ReleaseNotesLanguage = string.IsNullOrWhiteSpace(language) ? "en-US" : language.Trim(),
-            RolloutPercentage = snapshot.Track?.IsProduction == true
-                ? Math.Clamp(rolloutPercentage, 1, 100)
-                : 100
+            RolloutPercentage = Math.Clamp(rolloutPercentage, 1, 100)
         });
     }
 

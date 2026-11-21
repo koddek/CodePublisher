@@ -10,6 +10,10 @@ namespace CodePublisher.ViewModels;
 /// </summary>
 public partial class MainViewModel
 {
+    private int _deviceFilesGeneration;
+    private int _deviceFilesActiveGeneration;
+    private bool _deviceFilesReloadPending;
+
     public ObservableCollection<DeviceFileRowViewModel> DeviceFiles { get; } = [];
 
     public ObservableCollection<WirelessPeerRowViewModel> WirelessPeers { get; } = [];
@@ -231,10 +235,19 @@ public partial class MainViewModel
         }
 
         var target = AndroidStorageLocations.NormalizeRemotePath(path);
+        var generation = ++_deviceFilesGeneration;
+        _deviceFilesActiveGeneration = generation;
+        var serial = SelectedDevice.Serial;
+        var targetName = SelectedDevice.DisplayName;
         try
         {
             IsDeviceFilesBusy = true;
-            var entries = await _publisherService.ListAndroidFilesAsync(SelectedDevice.Serial, target, CancellationToken.None);
+            var entries = await _publisherService.ListAndroidFilesAsync(serial, target, CancellationToken.None);
+            if (generation != _deviceFilesGeneration)
+            {
+                return;
+            }
+
             DeviceFilesPath = target;
             DeviceFiles.Clear();
             foreach (var entry in entries)
@@ -251,10 +264,15 @@ public partial class MainViewModel
                 ? $"{target} is empty."
                 : $"{entries.Count(entry => entry.IsDirectory)} folder(s) · {entries.Count(entry => entry.IsFile)} file(s) · " +
                   $"{AndroidDeviceFileEntry.FormatSize(entries.Sum(entry => entry.SizeBytes))} in {target}.";
-            StatusMessage = $"Loaded {entries.Count} item(s) from {target} on {SelectedDevice.DisplayName}.";
+            StatusMessage = $"Loaded {entries.Count} item(s) from {target} on {targetName}.";
         }
         catch (Exception ex)
         {
+            if (generation != _deviceFilesGeneration)
+            {
+                return;
+            }
+
             DeviceFiles.Clear();
             HasDeviceFiles = false;
             // A folder the device does not have yet is routine data, not a modal-worthy error.
@@ -266,7 +284,15 @@ public partial class MainViewModel
         }
         finally
         {
-            IsDeviceFilesBusy = false;
+            if (_deviceFilesActiveGeneration == generation)
+            {
+                IsDeviceFilesBusy = false;
+                if (_deviceFilesReloadPending && IsDeploySection)
+                {
+                    _deviceFilesReloadPending = false;
+                    _ = LoadDeviceFilesFromSectionAsync();
+                }
+            }
         }
     }
 
@@ -559,6 +585,15 @@ public partial class MainViewModel
     [RelayCommand(CanExecute = nameof(CanUseWirelessDebugging))]
     private async Task ResetWirelessDebuggingAsync()
     {
+        var confirmed = await _desktopInteractionService.ConfirmAsync(
+            "Reset Wi-Fi debugging",
+            "Disconnect every Wi-Fi debugging target and forget all paired and recent addresses recorded by Code Publisher? USB devices and the phones' own pairing lists are not changed.");
+        if (!confirmed)
+        {
+            StatusMessage = "Wi-Fi reset cancelled.";
+            return;
+        }
+
         try
         {
             IsWirelessBusy = true;

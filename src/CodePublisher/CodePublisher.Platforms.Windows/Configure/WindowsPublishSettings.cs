@@ -1,15 +1,15 @@
 namespace CodePublisher.Features.Publishing.Configure;
 
 /// <summary>
-/// Normalizes the Windows share of a publish settings snapshot. Native AOT always trims; the
-/// Windows launcher toggle is honored and every other platform's knobs are zeroed out.
+/// Normalizes the Windows share of a publish settings snapshot. UseAppHost is the single source
+/// of truth for the .exe launcher; the view-model alias mirrors it and other platforms are zeroed.
 /// </summary>
 public static class WindowsPublishSettings
 {
     public static PublishSettingsState Apply(PublishSettingsState state)
-        => DesktopPublishSettings.Normalize(state) with
+        => state with
         {
-            CreateWindowsExecutable = state.CreateWindowsExecutable,
+            CreateWindowsExecutable = state.UseAppHost,
             CreateMacAppBundle = false,
             BuildIpa = false,
             ArchiveOnBuild = false,

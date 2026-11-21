@@ -148,4 +148,63 @@ public sealed class NuGetViewModelTests
             Directory.Delete(folder, recursive: true);
         }
     }
+
+    [Test]
+    public async Task UpdateContext_ClearsPreviousProjectAndPackedArtifactWhenSelectionDisappears()
+    {
+        var viewModel = CreateViewModel();
+        viewModel.UpdateContext("/proj", "/proj/Lib.csproj", "Lib", "1.0.0");
+        viewModel.PackedPackagePath = "/proj/nupkgs/Lib.1.0.0.nupkg";
+        viewModel.FeedOwnerOrFolder = "old-owner";
+
+        viewModel.UpdateContext(string.Empty, string.Empty, string.Empty, string.Empty);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(viewModel.HasProject).IsFalse();
+            await Assert.That(viewModel.PackageId).IsEmpty();
+            await Assert.That(viewModel.PackageVersion).IsEmpty();
+            await Assert.That(viewModel.OutputDirectory).IsEmpty();
+            await Assert.That(viewModel.PackedPackagePath).IsEmpty();
+            await Assert.That(viewModel.FeedOwnerOrFolder).IsEmpty();
+            await Assert.That(viewModel.PackCommand.CanExecute(null)).IsFalse();
+            await Assert.That(viewModel.PushCommand.CanExecute(null)).IsFalse();
+        }
+    }
+
+    [Test]
+    public async Task IncludeSymbols_UpdatesPackPreview()
+    {
+        var viewModel = CreateViewModel();
+        viewModel.UpdateContext("/proj", "/proj/Lib.csproj", "Lib", "1.0.0");
+
+        viewModel.IncludeSymbols = true;
+
+        await Assert.That(viewModel.PackCommandPreview).Contains("--include-symbols");
+    }
+
+    [Test]
+    public async Task ValidationIssues_NotifiesWhenIssuesArriveAndClear()
+    {
+        var viewModel = CreateViewModel();
+        var notifications = 0;
+        viewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(NuGetViewModel.HasValidationIssues))
+            {
+                notifications++;
+            }
+        };
+
+        viewModel.ValidationIssues.Add(new NuGetValidationIssue(NuGetIssueSeverity.Warning, "Check this package"));
+        var visible = viewModel.HasValidationIssues;
+        viewModel.ValidationIssues.Clear();
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(visible).IsTrue();
+            await Assert.That(viewModel.HasValidationIssues).IsFalse();
+            await Assert.That(notifications).IsEqualTo(2);
+        }
+    }
 }

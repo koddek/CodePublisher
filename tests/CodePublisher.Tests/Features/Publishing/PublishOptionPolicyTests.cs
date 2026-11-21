@@ -182,4 +182,60 @@ public sealed class PublishOptionPolicyTests
 
         await Assert.That(message).IsEqualTo(expectedMessage);
     }
+
+    [Test]
+    public async Task Net11AndroidPreflight_RejectsMonoPropertiesEvenWhenFalse()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            PublishOptionPolicy.ValidateProjectProperties(
+                PublisherService.AndroidPlatform,
+                "net11.0-android",
+                new Dictionary<string, string> { ["RunAOTCompilation"] = "false" }));
+
+        await Assert.That(exception.Message).Contains("XA1044");
+        PublishOptionPolicy.ValidateProjectProperties(
+            PublisherService.AndroidPlatform,
+            "net10.0-android",
+            new Dictionary<string, string> { ["RunAOTCompilation"] = "false" });
+    }
+
+    [Test]
+    public async Task Net11AndroidPreflight_RejectsProfiledAotFromImportedProps()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            PublishOptionPolicy.ValidateProjectProperties(
+                PublisherService.AndroidPlatform,
+                "net11.0-android",
+                new Dictionary<string, string> { ["AndroidEnableProfiledAot"] = "true" }));
+
+        await Assert.That(exception.Message).Contains("imported props");
+    }
+
+    [Test]
+    public async Task Net11ApplePreflight_RejectsExplicitPublishTrimmed()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            PublishOptionPolicy.ValidateProjectProperties(
+                PublisherService.IosPlatform,
+                "net11.0-ios",
+                new Dictionary<string, string> { ["PublishTrimmed"] = "true" }));
+
+        await Assert.That(exception.Message).Contains("TrimMode=copy");
+        PublishOptionPolicy.ValidateProjectProperties(
+            PublisherService.IosPlatform,
+            "net10.0-ios",
+            new Dictionary<string, string> { ["PublishTrimmed"] = "true" });
+    }
+
+    [Test]
+    public async Task Net11CatalystPreflight_RejectsExplicitPublishTrimmed()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            PublishOptionPolicy.ValidateProjectProperties(
+                PublisherService.MacOsPlatform,
+                "net11.0-maccatalyst",
+                new Dictionary<string, string> { ["PublishTrimmed"] = "false" }));
+
+        await Assert.That(exception.Message).Contains("Remove it");
+    }
 }

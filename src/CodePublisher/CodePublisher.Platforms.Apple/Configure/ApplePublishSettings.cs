@@ -34,7 +34,8 @@ public static class ApplePublishSettings
     private static PublishSettingsState ApplyCommon(PublishSettingsState state, bool buildIpa, bool archiveOnBuild, bool createMacAppBundle)
         => state with
         {
-            // The Apple workload forces trimming on and fails the build otherwise.
+            // Apple application publishes are self-contained and always run the trimmer.
+            SelfContained = true,
             PublishTrimmed = true,
             RunAotCompilation = false,
             EnableProfiledAot = false,

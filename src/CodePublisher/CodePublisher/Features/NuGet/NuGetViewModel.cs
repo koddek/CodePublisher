@@ -48,6 +48,7 @@ public sealed partial class NuGetViewModel : ObservableObject
     private string _outputDirectory = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PackCommandPreview))]
     private bool _includeSymbols;
 
     [ObservableProperty]
@@ -146,6 +147,8 @@ public sealed partial class NuGetViewModel : ObservableObject
         _interaction = interaction;
         _service = service;
         _writeLog = writeLog;
+        ValidationIssues.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasValidationIssues));
+        FeedVersions.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasFeedVersions));
     }
 
     /// <summary>
@@ -161,8 +164,16 @@ public sealed partial class NuGetViewModel : ObservableObject
         var nextProjectFile = projectFile ?? string.Empty;
         if (string.IsNullOrWhiteSpace(nextProjectFile))
         {
-            // The main view model has no project to hand over (startup or a cleared selection).
-            // Leave the NuGet workspace's own fields alone.
+            // A cleared selection invalidates every project-derived value. Keeping them here would
+            // let Pack or Push act on the previously selected project's artifact.
+            _projectDirectory = string.Empty;
+            ProjectFile = string.Empty;
+            PackageId = string.Empty;
+            PackageVersion = string.Empty;
+            OutputDirectory = string.Empty;
+            FeedOwnerOrFolder = string.Empty;
+            FeedVersions.Clear();
+            ClearPackedPackage();
             RefreshPackPreview();
             return;
         }
@@ -293,6 +304,10 @@ public sealed partial class NuGetViewModel : ObservableObject
     }
 
     partial void OnProjectFileChanged(string value) => RefreshPackPreview();
+
+    partial void OnPackageVersionChanged(string value) => RefreshPackPreview();
+
+    partial void OnIncludeSymbolsChanged(bool value) => RefreshPackPreview();
 
     partial void OnConfigurationChanged(string value) => RefreshPackPreview();
 

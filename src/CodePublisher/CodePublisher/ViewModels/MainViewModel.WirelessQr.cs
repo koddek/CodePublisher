@@ -106,18 +106,11 @@ public partial class MainViewModel
             WirelessQrStatus = $"Waiting for the phone to scan the code ({QrPairingTimeout.TotalMinutes:0} min)…";
             StatusMessage = "Pair with QR code: scan it on the phone under Developer options > Wireless debugging > Pair device with QR code.";
 
-            // 2. Automatically clear any cache, any old connections, and daemon transports:
-            _pairedWirelessHosts.Clear();
-            _wirelessReconnectLastAttempt.Clear();
-            _wirelessReconnectFailures.Clear();
-            _recentWirelessAddresses.Clear();
-            RecentWirelessDevices.Clear();
+            // 2. Clear only the previous QR attempt. Other paired and connected devices belong to
+            // the user's workspace and must survive adding a new phone.
+            var previousQrHost = _lastQrPairingHost;
             _lastQrPairingHost = null;
-            OnPropertyChanged(nameof(IsWirelessAddressPaired));
-            OnPropertyChanged(nameof(HasRecentWirelessDevices));
-            OnPropertyChanged(nameof(HasPairedWirelessDevices));
-
-            var cleanup = await _publisherService.PrepareAndroidWirelessPairingAsync(null, CancellationToken.None);
+            var cleanup = await _publisherService.PrepareAndroidWirelessPairingAsync(previousQrHost, CancellationToken.None);
             AppendLog($"{Environment.NewLine}[Pair with QR code] {cleanup}{Environment.NewLine}");
 
             var cancellation = new CancellationTokenSource();

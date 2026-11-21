@@ -92,6 +92,15 @@ public static class GooglePlayReleaseLinePolicy
             .DefaultIfEmpty(0)
             .Max();
 
+        if (targetVersionCode >= installedVersionCode && competingVersionCode <= targetVersionCode)
+        {
+            return new GooglePlayReleaseLinePlan(
+                CanReachTarget: true,
+                RequiredVersionCode: null,
+                BlockingReason: string.Empty,
+                Steps: []);
+        }
+
         var requiredVersionCode = Math.Max(installedVersionCode.Value, competingVersionCode) + 1;
 
         if (targetVersionCode is { } served && served >= requiredVersionCode)

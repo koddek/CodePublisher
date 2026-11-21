@@ -42,6 +42,12 @@ public static class DesktopPublishOptionRules
             "Trimming only works for a self-contained publish. The SDK fails the build with NETSDK1102 otherwise.",
             Desktop),
         new(
+            PublishOptionId.SelfContained,
+            PublishOptionRelation.Requires,
+            PublishOptionId.UseAppHost,
+            "A self-contained publish requires the application host. The SDK fails the build with NETSDK1067 otherwise.",
+            Desktop),
+        new(
             PublishOptionId.PublishSingleFile,
             PublishOptionRelation.Requires,
             PublishOptionId.UseAppHost,

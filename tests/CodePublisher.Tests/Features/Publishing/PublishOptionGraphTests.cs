@@ -389,4 +389,97 @@ public sealed class PublishOptionGraphTests
             await Assert.That(result.Changes).IsEmpty();
         }
     }
+
+    [Test]
+    [Arguments("macOS", "net11.0", "osx-arm64")]
+    [Arguments("Windows", "net11.0-windows", "win-x64")]
+    [Arguments("Linux", "net11.0", "linux-x64")]
+    public async Task DesktopAppHost_TurnsOffSelfContainedAndSingleFileWhenDisabled(
+        string platform,
+        string targetFramework,
+        string runtimeIdentifier)
+    {
+        var result = PublishOptionResolver.Resolve(
+            State(platform, targetFramework, runtimeIdentifier, selfContained: true, publishSingleFile: true),
+            PublishOptionId.UseAppHost,
+            changedValue: false);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(result.State.UseAppHost).IsFalse();
+            await Assert.That(result.State.SelfContained).IsFalse();
+            await Assert.That(result.State.PublishSingleFile).IsFalse();
+        }
+    }
+
+    [Test]
+    public async Task AndroidSelfContained_TurnsOffTrimmingLinkingAndMonoAotWhenDisabled()
+    {
+        var result = PublishOptionResolver.Resolve(
+            State(
+                platform: "Android",
+                targetFramework: "net10.0-android",
+                runtimeIdentifier: "android-arm64",
+                selfContained: true,
+                publishTrimmed: true,
+                androidLinkMode: "SdkOnly",
+                runAotCompilation: true,
+                enableProfiledAot: true),
+            PublishOptionId.SelfContained,
+            changedValue: false);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(result.State.SelfContained).IsFalse();
+            await Assert.That(result.State.PublishTrimmed).IsFalse();
+            await Assert.That(result.State.AndroidLinkMode).IsEqualTo("None");
+            await Assert.That(result.State.RunAotCompilation).IsFalse();
+            await Assert.That(result.State.EnableProfiledAot).IsFalse();
+        }
+    }
+
+    [Test]
+    [Arguments("iOS", "net11.0-ios", "ios-arm64")]
+    [Arguments("macOS", "net11.0-maccatalyst", "maccatalyst-arm64")]
+    public async Task ApplePublish_KeepsSelfContainedAndTrimmingEnabled(
+        string platform,
+        string targetFramework,
+        string runtimeIdentifier)
+    {
+        var result = PublishOptionResolver.Resolve(
+            State(platform, targetFramework, runtimeIdentifier, selfContained: false),
+            PublishOptionId.SelfContained,
+            changedValue: false);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(result.State.SelfContained).IsTrue();
+            await Assert.That(result.State.PublishTrimmed).IsTrue();
+        }
+    }
+
+    [Test]
+    public async Task NuGetNormalization_ClearsEveryApplicationPublishOption()
+    {
+        var result = PublishOptionResolver.Resolve(State(
+            platform: "NuGet",
+            targetFramework: "net11.0",
+            runtimeIdentifier: "any",
+            selfContained: true,
+            publishAot: true,
+            publishReadyToRun: true,
+            publishSingleFile: true,
+            publishTrimmed: true,
+            useAppHost: true));
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(result.State.SelfContained).IsFalse();
+            await Assert.That(result.State.PublishAot).IsFalse();
+            await Assert.That(result.State.PublishReadyToRun).IsFalse();
+            await Assert.That(result.State.PublishSingleFile).IsFalse();
+            await Assert.That(result.State.PublishTrimmed).IsFalse();
+            await Assert.That(result.State.UseAppHost).IsFalse();
+        }
+    }
 }

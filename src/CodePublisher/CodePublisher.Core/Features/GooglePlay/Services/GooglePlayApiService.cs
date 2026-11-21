@@ -5,6 +5,7 @@ using System.Text.Json;
 using CodePublisher.Features.GooglePlay.Authentication;
 using CodePublisher.Features.GooglePlay.Images;
 using CodePublisher.Features.GooglePlay.Models;
+using CodePublisher.Features.GooglePlay.Releases;
 using CodePublisher.Features.GooglePlay.Tracks;
 
 namespace CodePublisher.Features.GooglePlay.Services;
@@ -48,6 +49,10 @@ public sealed class GooglePlayApiService
             {
                 throw;
             }
+            catch (InvalidOperationException)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 throw new InvalidOperationException(
@@ -73,9 +78,10 @@ public sealed class GooglePlayApiService
             throw new ArgumentOutOfRangeException(nameof(rolloutPercentage), "Rollout must be between 1 and 100 percent.");
         }
 
-        if (releaseNotes.Count == 0 || releaseNotes.Any(note => string.IsNullOrWhiteSpace(note.Language) || string.IsNullOrWhiteSpace(note.Text)))
+        var notesError = GooglePlayReleaseValidation.ValidateNotes(releaseNotes);
+        if (notesError is not null)
         {
-            throw new InvalidOperationException("At least one release note with a language and text is required.");
+            throw new InvalidOperationException(notesError);
         }
 
         if (storeImages is not null)
@@ -128,6 +134,8 @@ public sealed class GooglePlayApiService
         string trackId,
         string releaseName,
         IReadOnlyList<string> versionCodes,
+        IReadOnlyList<GooglePlayReleaseNote> releaseNotes,
+        int? currentRolloutPercentage,
         Action<string>? reportProgress,
         CancellationToken cancellationToken) =>
         UpdateTrackAsync(
@@ -140,7 +148,8 @@ public sealed class GooglePlayApiService
                     releaseName,
                     versionCodes,
                     GooglePlayTrackReleaseStatus.Halted,
-                    null)
+                    currentRolloutPercentage is < 100 ? currentRolloutPercentage / 100d : null,
+                    releaseNotes)
             ],
             reportProgress,
             cancellationToken,
@@ -198,7 +207,8 @@ public sealed class GooglePlayApiService
         string releaseName,
         IReadOnlyList<string> versionCodes,
         IReadOnlyList<GooglePlayReleaseNote> releaseNotes,
-        int rolloutPercentage,
+        string status,
+        int? rolloutPercentage,
         Action<string>? reportProgress,
         CancellationToken cancellationToken)
     {
@@ -217,12 +227,17 @@ public sealed class GooglePlayApiService
             throw new ArgumentOutOfRangeException(nameof(rolloutPercentage), "Rollout must be between 1 and 100 percent.");
         }
 
-        var status = rolloutPercentage >= 100
-            ? GooglePlayTrackReleaseStatus.Completed
-            : GooglePlayTrackReleaseStatus.InProgress;
-        double? userFraction = rolloutPercentage >= 100
+        if (status is not (GooglePlayTrackReleaseStatus.InProgress
+            or GooglePlayTrackReleaseStatus.Halted
+            or GooglePlayTrackReleaseStatus.Completed))
+        {
+            throw new InvalidOperationException("The live release has an unknown status, so it cannot be promoted safely.");
+        }
+
+        double? userFraction = status == GooglePlayTrackReleaseStatus.Completed
+            || rolloutPercentage is null or >= 100
             ? null
-            : (double)rolloutPercentage / 100d;
+            : rolloutPercentage / 100d;
 
         return UpdateTrackAsync(
             accountId,
@@ -301,6 +316,10 @@ public sealed class GooglePlayApiService
             {
                 throw;
             }
+            catch (InvalidOperationException)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 throw new InvalidOperationException(
@@ -336,6 +355,10 @@ public sealed class GooglePlayApiService
                 return codes;
             }
             catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (InvalidOperationException)
             {
                 throw;
             }
@@ -437,6 +460,10 @@ public sealed class GooglePlayApiService
             {
                 throw;
             }
+            catch (InvalidOperationException)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 throw new InvalidOperationException(
@@ -489,7 +516,7 @@ public sealed class GooglePlayApiService
                 await EnsureSuccessAsync(validateResponse, "Google Play rejected the release before commit", cancellationToken);
             }
 
-            reportProgress?.Invoke("Submitting release for review");
+            reportProgress?.Invoke("Committing release");
             using var commitRequest = new HttpRequestMessage(
                 HttpMethod.Post,
                 $"{BaseUrl}/applications/{Uri.EscapeDataString(packageName)}/edits/{edit}:commit?changesInReviewBehavior=ERROR_IF_IN_REVIEW")
@@ -501,8 +528,8 @@ public sealed class GooglePlayApiService
             await EnsureSuccessAsync(commitResponse, "Google Play did not accept the release", cancellationToken);
             return new GooglePlayPublishResult(
                 true,
-                GooglePlayPublishStage.InReview,
-                "Release submitted. Google Play review has started.",
+                GooglePlayPublishStage.Published,
+                $"Change committed to {trackId} with version code {versionCode}. Check status for the review outcome.",
                 releaseName,
                 trackId,
                 versionCode);
@@ -512,7 +539,7 @@ public sealed class GooglePlayApiService
         string accountId,
         string packageName,
         string trackId,
-        string? releaseName,
+        int? versionCode,
         CancellationToken cancellationToken)
     {
         var token = await RequireAccessTokenAsync(accountId, cancellationToken);
@@ -532,13 +559,16 @@ public sealed class GooglePlayApiService
             return "No active release";
         }
 
-        if (!string.IsNullOrWhiteSpace(releaseName))
+        if (versionCode is not null)
         {
             var matchingRelease = releases.EnumerateArray()
-                .FirstOrDefault(release => string.Equals(
-                    release.TryGetProperty("name", out var name) ? name.GetString() : null,
-                    releaseName,
-                    StringComparison.Ordinal));
+                .FirstOrDefault(release => release.TryGetProperty("activeArtifacts", out var artifacts)
+                    && artifacts.ValueKind == JsonValueKind.Array
+                    && artifacts.EnumerateArray().Any(artifact =>
+                        artifact.TryGetProperty("versionCode", out var code)
+                        && (code.ValueKind == JsonValueKind.Number
+                            ? code.GetInt64() == versionCode.Value
+                            : string.Equals(code.GetString(), versionCode.Value.ToString(), StringComparison.Ordinal))));
             if (matchingRelease.ValueKind == JsonValueKind.Object)
             {
                 return ReadReleaseState(matchingRelease);
@@ -801,21 +831,64 @@ public sealed class GooglePlayApiService
         {
             var id = track.GetProperty("track").GetString() ?? string.Empty;
             var status = "Not configured";
+            var liveStatus = string.Empty;
+            var liveReleaseName = string.Empty;
+            IReadOnlyList<GooglePlayReleaseNote> liveReleaseNotes = [];
             IReadOnlyList<string> versionCodes = [];
+            var activeReleaseCount = 0;
+            int? liveRolloutPercentage = null;
 
-            if (track.TryGetProperty("releases", out var releases) &&
-                releases.ValueKind == JsonValueKind.Array &&
-                releases.GetArrayLength() > 0)
+            if (track.TryGetProperty("releases", out var releases) && releases.ValueKind == JsonValueKind.Array)
             {
-                var active = releases[0];
-                status = active.TryGetProperty("status", out var releaseStatus)
-                    ? releaseStatus.GetString() ?? "Unknown"
-                    : "Unknown";
-                versionCodes = ReadVersionCodes(active);
+                activeReleaseCount = releases.GetArrayLength();
+                if (activeReleaseCount > 0)
+                {
+                    var active = releases[0];
+                    liveStatus = active.TryGetProperty("status", out var releaseStatus)
+                        ? releaseStatus.GetString() ?? "Unknown"
+                        : "Unknown";
+                    status = liveStatus;
+                    liveReleaseName = active.TryGetProperty("name", out var releaseName)
+                        ? releaseName.GetString() ?? string.Empty
+                        : string.Empty;
+                    liveReleaseNotes = ReadReleaseNotes(active);
+                    versionCodes = ReadVersionCodes(active);
+                    if (active.TryGetProperty("userFraction", out var fraction)
+                        && fraction.TryGetDouble(out var value))
+                    {
+                        liveRolloutPercentage = Math.Clamp((int)Math.Round(value * 100), 1, 100);
+                    }
+                    else if (string.Equals(liveStatus, GooglePlayTrackReleaseStatus.Completed, StringComparison.Ordinal))
+                    {
+                        liveRolloutPercentage = 100;
+                    }
+                }
             }
 
-            return GooglePlayTrackCatalog.Describe(id, status, versionCodes);
+            return GooglePlayTrackCatalog.Describe(id, status, versionCodes) with
+            {
+                ActiveReleaseCount = activeReleaseCount,
+                LiveReleaseName = liveReleaseName,
+                LiveReleaseNotes = liveReleaseNotes,
+                LiveStatus = liveStatus,
+                LiveRolloutPercentage = liveRolloutPercentage
+            };
         }).OrderBy(track => track.Group).ThenBy(track => track.DisplayName).ToArray();
+    }
+
+    private static IReadOnlyList<GooglePlayReleaseNote> ReadReleaseNotes(JsonElement release)
+    {
+        if (!release.TryGetProperty("releaseNotes", out var notes) || notes.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return notes.EnumerateArray()
+            .Select(note => new GooglePlayReleaseNote(
+                note.TryGetProperty("language", out var language) ? language.GetString() ?? string.Empty : string.Empty,
+                note.TryGetProperty("text", out var text) ? text.GetString() ?? string.Empty : string.Empty))
+            .Where(note => !string.IsNullOrWhiteSpace(note.Language) && !string.IsNullOrWhiteSpace(note.Text))
+            .ToArray();
     }
 
     /// <summary>Reads the version codes of one release, highest first.</summary>
@@ -935,8 +1008,8 @@ public sealed class GooglePlayApiService
         if (message.Contains("required permission", StringComparison.OrdinalIgnoreCase) ||
             message.Contains("403", StringComparison.OrdinalIgnoreCase))
         {
-            return " The account may not have permission for this app. Check that the Google account is " +
-                "an app owner or tester with release access.";
+            return " The account may not have permission for this app. In Play Console, ask an app admin " +
+                "for 'Release apps to testing tracks' or 'Release to production', as required by this action.";
         }
 
         return string.Empty;

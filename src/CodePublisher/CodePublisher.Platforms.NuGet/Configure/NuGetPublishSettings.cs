@@ -10,6 +10,9 @@ public static class NuGetPublishSettings
     public static PublishSettingsState Apply(PublishSettingsState state)
         => state with
         {
+            SelfContained = false,
+            PublishTrimmed = false,
+            UseAppHost = false,
             CreateWindowsExecutable = false,
             CreateMacAppBundle = false,
             BuildIpa = false,

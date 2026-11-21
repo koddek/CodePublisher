@@ -281,6 +281,25 @@ public sealed class PublishCommandBuilderTests
         }
     }
 
+    [Test]
+    [Arguments(PublisherService.MacOsPlatform)]
+    [Arguments(PublisherService.WindowsPlatform)]
+    [Arguments(PublisherService.LinuxPlatform)]
+    public async Task SelfContainedDesktop_RequiresAppHost(string platform)
+    {
+        var configuration = CreateConfiguration(platform) with
+        {
+            SelfContained = true,
+            UseAppHost = false,
+            PublishSingleFile = false
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            PublishCommandBuilder.Build("/dotnet", configuration, "/tmp/App.csproj", "/tmp/output", null));
+
+        await Assert.That(exception.Message).Contains("NETSDK1067");
+    }
+
     private static PublishConfiguration CreateConfiguration(string platform) => new()
     {
         ProjectDirectory = "/tmp",

@@ -16,6 +16,9 @@ namespace CodePublisher.ViewModels;
 /// </summary>
 public partial class MainViewModel
 {
+    private int _crashLogScanGeneration;
+    private string _crashLogReportContext = string.Empty;
+
     public ObservableCollection<CrashLogRowViewModel> CrashLogs { get; } = [];
 
     [ObservableProperty]
@@ -94,6 +97,9 @@ public partial class MainViewModel
             return;
         }
 
+        var generation = ++_crashLogScanGeneration;
+        var appName = CrashLogAppName;
+        var targetName = CrashLogTargetText;
         try
         {
             IsCrashLogsBusy = true;
@@ -102,20 +108,31 @@ public partial class MainViewModel
             CrashLogPreviewTitle = string.Empty;
 
             var scan = await RunCrashLogScanAsync();
+            if (generation != _crashLogScanGeneration)
+            {
+                return;
+            }
+
             foreach (var artifact in scan.Artifacts)
             {
                 CrashLogs.Add(new CrashLogRowViewModel(artifact, ShowCrashLogAsync, CopyCrashLogAsync));
             }
 
             CrashLogNotes = string.Join(Environment.NewLine, scan.Notes);
+            _crashLogReportContext = $"Crash reports of {appName} on {targetName}.";
             CrashLogsSummary = scan.Artifacts.Count == 0
-                ? $"No crash report for {CrashLogAppName} was found on {CrashLogTargetText}."
-                : $"Found {scan.Artifacts.Count} crash report(s) for {CrashLogAppName} on {CrashLogTargetText}.";
+                ? $"No crash report for {appName} was found on {targetName}."
+                : $"Found {scan.Artifacts.Count} crash report(s) for {appName} on {targetName}.";
             StatusMessage = CrashLogsSummary;
             OnPropertyChanged(nameof(HasCrashLogs));
         }
         catch (Exception ex)
         {
+            if (generation != _crashLogScanGeneration)
+            {
+                return;
+            }
+
             CrashLogs.Clear();
             CrashLogsSummary = "The crash report scan failed.";
             StatusMessage = "The crash report scan failed.";
@@ -212,11 +229,23 @@ public partial class MainViewModel
 
         var text = CrashLogReport.BuildAll(
             artifacts,
-            $"Crash reports of {CrashLogAppName} on {CrashLogTargetText}.");
+            _crashLogReportContext);
 
         await _desktopInteractionService.CopyTextToClipboardAsync(text);
         StatusMessage = $"{artifacts.Length} crash report(s) copied. Paste them into an AI agent to read the crashes.";
         PlayCompletionAlert(failed: false);
+    }
+
+    partial void OnSelectedIosSimulatorChanged(string value)
+    {
+        _crashLogScanGeneration++;
+        OnPropertyChanged(nameof(CrashLogTargetText));
+    }
+
+    partial void OnSelectedIosDeviceChanged(IosDeviceInfo? value)
+    {
+        _crashLogScanGeneration++;
+        OnPropertyChanged(nameof(CrashLogTargetText));
     }
 
     private bool CanCopyAllCrashLogs() =>

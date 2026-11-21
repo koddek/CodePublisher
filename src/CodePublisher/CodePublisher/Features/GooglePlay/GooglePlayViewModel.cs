@@ -30,6 +30,9 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
     private CancellationTokenSource? _operationCts;
     private GooglePlayProjectContext? _context;
     private bool _isProductionSelected;
+    private string _tracksContext = string.Empty;
+    private int? _lastPublishedVersionCode;
+    private bool _tracksReloadPending;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanPublish))]
@@ -62,7 +65,18 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
     private int rolloutPercentage = 100;
 
     [ObservableProperty]
+    private int liveRolloutPercentage = 100;
+
+    [ObservableProperty]
     private string activity = "Connect a Google account to begin.";
+
+    [ObservableProperty]
+    private bool isSetupExpanded = true;
+
+    public string SetupHeader => IsGoogleClientIdConfigured
+        ? "Google Play setup (configured)"
+        : "Google Play setup (required once)";
+    public string ReleaseNotesCountText => $"{ReleaseNotes.Length}/{GooglePlayReleaseValidation.MaximumReleaseNoteLength} characters";
 
     /// <summary>Status text is owned by the state holder; the view model only projects it.</summary>
     public string StatusHeadline => _stateHolder.Current.StatusHeadline;
@@ -190,11 +204,11 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
                 : effective.DisplayName;
 
             var head = $"The device runs version code {ConnectedDevice.InstalledVersionCode?.ToString() ?? "unknown"} " +
-                $"and is on {onLine}.";
+                $"and matches {onLine}.";
 
             return plan.CanReachTarget
-                ? $"{head} It can reach the {SelectedTrack.DisplayName} line."
-                : $"{head} {plan.BlockingReason}";
+                ? $"{head} The version-code check passes for {SelectedTrack.DisplayName}. Tester eligibility and device compatibility still apply."
+                : $"{head} {plan.BlockingReason} Tester eligibility and device compatibility also apply.";
         }
     }
 
@@ -248,6 +262,7 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
 
     private IReadOnlyList<GooglePlayTrackLineState> BuildTrackLineStates() =>
         Tracks
+            .Where(track => !GooglePlayTrackCatalog.IsFormFactor(track.Id))
             .Select(track => new GooglePlayTrackLineState(
                 track.Id,
                 track.DisplayName,
@@ -276,12 +291,34 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
     public bool IsBrowser => OperatingSystem.IsBrowser();
     public string PlatformLabel => IsBrowser ? "Browser preview" : "Desktop session";
     public bool IsReadyToSubmit => CanPublish;
-    public bool IsProductionRolloutEnabled => SelectedTrack?.IsProduction == true;
+    public bool IsFirstProductionRelease => SelectedTrack?.IsProduction == true && SelectedTrack.ActiveReleaseCount == 0;
+    public bool IsProductionRolloutEnabled => SelectedTrack is not null && !IsFirstProductionRelease;
     public bool IsTrackReady => SelectedTrack is not null;
     public string TrackStatusLabel => SelectedTrack is null ? "Track status unavailable" : SelectedTrack.Status;
-    public string RolloutLabel => IsProductionRolloutEnabled
-        ? $"Production rollout ({RolloutPercentage}%)"
-        : "Testing track publishes at 100%";
+    public string RolloutLabel => IsFirstProductionRelease
+        ? "The first production release requires a full rollout"
+        : RolloutPercentage >= 100 ? "Full rollout (100%)" : $"Staged rollout ({RolloutPercentage}%)";
+    public string LiveReleaseSummary => SelectedTrack is null || SelectedTrack.ActiveReleaseCount == 0
+        ? "No live release on this track."
+        : SelectedTrack.ActiveReleaseCount != 1
+            ? "This track has multiple active releases. Manage them in Play Console."
+            : $"{SelectedTrack.LiveReleaseName} · {SelectedTrack.LiveRolloutPercentage?.ToString() ?? "unknown"}% · {SelectedTrack.LiveStatus}";
+    public string TrackManagementReason
+    {
+        get
+        {
+            if (!HasLoadedTracksForContext) return "Refresh tracks for this account and project first.";
+            if (SelectedTrack is null) return "Select a track first.";
+            if (!SelectedTrack.HasUnambiguousLiveRelease)
+            {
+                return SelectedTrack.ActiveReleaseCount == 0
+                    ? "There is no live release to manage on this track."
+                    : "Multiple active releases are ambiguous. Choose the release in Play Console.";
+            }
+
+            return string.Empty;
+        }
+    }
     public string BuildSummary => IsBuildReady
         ? "Signed AAB build is ready to start."
         : "Select an Android project and upload key before building.";
@@ -299,12 +336,15 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
         ? "A .aab is present. Structure is checked immediately before upload."
         : "No .aab is present yet. Build and publish creates one.";
     public string ReleaseReadiness => IsProjectReady && IsSignedIn && SelectedAccount is not null
-        ? SelectedTrack is null ? "Choose a release track" : IsReleaseReady ? "Release settings are ready" : "Add a release name and notes"
+        ? SelectedTrack is null ? "Choose a release track" : IsReleaseReady ? "Release settings are ready" : NotesValidationMessage ?? "Add a release name"
         : "Connect an account and choose a track";
     public bool IsUploadKeyRequired => !HasSigningKey;
     public bool IsProjectReady => _context?.IsAndroidProject == true && !string.IsNullOrWhiteSpace(_context.PackageId);
-    public bool CanPublish => IsDesktopSession && IsProjectReady && IsSignedIn && SelectedAccount is not null && SelectedTrack is not null && !IsBusy && !string.IsNullOrWhiteSpace(ReleaseName) && HasSigningKey && !string.IsNullOrWhiteSpace(ReleaseNotes);
-    public bool IsReleaseReady => !string.IsNullOrWhiteSpace(ReleaseName) && !string.IsNullOrWhiteSpace(ReleaseNotes);
+    public bool HasLoadedTracksForContext => SelectedAccount is not null && IsProjectReady
+        && string.Equals(_tracksContext, $"{SelectedAccount.Id}|{_context!.PackageId}", StringComparison.Ordinal);
+    public bool CanPublish => IsDesktopSession && HasLoadedTracksForContext && SelectedTrack is not null && !IsBusy && HasSigningKey && IsReleaseReady;
+    public string? NotesValidationMessage => GooglePlayReleaseValidation.ValidateNotes(ReleaseNotesLanguage, ReleaseNotes);
+    public bool IsReleaseReady => !string.IsNullOrWhiteSpace(ReleaseName) && NotesValidationMessage is null;
     public bool IsProductionSelected => _isProductionSelected;
     public GooglePlayStatusTone StatusTone => _stateHolder.Current.StatusTone;
     public bool IsStatusSuccess => StatusTone == GooglePlayStatusTone.Success;
@@ -322,12 +362,14 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
         _ => 0
     };
     public bool IsProgressVisible => IsBusy;
+    public bool IsProgressIndeterminate => IsBusy;
     public GooglePlaySigningKeyInfo? SigningKey => SigningKeyInfo;
 
     public string GoogleClientId => _environmentVariableService.GoogleClientId ?? string.Empty;
 
     public bool IsGoogleClientIdConfigured => EnvironmentVariables
         .FirstOrDefault(variable => variable.Name == "DOTNET_APP_PUBLISHER_GOOGLE_CLIENT_ID")?.IsSet == true;
+    public string ConnectButtonText => IsGoogleClientIdConfigured ? "Connect Google account" : "Set up Google connection";
     public bool IsEnvironmentSetupAvailable => !IsBrowser;
     public bool CanPersistEnvironmentVariables => _environmentVariableService.SupportsPersistentUserVariables;
 
@@ -350,6 +392,8 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsEnvironmentSetupAvailable));
         OnPropertyChanged(nameof(CanPersistEnvironmentVariables));
         OnPropertyChanged(nameof(GoogleClientIdStatus));
+        OnPropertyChanged(nameof(ConnectButtonText));
+        OnPropertyChanged(nameof(SetupHeader));
     }
 
     public void ClearSessionAndForget()
@@ -362,12 +406,18 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
 
         Accounts.Clear();
         Tracks.Clear();
+        _tracksContext = string.Empty;
+        _lastPublishedVersionCode = null;
+        PlaySigningCertificate = string.Empty;
         SelectedAccount = null;
         SelectedTrack = null;
+        ReleaseName = string.Empty;
         ReleaseNotes = string.Empty;
+        ReleaseNotesLanguage = "en-US";
         StoreImages.Clear();
         NotifyStoreImagesChanged();
         _stateHolder.ClearSession();
+        NotifyPlaySigningCertificate();
         KeystorePassword = string.Empty;
         KeyPassword = string.Empty;
         SetStatus("Session cleared", "Google credentials and in-memory key passwords were removed.", GooglePlayStatusTone.Info);
@@ -384,6 +434,8 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsGoogleClientIdConfigured));
         OnPropertyChanged(nameof(CanPersistEnvironmentVariables));
         OnPropertyChanged(nameof(GoogleClientIdStatus));
+        OnPropertyChanged(nameof(ConnectButtonText));
+        OnPropertyChanged(nameof(SetupHeader));
         NotifyCommands();
     }
 
@@ -399,6 +451,9 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
         if (contextChanged)
         {
             Tracks.Clear();
+            _tracksContext = string.Empty;
+            _lastPublishedVersionCode = null;
+            PlaySigningCertificate = string.Empty;
             SelectedTrack = null;
             ReleaseName = string.Empty;
             ReleaseNotes = string.Empty;
@@ -426,6 +481,9 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(CanPublish));
         OnPropertyChanged(nameof(IsReleaseReady));
         OnPropertyChanged(nameof(IsReadyToSubmit));
+        OnPropertyChanged(nameof(HasLoadedTracksForContext));
+        OnPropertyChanged(nameof(TrackManagementReason));
+        NotifyPlaySigningCertificate();
         if (context is not null)
         {
             if (contextChanged || string.IsNullOrWhiteSpace(ReleaseName))
@@ -467,6 +525,11 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ProgressValue));
         OnPropertyChanged(nameof(IsSignedIn));
         OnPropertyChanged(nameof(ReadinessSummary));
+        OnPropertyChanged(nameof(ReadinessHeadline));
+        OnPropertyChanged(nameof(ReleaseReadiness));
+        OnPropertyChanged(nameof(HasLoadedTracksForContext));
+        OnPropertyChanged(nameof(TrackManagementReason));
+        OnPropertyChanged(nameof(NotesValidationMessage));
         OnPropertyChanged(nameof(CanPublish));
         OnPropertyChanged(nameof(IsReadyToSubmit));
         OnPropertyChanged(nameof(HasSigningKey));
@@ -513,9 +576,7 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
                 "OAuth setup required",
                 "Add a public Google Desktop OAuth client ID in Setup before connecting an account.",
                 GooglePlayStatusTone.Warning);
-            await _desktopInteractionService.ShowErrorAsync(
-                "Google Play connection",
-                "Add a public Google Desktop OAuth client ID in the Setup card, then try again.");
+            Activity = "In Google Play setup, open Google Cloud credentials, create a Desktop app OAuth client ID, paste it, then choose Use now.";
             return;
         }
 
@@ -524,19 +585,35 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
             var account = await _authenticationWorkflow.SignInAsync(cancellationToken);
             UpsertAccount(account);
             SelectedAccount = account;
+            IsSetupExpanded = false;
+            _tracksReloadPending = false;
             await LoadTracksAsync(cancellationToken);
         }, "Connecting Google account");
     }
 
-    private bool CanConnect() => !IsBusy && IsDesktopSession && IsGoogleClientIdConfigured;
+    private bool CanConnect() => !IsBusy && IsDesktopSession && IsProjectReady;
 
     [RelayCommand(CanExecute = nameof(CanRefreshTracks))]
     private async Task RefreshTracksAsync()
     {
-        await RunAsync(LoadTracksAsync, "Loading Google Play tracks");
+        await RunAsync(token => LoadTracksAsync(token), "Loading Google Play tracks");
     }
 
     private bool CanRefreshTracks() => IsDesktopSession && !IsBusy && IsProjectReady && IsSignedIn && SelectedAccount is not null;
+
+    private void StartPendingTrackRefresh()
+    {
+        if (!_tracksReloadPending)
+        {
+            return;
+        }
+
+        _tracksReloadPending = false;
+        if (CanRefreshTracks())
+        {
+            _ = RunAsync(token => LoadTracksAsync(token), "Loading Google Play tracks");
+        }
+    }
 
     [RelayCommand(CanExecute = nameof(CanDisconnect))]
     private async Task DisconnectAsync()
@@ -546,10 +623,10 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var accountId = SelectedAccount.Id;
+        var account = SelectedAccount;
         try
         {
-            await _authenticationWorkflow.RevokeAsync(accountId, CancellationToken.None);
+            await _authenticationWorkflow.RevokeAsync(account.Id, CancellationToken.None);
         }
         catch (Exception ex)
         {
@@ -557,9 +634,16 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
         }
         finally
         {
-            Accounts.Remove(SelectedAccount);
-            SelectedAccount = Accounts.FirstOrDefault();
-            Tracks.Clear();
+            Accounts.Remove(account);
+            if (SelectedAccount?.Id == account.Id)
+            {
+                SelectedTrack = null;
+                Tracks.Clear();
+                _tracksContext = string.Empty;
+                PlaySigningCertificate = string.Empty;
+                SelectedAccount = Accounts.FirstOrDefault();
+                NotifyPlaySigningCertificate();
+            }
         }
     }
 
@@ -603,18 +687,27 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(ReleaseNotes))
+        if (NotesValidationMessage is { } notesError)
         {
-            SetStatus("Release notes required", "Add release notes before submitting to Google Play.", GooglePlayStatusTone.Warning);
+            SetStatus("Check release notes", notesError, GooglePlayStatusTone.Warning);
             return;
         }
 
+        if (IsFirstProductionRelease)
+        {
+            RolloutPercentage = 100;
+        }
+
         var snapshot = CreatePublishSnapshot();
-        if (snapshot.Track.IsProduction)
+        if (snapshot.Track.IsProduction || GooglePlayTrackCatalog.IsOpenTesting(snapshot.Track.Id))
         {
             var confirmed = await _desktopInteractionService.ConfirmAsync(
                 "Confirm Google Play release",
-                $"Release: {snapshot.ReleaseName}\nNotes language: {snapshot.NotesLanguage}\nTrack: {snapshot.Track.DisplayName}\nPackage: {snapshot.PackageId}\nVersion: {snapshot.VersionLabel}\nRollout: {snapshot.RolloutPercentage}%\n\nProduction publishing can make this release available after Google review. Continue?");
+                $"Release: {snapshot.ReleaseName}\nNotes language: {snapshot.NotesLanguage}\nTrack: {snapshot.Track.DisplayNameWithId}\nPackage: {snapshot.PackageId}\nVersion: {snapshot.VersionLabel}\nRollout: {snapshot.RolloutPercentage}%\n\n" +
+                (snapshot.Track.IsProduction
+                    ? "Production publishing can make this release available after Google review."
+                    : "Open testing can be publicly visible and anyone can join.")
+                + " Continue?");
             if (!confirmed)
             {
                 return;
@@ -650,22 +743,27 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
             }
 
             SetStage(GooglePlayPublishStage.Uploading);
+            IReadOnlyList<GooglePlayReleaseNote> releaseNotes = string.IsNullOrWhiteSpace(snapshot.Notes)
+                ? []
+                : [new GooglePlayReleaseNote(snapshot.NotesLanguage, snapshot.Notes)];
             var result = await _releaseWorkflow.PublishAsync(
                 snapshot.AccountId,
                 snapshot.PackageId,
                 aab.FullName,
                 snapshot.Track.Id,
                 snapshot.ReleaseName,
-                [new GooglePlayReleaseNote(snapshot.NotesLanguage, snapshot.Notes)],
+                releaseNotes,
                 snapshot.RolloutPercentage,
                 message => Activity = message,
                 cancellationToken,
                 _stateHolder.Current.Images);
+            _lastPublishedVersionCode = result.VersionCode;
+            OnPropertyChanged(nameof(HasAab));
+            OnPropertyChanged(nameof(IsAabReady));
+            OnPropertyChanged(nameof(ArtifactValidationSummary));
+            await LoadTracksAsync(cancellationToken, result.TrackId, showReadyStatus: false);
             SetStage(result.Stage);
-            SetStatus(
-                result.Stage == GooglePlayPublishStage.Published ? "Published" : "In review",
-                result.Message,
-                result.Stage == GooglePlayPublishStage.Published ? GooglePlayStatusTone.Success : GooglePlayStatusTone.Progress);
+            SetStatus("Change committed", result.Message, GooglePlayStatusTone.Success);
         }, "Publishing to Google Play");
     }
 
@@ -683,7 +781,8 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
                 SelectedAccount.Id,
                 _context.PackageId,
                 SelectedTrack.Id,
-                ReleaseName,
+                _lastPublishedVersionCode
+                    ?? (SelectedTrack.VersionCodes.Count == 1 && int.TryParse(SelectedTrack.VersionCodes[0], out var code) ? code : null),
                 cancellationToken);
             var resolvedStage = state switch
             {
@@ -712,7 +811,7 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
         }, "Checking Google Play status");
     }
 
-    private bool CanCheckStatus() => IsDesktopSession && !IsBusy && IsProjectReady && IsSignedIn && SelectedAccount is not null && SelectedTrack is not null;
+    private bool CanCheckStatus() => IsDesktopSession && !IsBusy && HasLoadedTracksForContext && SelectedTrack is not null;
 
     [RelayCommand(CanExecute = nameof(CanChooseKeystore))]
     private async Task ChooseKeystoreAsync()
@@ -936,17 +1035,30 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(HasStoreImages));
     }
 
-    private async Task LoadTracksAsync(CancellationToken cancellationToken)
+    private async Task LoadTracksAsync(
+        CancellationToken cancellationToken,
+        string? preferredTrackId = null,
+        bool showReadyStatus = true)
     {
         if (_context is null || SelectedAccount is null || !IsProjectReady)
+        {
+            _tracksContext = string.Empty;
+            return;
+        }
+
+        var account = SelectedAccount;
+        var packageId = _context.PackageId;
+        var previousTrackId = preferredTrackId ?? SelectedTrack?.Id;
+        Activity = "Discovering release tracks";
+        var tracks = await _trackWorkflow.GetTracksAsync(account.Id, packageId, cancellationToken);
+        if (SelectedAccount?.Id != account.Id || _context?.PackageId != packageId)
         {
             return;
         }
 
-        Activity = "Discovering release tracks";
-        var tracks = await _trackWorkflow.GetTracksAsync(SelectedAccount.Id, _context.PackageId, cancellationToken);
+        var phoneTracks = tracks.Where(track => !GooglePlayTrackCatalog.IsFormFactor(track.Id)).ToArray();
         Tracks.Clear();
-        foreach (var track in tracks)
+        foreach (var track in phoneTracks)
         {
             Tracks.Add(track);
         }
@@ -958,18 +1070,58 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
             Tracks.Add(GooglePlayTrackCatalog.Describe(GooglePlayTrackCatalog.Production, null, []));
         }
 
-        SelectedTrack = Tracks.FirstOrDefault(track => GooglePlayTrackCatalog.IsInternalTesting(track.Id))
+        _tracksContext = $"{account.Id}|{packageId}";
+        SelectedTrack = Tracks.FirstOrDefault(track => track.Id == previousTrackId)
+            ?? Tracks.FirstOrDefault(track => GooglePlayTrackCatalog.IsInternalTesting(track.Id))
             ?? Tracks.FirstOrDefault(track => !track.IsProduction)
             ?? Tracks.FirstOrDefault();
         OnPropertyChanged(nameof(DeviceLineSummary));
         OnPropertyChanged(nameof(DeviceLineSteps));
+        OnPropertyChanged(nameof(HasLoadedTracksForContext));
+        OnPropertyChanged(nameof(TrackManagementReason));
+        OnPropertyChanged(nameof(CanPublish));
         await RefreshPlaySigningCertificateAsync(cancellationToken);
-        SetStatus(
-            tracks.Count == 0 ? "Play Console setup needed" : "Ready to publish",
-            tracks.Count == 0
-                ? "Standard tracks are shown; confirm access and configuration in Play Console."
-                : $"Found {tracks.Count} release track{(tracks.Count == 1 ? string.Empty : "s")}.",
-            tracks.Count == 0 ? GooglePlayStatusTone.Warning : GooglePlayStatusTone.Success);
+        if (showReadyStatus)
+        {
+            SetStatus(
+                tracks.Count == 0 ? "Play Console setup needed" : "Ready to publish",
+                tracks.Count == 0
+                    ? "Standard tracks are shown; confirm access and configuration in Play Console."
+                    : $"Found {phoneTracks.Length} phone release track{(phoneTracks.Length == 1 ? string.Empty : "s")}.",
+                tracks.Count == 0 ? GooglePlayStatusTone.Warning : GooglePlayStatusTone.Success);
+        }
+    }
+
+    internal async Task RefreshTracksQuietlyAsync()
+    {
+        if (!CanRefreshTracks())
+        {
+            return;
+        }
+
+        IsBusy = true;
+        _operationCts = new CancellationTokenSource();
+        NotifyCommands();
+        try
+        {
+            await LoadTracksAsync(_operationCts.Token, showReadyStatus: false);
+        }
+        catch (OperationCanceledException)
+        {
+            SetStatus("Refresh cancelled", "Track refresh was cancelled.", GooglePlayStatusTone.Info);
+        }
+        catch (Exception ex)
+        {
+            SetStatus("Could not refresh tracks", ex.Message, GooglePlayStatusTone.Warning);
+        }
+        finally
+        {
+            _operationCts.Dispose();
+            _operationCts = null;
+            IsBusy = false;
+            NotifyCommands();
+            StartPendingTrackRefresh();
+        }
     }
 
     /// <summary>
@@ -1061,8 +1213,8 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
                 message => Activity = message,
                 cancellationToken);
 
+            await LoadTracksAsync(cancellationToken, track.Id, showReadyStatus: false);
             SetStatus("Release removed", result.Message, GooglePlayStatusTone.Success);
-            await LoadTracksAsync(cancellationToken);
         }, "Removing the release from the track");
     }
 
@@ -1101,13 +1253,15 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
                 SelectedAccount.Id,
                 _context.PackageId,
                 track.Id,
-                ReleaseName,
+                track.LiveReleaseName,
                 track.VersionCodes,
+                track.LiveReleaseNotes,
+                track.LiveRolloutPercentage,
                 message => Activity = message,
                 cancellationToken);
 
+            await LoadTracksAsync(cancellationToken, track.Id, showReadyStatus: false);
             SetStatus("Release halted", result.Message, GooglePlayStatusTone.Success);
-            await LoadTracksAsync(cancellationToken);
         }, "Halting the release");
     }
 
@@ -1130,7 +1284,9 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var targets = Tracks.Where(track => track.Id != source.Id).ToArray();
+        var targets = Tracks
+            .Where(track => track.Id != source.Id && GooglePlayPromotionPolicy.IsTargetAllowed(track))
+            .ToArray();
         if (targets.Length == 0)
         {
             SetStatus(
@@ -1146,6 +1302,23 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
             return;
         }
 
+        var rollout = GooglePlayPromotionPolicy.Resolve(source, target);
+        if (target.IsProduction || GooglePlayTrackCatalog.IsOpenTesting(target.Id))
+        {
+            var confirmed = await _desktopInteractionService.ConfirmAsync(
+                "Confirm release promotion",
+                $"Promote {source.LiveReleaseName} from {source.DisplayNameWithId} to {target.DisplayNameWithId}?\n" +
+                $"Version codes: {string.Join(", ", source.VersionCodes)}\nStatus: {rollout.Status}\nRollout: {rollout.RolloutPercentage?.ToString() ?? "unknown"}%\n\n" +
+                (target.IsProduction
+                    ? "Production publishing can make this release available after Google review."
+                    : "Open testing can be publicly visible and anyone can join.")
+                + " Continue?");
+            if (!confirmed)
+            {
+                return;
+            }
+        }
+
         await RunAsync(async cancellationToken =>
         {
             var result = await _trackWorkflow.PromoteReleaseAsync(
@@ -1153,20 +1326,21 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
                 _context.PackageId,
                 source.Id,
                 target.Id,
-                ReleaseName,
+                source.LiveReleaseName,
                 source.VersionCodes,
-                [new GooglePlayReleaseNote(ReleaseNotesLanguage, ReleaseNotes)],
-                RolloutPercentage,
+                source.LiveReleaseNotes,
+                rollout.Status,
+                rollout.RolloutPercentage,
                 message => Activity = message,
                 cancellationToken);
 
+            await LoadTracksAsync(cancellationToken, target.Id, showReadyStatus: false);
             SetStatus("Release promoted", result.Message, GooglePlayStatusTone.Success);
-            await LoadTracksAsync(cancellationToken);
         }, "Promoting the release");
     }
 
     /// <summary>Creates a closed testing track, which is the only kind the Play API can create.</summary>
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanCreateClosedTrack))]
     private async Task CreateClosedTestingTrackAsync()
     {
         if (_context is null || SelectedAccount is null)
@@ -1191,8 +1365,11 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
                 message => Activity = message,
                 cancellationToken);
 
-            SetStatus("Track created", result.Message, GooglePlayStatusTone.Success);
-            await LoadTracksAsync(cancellationToken);
+            await LoadTracksAsync(cancellationToken, result.TrackId, showReadyStatus: false);
+            SetStatus(
+                "Track created",
+                $"{result.Message} Add testers and choose feedback/opt-in settings in Play Console before sharing the test.",
+                GooglePlayStatusTone.Success);
         }, "Creating the closed testing track");
     }
 
@@ -1215,28 +1392,46 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
             return;
         }
 
+        if (LiveRolloutPercentage >= 100
+            || string.Equals(track.LiveStatus, GooglePlayTrackReleaseStatus.Halted, StringComparison.Ordinal))
+        {
+            var confirmed = await _desktopInteractionService.ConfirmAsync(
+                "Confirm rollout change",
+                $"Update {track.LiveReleaseName} on {track.DisplayNameWithId} to {LiveRolloutPercentage}%?\n" +
+                (LiveRolloutPercentage >= 100
+                    ? "This completes the rollout to every eligible user."
+                    : "This resumes the halted release.")
+                + " Continue?");
+            if (!confirmed)
+            {
+                return;
+            }
+        }
+
         await RunAsync(async cancellationToken =>
         {
             var result = await _trackWorkflow.UpdateRolloutAsync(
                 SelectedAccount.Id,
                 _context.PackageId,
                 track.Id,
-                ReleaseName,
+                track.LiveReleaseName,
                 track.VersionCodes,
-                RolloutPercentage,
-                [new GooglePlayReleaseNote(ReleaseNotesLanguage, ReleaseNotes)],
+                LiveRolloutPercentage,
+                track.LiveReleaseNotes,
                 message => Activity = message,
                 cancellationToken);
 
+            await LoadTracksAsync(cancellationToken, track.Id, showReadyStatus: false);
             SetStatus("Rollout updated", result.Message, GooglePlayStatusTone.Success);
-            await LoadTracksAsync(cancellationToken);
         }, "Updating the rollout");
     }
 
-    private bool CanManageReleaseLine() => !IsBusy && IsDesktopSession && IsProjectReady && SelectedAccount is not null;
+    private bool CanManageReleaseLine() => !IsBusy && IsDesktopSession && HasLoadedTracksForContext
+        && SelectedTrack?.HasUnambiguousLiveRelease == true;
 
-    /// <summary>True when the release lines can be managed right now.</summary>
-    public bool CanManageTrack => !IsBusy && IsDesktopSession && IsProjectReady && SelectedAccount is not null;
+    /// <summary>True when one loaded live release can be managed without ambiguity.</summary>
+    public bool CanManageTrack => CanManageReleaseLine();
+    public bool CanCreateClosedTrack => !IsBusy && IsDesktopSession && HasLoadedTracksForContext;
 
     /// <summary>
     /// Asks the user to pick one of the tracks. The desktop interaction service shows a simple
@@ -1312,6 +1507,7 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
             OnPropertyChanged(nameof(IsStatusWarning));
             OnPropertyChanged(nameof(IsStatusError));
             OnPropertyChanged(nameof(IsStatusInfo));
+            StartPendingTrackRefresh();
         }
     }
 
@@ -1334,6 +1530,9 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(CanPublish));
         OnPropertyChanged(nameof(IsReadyToSubmit));
         OnPropertyChanged(nameof(CanManageTrack));
+        OnPropertyChanged(nameof(CanCreateClosedTrack));
+        OnPropertyChanged(nameof(TrackManagementReason));
+        OnPropertyChanged(nameof(HasLoadedTracksForContext));
         ConnectCommand.NotifyCanExecuteChanged();
         ClearSessionCommand.NotifyCanExecuteChanged();
         ClearSigningKeyCommand.NotifyCanExecuteChanged();
@@ -1342,6 +1541,8 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsEnvironmentSetupAvailable));
         OnPropertyChanged(nameof(CanPersistEnvironmentVariables));
         OnPropertyChanged(nameof(GoogleClientIdStatus));
+        OnPropertyChanged(nameof(ConnectButtonText));
+        OnPropertyChanged(nameof(SetupHeader));
         OnPropertyChanged(nameof(EnvironmentVariables));
         CreateSigningKeyCommand.NotifyCanExecuteChanged();
         InspectSigningKeyCommand.NotifyCanExecuteChanged();
@@ -1355,6 +1556,7 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
         HaltReleaseCommand.NotifyCanExecuteChanged();
         PromoteReleaseCommand.NotifyCanExecuteChanged();
         UpdateRolloutCommand.NotifyCanExecuteChanged();
+        CreateClosedTestingTrackCommand.NotifyCanExecuteChanged();
     }
 
     private void UpsertAccount(GooglePlayAccountInfo account)
@@ -1431,6 +1633,9 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
         string KeyPassword,
         string VersionLabel);
 
+    [RelayCommand]
+    private void SetRollout(int percentage) => RolloutPercentage = Math.Clamp(percentage, 1, 100);
+
     partial void OnSigningKeyInfoChanged(GooglePlaySigningKeyInfo? value)
     {
         _stateHolder.SetSigningKey(value?.Path ?? string.Empty, value?.Alias ?? string.Empty);
@@ -1439,16 +1644,22 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
     partial void OnReleaseNameChanged(string value)
     {
         _stateHolder.SetRelease(value, ReleaseNotes, ReleaseNotesLanguage, RolloutPercentage);
+        OnPropertyChanged(nameof(ReleaseReadiness));
     }
 
     partial void OnReleaseNotesChanged(string value)
     {
         _stateHolder.SetRelease(ReleaseName, value, ReleaseNotesLanguage, RolloutPercentage);
+        OnPropertyChanged(nameof(NotesValidationMessage));
+        OnPropertyChanged(nameof(ReleaseReadiness));
+        OnPropertyChanged(nameof(ReleaseNotesCountText));
     }
 
     partial void OnReleaseNotesLanguageChanged(string value)
     {
         _stateHolder.SetRelease(ReleaseName, ReleaseNotes, value, RolloutPercentage);
+        OnPropertyChanged(nameof(NotesValidationMessage));
+        OnPropertyChanged(nameof(ReleaseReadiness));
     }
 
     partial void OnRolloutPercentageChanged(int value)
@@ -1478,38 +1689,60 @@ public sealed partial class GooglePlayViewModel : ObservableObject, IDisposable
 
     partial void OnSelectedAccountChanged(GooglePlayAccountInfo? value)
     {
+        _tracksContext = string.Empty;
+        _lastPublishedVersionCode = null;
+        SelectedTrack = null;
+        Tracks.Clear();
+        PlaySigningCertificate = string.Empty;
         _stateHolder.SetAccount(value);
         OnPropertyChanged(nameof(ReadinessSummary));
+        OnPropertyChanged(nameof(ReadinessHeadline));
+        OnPropertyChanged(nameof(ReleaseReadiness));
         OnPropertyChanged(nameof(CanPublish));
         OnPropertyChanged(nameof(IsReadyToSubmit));
         OnPropertyChanged(nameof(HasSigningKey));
         OnPropertyChanged(nameof(IsUploadKeyRequired));
+        OnPropertyChanged(nameof(HasLoadedTracksForContext));
+        OnPropertyChanged(nameof(TrackManagementReason));
+        NotifyPlaySigningCertificate();
         NotifyCommands();
+        if (value is not null && IsProjectReady)
+        {
+            if (IsBusy)
+            {
+                _tracksReloadPending = true;
+            }
+            else
+            {
+                _ = RunAsync(token => LoadTracksAsync(token), "Loading Google Play tracks");
+            }
+        }
     }
 
     partial void OnSelectedTrackChanged(GooglePlayTrackInfo? value)
     {
         _isProductionSelected = value?.IsProduction == true;
-        if (value?.IsProduction != true)
-        {
-            RolloutPercentage = 100;
-        }
-        else if (RolloutPercentage is < 1 or > 100)
-        {
-            RolloutPercentage = 100;
-        }
+        _lastPublishedVersionCode = null;
+        RolloutPercentage = 100;
+        LiveRolloutPercentage = value?.LiveRolloutPercentage ?? 100;
         _stateHolder.SetTrack(value, RolloutPercentage);
         OnPropertyChanged(nameof(IsProductionSelected));
+        OnPropertyChanged(nameof(IsFirstProductionRelease));
         OnPropertyChanged(nameof(IsProductionRolloutEnabled));
         OnPropertyChanged(nameof(IsTrackReady));
         OnPropertyChanged(nameof(TrackStatusLabel));
         OnPropertyChanged(nameof(RolloutLabel));
+        OnPropertyChanged(nameof(LiveReleaseSummary));
+        OnPropertyChanged(nameof(TrackManagementReason));
         OnPropertyChanged(nameof(TrackLabel));
         OnPropertyChanged(nameof(ReadinessSummary));
+        OnPropertyChanged(nameof(ReleaseReadiness));
         OnPropertyChanged(nameof(CanPublish));
         OnPropertyChanged(nameof(IsReadyToSubmit));
         OnPropertyChanged(nameof(HasSigningKey));
         OnPropertyChanged(nameof(IsUploadKeyRequired));
+        OnPropertyChanged(nameof(DeviceLineSummary));
+        OnPropertyChanged(nameof(DeviceLineSteps));
         NotifyCommands();
     }
 

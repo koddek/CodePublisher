@@ -115,6 +115,38 @@ public sealed class GooglePlayReleaseLinePolicyTests
     }
 
     [Test]
+    public async Task Plan_AllowsTheTarget_WhenTheDeviceAlreadyRunsThatVersion()
+    {
+        var plan = GooglePlayReleaseLinePolicy.Plan(
+            Device(50),
+            [Production],
+            "production");
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(plan.CanReachTarget).IsTrue();
+            await Assert.That(plan.RequiredVersionCode).IsNull();
+            await Assert.That(plan.Steps).IsEmpty();
+        }
+    }
+
+    [Test]
+    public async Task Plan_AllowsTarget_WhenCompetingLineHasTheSameHighestVersion()
+    {
+        var plan = GooglePlayReleaseLinePolicy.Plan(
+            Device(40),
+            [new GooglePlayTrackLineState("beta", "Open testing", false, ["100"]),
+            new GooglePlayTrackLineState("production", "Production", true, ["100"])],
+            "production");
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(plan.CanReachTarget).IsTrue();
+            await Assert.That(plan.RequiredVersionCode).IsNull();
+        }
+    }
+
+    [Test]
     public async Task EffectiveLine_FindsTheLineServingTheInstalledVersionCode()
     {
         var effective = GooglePlayReleaseLinePolicy.EffectiveLine(

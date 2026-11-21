@@ -13,7 +13,7 @@ namespace CodePublisher.Features.Publishing.Build;
 /// <c>PublishTrimmed</c> to any value is an error there, and <c>PublishReadyToRun=false</c> would
 /// turn off the whole-app precompilation the SDK enables by default. On .NET 11 the commands omit
 /// both properties and let the workload decide. On .NET 10 the Mono-era properties still apply, and
-/// <c>MtouchLink=None</c> is the documented way to relax linking.
+/// <c>TrimMode=copy</c> is the documented way to run the trimmer without removing assemblies.
 /// </summary>
 public static class ApplePublishCommands
 {
@@ -192,7 +192,7 @@ public static class ApplePublishCommands
         {
             if (!configuration.PublishTrimmed)
             {
-                command.Add("-p:MtouchLink=None");
+                command.Add("-p:TrimMode=copy");
             }
 
             return;

@@ -66,6 +66,7 @@ public partial class MainViewModel : ViewModelBase
     private readonly StringBuilder _logBuilder = new();
     private readonly object _logLock = new();
     private bool _logFlushScheduled;
+    private int _logFlushVersion;
     private long _lastLogFlushTicks;
     private const int LogFlushIntervalMs = 150;
     private readonly DesktopInteractionService _desktopInteractionService;
@@ -78,6 +79,7 @@ public partial class MainViewModel : ViewModelBase
     private bool _isOutputDirectoryManualOverride;
     private bool _isNormalizingPublishSettings;
     private bool _isApplyingProjectSelection;
+    private bool _isRefreshingOutputDirectory;
     private int _projectMetadataGeneration;
 
     /// <summary>Every .csproj found under the selected folder, so a source root with several projects can be picked from.</summary>
@@ -137,6 +139,7 @@ public partial class MainViewModel : ViewModelBase
         AdbInstallationNote = BuildAdbInstallationNote(publisherService);
         EmulatorStatus = publisherService.EmulatorStatusText;
         StatusMessage = "Select a .NET project folder to start building your publish command.";
+        ApplyPlatformProfiles(PublishPlatform);
         RebuildNavigation();
         RefreshCommandPreview();
         if (!OperatingSystem.IsBrowser())
@@ -267,6 +270,11 @@ public partial class MainViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsIosDeviceRuntime))]
     [NotifyPropertyChangedFor(nameof(ShowAndroidPackageFormatsTogether))]
     [NotifyPropertyChangedFor(nameof(IsDeviceWatchStatusVisible))]
+    [NotifyPropertyChangedFor(nameof(IsAndroidMonoAotVisible))]
+    [NotifyPropertyChangedFor(nameof(IsRunAotEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsSelfContainedEnabled))]
+    [NotifyPropertyChangedFor(nameof(SelfContainedDisabledReason))]
+    [NotifyPropertyChangedFor(nameof(PublishActionText))]
     private string _publishPlatform = PublisherService.AndroidPlatform;
 
     [ObservableProperty]
@@ -307,6 +315,10 @@ public partial class MainViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(PublishTrimmedDisabledReason))]
     [NotifyPropertyChangedFor(nameof(IsReadyToRunAutomatic))]
     [NotifyPropertyChangedFor(nameof(IsPublishTrimmedAutomatic))]
+    [NotifyPropertyChangedFor(nameof(IsAndroidMonoAotVisible))]
+    [NotifyPropertyChangedFor(nameof(IsRunAotEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsSelfContainedEnabled))]
+    [NotifyPropertyChangedFor(nameof(SelfContainedDisabledReason))]
     private string _targetFramework = "net11.0-android";
 
     [ObservableProperty]
@@ -317,6 +329,8 @@ public partial class MainViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsPublishTrimmedEnabled))]
     [NotifyPropertyChangedFor(nameof(PublishTrimmedDisabledReason))]
     [NotifyPropertyChangedFor(nameof(IsUseAppHostEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsSelfContainedEnabled))]
+    [NotifyPropertyChangedFor(nameof(SelfContainedDisabledReason))]
     private string _runtimeIdentifier = "android-arm64";
 
     [ObservableProperty]
@@ -448,10 +462,10 @@ public partial class MainViewModel : ViewModelBase
     private bool _enableDesugar = true;
 
     [ObservableProperty]
-    private bool _deleteBin = true;
+    private bool _deleteBin;
 
     [ObservableProperty]
-    private bool _deleteObj = true;
+    private bool _deleteObj;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(PublishCommand))]
@@ -585,6 +599,8 @@ public partial class MainViewModel : ViewModelBase
     [NotifyCanExecuteChangedFor(nameof(CancelPublishCommand))]
     [NotifyPropertyChangedFor(nameof(IsEditorEnabled))]
     [NotifyPropertyChangedFor(nameof(IsReadyToRunCheckBoxEnabled))]
+    [NotifyPropertyChangedFor(nameof(IsSelfContainedEnabled))]
+    [NotifyPropertyChangedFor(nameof(SelfContainedDisabledReason))]
     [NotifyPropertyChangedFor(nameof(IsSharedProgressVisible))]
     [NotifyPropertyChangedFor(nameof(IsSharedProgressIndeterminate))]
     [NotifyPropertyChangedFor(nameof(SharedProgressText))]
@@ -592,6 +608,7 @@ public partial class MainViewModel : ViewModelBase
     private bool _isBusy;
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(PublishCommand))]
     private bool _isPublishing;
 
     public bool IsEditorEnabled => !IsBusy;
@@ -691,10 +708,30 @@ public partial class MainViewModel : ViewModelBase
         }
     }
 
+    /// <summary>The output folder owned by the active pack or publish workflow.</summary>
+    public string ActiveOutputDirectory
+    {
+        get => IsNuGetPlatform ? _nugetViewModel.OutputDirectory : OutputDirectory;
+        set
+        {
+            if (IsNuGetPlatform)
+            {
+                _nugetViewModel.OutputDirectory = value;
+            }
+            else
+            {
+                OutputDirectory = value;
+            }
+
+            OnPropertyChanged(nameof(ActiveOutputDirectory));
+            OnPropertyChanged(nameof(ContextOutputText));
+        }
+    }
+
     /// <summary>The output folder shown in the sticky context strip.</summary>
-    public string ContextOutputText => string.IsNullOrWhiteSpace(OutputDirectory)
+    public string ContextOutputText => string.IsNullOrWhiteSpace(ActiveOutputDirectory)
         ? "No output folder"
-        : OutputDirectory;
+        : ActiveOutputDirectory;
 
     public bool ShowAndroidPackageFormatsTogether => IsAndroidPlatform && IncludeAab;
 
@@ -705,7 +742,21 @@ public partial class MainViewModel : ViewModelBase
 
     public bool IsSigningCardVisible => IsAndroidPlatform && IsSigningEnabled;
 
-    public bool IsKnownGoodBaselineVisible => true;
+    public bool IsKnownGoodBaselineVisible => !IsNuGetPlatform;
+
+    public bool IsAndroidMonoAotVisible => IsAndroidPlatform && PublishOptionPolicy.SupportsAndroidMonoAot(TargetFramework);
+
+    public bool IsSelfContainedEnabled => IsEditorEnabled
+        && !IsIosPlatform
+        && !PublishPlatforms.IsMacCatalyst(TargetFramework, RuntimeIdentifier);
+
+    public string SelfContainedDisabledReason => IsSelfContainedEnabled
+        ? string.Empty
+        : IsEditorEnabled
+            ? "Apple application publishes are self-contained because the workload always runs the trimmer."
+            : "Wait for the current operation to finish.";
+
+    public string PublishActionText => IsNuGetPlatform ? "Pack" : "Publish";
 
     public bool IsShrinkerSettingsEnabled => PublishOptionPolicy.IsShrinkerSettingsEnabled(AndroidLinkMode);
 
@@ -718,7 +769,7 @@ public partial class MainViewModel : ViewModelBase
     public bool IsProfiledAotEnabled => PublishOptionPolicy.IsProfiledAotEnabled(RunAotCompilation);
     public string ProfiledAotDisabledReason => PublishOptionPolicy.ProfiledAotDisabledReason(RunAotCompilation);
 
-    public bool IsRunAotEnabled => !IsAndroidPlatform || PublishOptionPolicy.IsAndroidAotEnabled(AndroidLinkMode);
+    public bool IsRunAotEnabled => IsAndroidMonoAotVisible && PublishOptionPolicy.IsAndroidAotEnabled(AndroidLinkMode);
     public string RunAotDisabledReason => PublishOptionPolicy.AndroidAotDisabledReason(AndroidLinkMode);
 
     public bool IsPublishSingleFileEnabled => PublishOptionPolicy.IsPublishSingleFileEnabled(PublishAot, PublishPlatform);
@@ -795,15 +846,31 @@ public partial class MainViewModel : ViewModelBase
         {
             StopDeviceWatch();
         }
+
+        if (section == PublishSection.GooglePlay)
+        {
+            _ = _googlePlayViewModel.RefreshTracksQuietlyAsync();
+        }
     }
 
     /// <summary>Keeps the open folder in sync when the user switches target.</summary>
     partial void OnSelectedDeviceChanged(AndroidDeviceInfo? value)
     {
+        _deviceFilesGeneration++;
+        _crashLogScanGeneration++;
         OnPropertyChanged(nameof(DeviceFilesHint));
+        OnPropertyChanged(nameof(CrashLogTargetText));
         if (IsDeploySection)
         {
-            _ = LoadDeviceFilesFromSectionAsync();
+            if (IsDeviceFilesBusy)
+            {
+                _deviceFilesReloadPending = true;
+            }
+            else
+            {
+                _deviceFilesReloadPending = false;
+                _ = LoadDeviceFilesFromSectionAsync();
+            }
         }
     }
 
@@ -816,34 +883,67 @@ public partial class MainViewModel : ViewModelBase
     /// </summary>
     partial void OnProjectDirectoryChanged(string value)
     {
-        // Invalidate a load that is still running for the previous folder.
-        _projectMetadataGeneration++;
-        RefreshAvailableProjectFiles();
-
-        var selection = SelectedProjectFile;
-        if (string.IsNullOrWhiteSpace(selection) || !IsProjectFileUnderSelectedDirectory(selection))
-        {
-            selection = AvailableProjectFiles.FirstOrDefault() ?? string.Empty;
-        }
-
-        // The folder change owns the selection. Set it without letting the selection handler
-        // start a second load, then load exactly once below.
+        var generation = ++_projectMetadataGeneration;
         _isApplyingProjectSelection = true;
         try
         {
-            SelectedProjectFile = selection;
+            SelectedProjectFile = string.Empty;
         }
         finally
         {
             _isApplyingProjectSelection = false;
         }
 
+        AvailableProjectFiles.Clear();
+        OnPropertyChanged(nameof(HasMultipleProjectFiles));
         ResetProjectDerivedState();
         UpdateGooglePlayContext();
 
-        if (!string.IsNullOrWhiteSpace(selection))
+        if (!string.IsNullOrWhiteSpace(value) && Directory.Exists(value))
         {
-            _ = ReloadProjectMetadataAsync();
+            _ = DiscoverProjectFilesAsync(value, generation);
+        }
+    }
+
+    private async Task DiscoverProjectFilesAsync(string projectDirectory, int generation)
+    {
+        try
+        {
+            var files = await Task.Run(
+                () => ProjectInspector.DiscoverProjectFiles(new DirectoryInfo(projectDirectory)));
+            if (generation != _projectMetadataGeneration
+                || !string.Equals(projectDirectory, ProjectDirectory, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            foreach (var file in files)
+            {
+                AvailableProjectFiles.Add(file.FullName);
+            }
+
+            OnPropertyChanged(nameof(HasMultipleProjectFiles));
+            _isApplyingProjectSelection = true;
+            try
+            {
+                SelectedProjectFile = files.FirstOrDefault()?.FullName ?? string.Empty;
+            }
+            finally
+            {
+                _isApplyingProjectSelection = false;
+            }
+
+            if (files.Count > 0)
+            {
+                await ReloadProjectMetadataAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            if (generation == _projectMetadataGeneration)
+            {
+                StatusMessage = $"Could not inspect this folder: {ex.Message}";
+            }
         }
     }
 
@@ -856,8 +956,11 @@ public partial class MainViewModel : ViewModelBase
 
         if (string.IsNullOrWhiteSpace(value) || !File.Exists(value))
         {
-            // A pending load for the old selection must not land on the empty selection.
+            // A pending load for the old selection must not land on the empty selection, and no
+            // feature may retain the previous project's pack or deployment context.
             _projectMetadataGeneration++;
+            ResetProjectDerivedState();
+            UpdateGooglePlayContext();
             return;
         }
 
@@ -880,6 +983,8 @@ public partial class MainViewModel : ViewModelBase
     /// </summary>
     private void ResetProjectDerivedState()
     {
+        _isRefreshingOutputDirectory = false;
+        PublishCommand.NotifyCanExecuteChanged();
         _projectOutputLayout = null;
         ProjectOutputLayoutSummary = string.Empty;
         PackageId = string.Empty;
@@ -887,20 +992,6 @@ public partial class MainViewModel : ViewModelBase
         ProjectInternalVersion = string.Empty;
         IsProjectInternalVersionSupported = GetDefaultInternalVersionSupport(PublishPlatform);
         SetAutomaticOutputDirectory(string.Empty);
-    }
-
-    private void RefreshAvailableProjectFiles()
-    {
-        AvailableProjectFiles.Clear();
-        if (!string.IsNullOrWhiteSpace(ProjectDirectory) && Directory.Exists(ProjectDirectory))
-        {
-            foreach (var file in ProjectInspector.DiscoverProjectFiles(new DirectoryInfo(ProjectDirectory)))
-            {
-                AvailableProjectFiles.Add(file.FullName);
-            }
-        }
-
-        OnPropertyChanged(nameof(HasMultipleProjectFiles));
     }
 
     private bool IsProjectFileUnderSelectedDirectory(string projectFilePath)
@@ -949,6 +1040,63 @@ public partial class MainViewModel : ViewModelBase
         return null;
     }
 
+    partial void OnTargetFrameworkChanged(string value) => HandlePublishTargetChanged();
+
+    partial void OnRuntimeIdentifierChanged(string value) => HandlePublishTargetChanged();
+
+    partial void OnConfigurationChanged(string value) => HandlePublishTargetChanged();
+
+    private void HandlePublishTargetChanged()
+    {
+        NormalizePublishSettings();
+        if (_isNormalizingPublishSettings)
+        {
+            return;
+        }
+
+        if (_projectOutputLayout?.UsesCentralizedArtifacts == true
+            && !string.IsNullOrWhiteSpace(SelectedProjectFile))
+        {
+            _isRefreshingOutputDirectory = true;
+            SetAutomaticOutputDirectory(string.Empty);
+            PublishCommand.NotifyCanExecuteChanged();
+            _ = ReloadProjectMetadataAsync();
+            return;
+        }
+
+        RefreshAutomaticOutputDirectory();
+    }
+
+    private void RefreshAutomaticOutputDirectory()
+    {
+        if (_isOutputDirectoryManualOverride || _isNormalizingPublishSettings)
+        {
+            return;
+        }
+
+        if (_projectOutputLayout?.UsesCentralizedArtifacts == true)
+        {
+            SetAutomaticOutputDirectory(_projectOutputLayout.DefaultOutputDirectory);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(ProjectDirectory)
+            || string.IsNullOrWhiteSpace(TargetFramework)
+            || string.IsNullOrWhiteSpace(RuntimeIdentifier))
+        {
+            return;
+        }
+
+        var projectDirectory = !string.IsNullOrWhiteSpace(SelectedProjectFile)
+            ? new FileInfo(SelectedProjectFile).Directory ?? new DirectoryInfo(ProjectDirectory)
+            : new DirectoryInfo(ProjectDirectory);
+        SetAutomaticOutputDirectory(ProjectInspector.GetDefaultOutputDirectory(
+            projectDirectory,
+            Configuration,
+            TargetFramework,
+            RuntimeIdentifier));
+    }
+
     partial void OnOutputDirectoryChanged(string value)
     {
         if (!_isAssigningAutomaticOutputDirectory)
@@ -968,12 +1116,24 @@ public partial class MainViewModel : ViewModelBase
 
     partial void OnPublishPlatformChanged(string value)
     {
+        _deviceFilesGeneration++;
+        _crashLogScanGeneration++;
+        OnPropertyChanged(nameof(CrashLogTargetText));
         IsProjectInternalVersionSupported = GetDefaultInternalVersionSupport(value);
 
-        // Platforms other than Android have nothing to watch, so this stops the poll as well.
-        StartDeviceWatch();
+        // Deploy owns the device poll; changing platform elsewhere must not start background adb work.
+        if (IsDeploySection)
+        {
+            StartDeviceWatch();
+        }
+        else
+        {
+            StopDeviceWatch();
+        }
 
         ApplyPlatformProfiles(value);
+        OnPropertyChanged(nameof(ActiveOutputDirectory));
+        OnPropertyChanged(nameof(ContextOutputText));
         RebuildNavigation();
 
         // The identifier and the output layout are platform-specific. Clear them before the
@@ -994,40 +1154,57 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsReadyToRunCheckBoxEnabled)));
         UpdateGooglePlayContext();
 
-        if (!string.IsNullOrWhiteSpace(ProjectDirectory))
+        if (!string.IsNullOrWhiteSpace(SelectedProjectFile))
         {
             _ = ReloadProjectMetadataAsync();
+        }
+        else if (!string.IsNullOrWhiteSpace(ProjectDirectory) && Directory.Exists(ProjectDirectory))
+        {
+            _ = DiscoverProjectFilesAsync(ProjectDirectory, _projectMetadataGeneration);
         }
     }
 
     private void ApplyPlatformProfiles(string platform)
     {
         var defaults = PlatformProfiles.GetDefaults(platform);
-        TargetFramework = defaults.TargetFramework;
-        RuntimeIdentifier = defaults.RuntimeIdentifier;
-        SelfContained = defaults.SelfContained;
-        PublishTrimmed = defaults.PublishTrimmed;
-        PublishAot = defaults.PublishAot;
-        PublishReadyToRun = defaults.PublishReadyToRun;
-        PublishSingleFile = defaults.PublishSingleFile;
-        UseAppHost = defaults.UseAppHost;
-        CreateMacAppBundle = defaults.CreateMacAppBundle;
-        CreateWindowsExecutable = defaults.CreateWindowsExecutable;
-        BuildIpa = defaults.BuildIpa;
-        ArchiveOnBuild = defaults.ArchiveOnBuild;
-        RunAotCompilation = defaults.RunAotCompilation;
-        EnableProfiledAot = defaults.EnableProfiledAot;
-        AndroidLinkMode = defaults.AndroidLinkMode;
-        AndroidLinkTool = defaults.AndroidLinkTool;
-        AndroidDexTool = defaults.AndroidDexTool;
-        CreateMappingFile = defaults.CreateMappingFile;
-        EnableMultiDex = defaults.EnableMultiDex;
-        UseAapt2 = defaults.UseAapt2;
-        EnableDesugar = defaults.EnableDesugar;
-        IncludeApk = defaults.IncludeApk;
-        IncludeAab = defaults.IncludeAab;
-        SignMode = defaults.SignMode;
+        _isNormalizingPublishSettings = true;
+        try
+        {
+            Configuration = defaults.Configuration;
+            TargetFramework = defaults.TargetFramework;
+            RuntimeIdentifier = defaults.RuntimeIdentifier;
+            SelfContained = defaults.SelfContained;
+            PublishTrimmed = defaults.PublishTrimmed;
+            PublishAot = defaults.PublishAot;
+            PublishReadyToRun = defaults.PublishReadyToRun;
+            PublishSingleFile = defaults.PublishSingleFile;
+            UseAppHost = defaults.UseAppHost;
+            CreateMacAppBundle = defaults.CreateMacAppBundle;
+            CreateWindowsExecutable = defaults.CreateWindowsExecutable;
+            BuildIpa = defaults.BuildIpa;
+            ArchiveOnBuild = defaults.ArchiveOnBuild;
+            RunAotCompilation = defaults.RunAotCompilation;
+            EnableProfiledAot = defaults.EnableProfiledAot;
+            AndroidLinkMode = defaults.AndroidLinkMode;
+            AndroidLinkTool = defaults.AndroidLinkTool;
+            AndroidDexTool = defaults.AndroidDexTool;
+            CreateMappingFile = defaults.CreateMappingFile;
+            EnableMultiDex = defaults.EnableMultiDex;
+            UseAapt2 = defaults.UseAapt2;
+            EnableDesugar = defaults.EnableDesugar;
+            IncludeApk = defaults.IncludeApk;
+            IncludeAab = defaults.IncludeAab;
+            SignMode = defaults.SignMode;
+            DeleteBin = false;
+            DeleteObj = false;
+        }
+        finally
+        {
+            _isNormalizingPublishSettings = false;
+        }
+
         NormalizePublishSettings();
+        RefreshAutomaticOutputDirectory();
     }
 
     /// <summary>
@@ -1245,7 +1422,6 @@ public partial class MainViewModel : ViewModelBase
         }
 
         ProjectDirectory = selected;
-        await ReloadProjectMetadataAsync();
     }
 
     [RelayCommand]
@@ -1257,10 +1433,10 @@ public partial class MainViewModel : ViewModelBase
             return;
         }
 
-        var selected = await _desktopInteractionService.PickFolderAsync("Select publish output directory", OutputDirectory);
+        var selected = await _desktopInteractionService.PickFolderAsync("Select publish output directory", ActiveOutputDirectory);
         if (!string.IsNullOrWhiteSpace(selected))
         {
-            OutputDirectory = selected;
+            ActiveOutputDirectory = selected;
         }
     }
 
@@ -1499,8 +1675,19 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand(CanExecute = nameof(CanUseIosPackageActions))]
     private async Task UninstallIosAppAsync()
     {
+        var packageId = PackageId;
+        var target = SelectedIosSimulator;
+        var confirmed = await _desktopInteractionService.ConfirmAsync(
+            "Uninstall iOS app",
+            $"Uninstall {packageId} from {target}? This permanently deletes the app and its local data from that target.");
+        if (!confirmed)
+        {
+            StatusMessage = "Uninstall cancelled.";
+            return;
+        }
+
         await RunQuickActionAsync(
-            async () => await _publisherService.UninstallIosAppAsync(PackageId, SelectedIosSimulator, CancellationToken.None),
+            async () => await _publisherService.UninstallIosAppAsync(packageId, target, CancellationToken.None),
             "Uninstall iOS app");
     }
 
@@ -1602,6 +1789,8 @@ public partial class MainViewModel : ViewModelBase
         var projectFilePath = ResolveProjectFilePath();
         if (string.IsNullOrWhiteSpace(projectFilePath))
         {
+            _isRefreshingOutputDirectory = false;
+            PublishCommand.NotifyCanExecuteChanged();
             return;
         }
 
@@ -1629,6 +1818,14 @@ public partial class MainViewModel : ViewModelBase
             StatusMessage = "Could not load project metadata.";
             await _desktopInteractionService.ShowErrorAsync("Project metadata", ex.Message);
         }
+        finally
+        {
+            if (generation == _projectMetadataGeneration)
+            {
+                _isRefreshingOutputDirectory = false;
+                PublishCommand.NotifyCanExecuteChanged();
+            }
+        }
     }
 
     /// <summary>
@@ -1650,6 +1847,9 @@ public partial class MainViewModel : ViewModelBase
             _isApplyingProjectSelection = false;
         }
 
+        // The new layout is applied below. Clear the old one before TFM/RID setters run so their
+        // centralized-output refresh cannot start a duplicate metadata load.
+        _projectOutputLayout = null;
         if (!string.IsNullOrWhiteSpace(metadata.TargetFramework)
             && !string.Equals(TargetFramework, metadata.TargetFramework, StringComparison.OrdinalIgnoreCase))
         {
@@ -1682,6 +1882,8 @@ public partial class MainViewModel : ViewModelBase
         IsProjectInternalVersionSupported = metadata.SupportsInternalVersion;
 
         ApplyPlatformRuntimeDefaults();
+        NormalizePublishSettings();
+        RefreshAutomaticOutputDirectory();
 
         StatusMessage = "Project metadata loaded. Review the command preview before publishing.";
         UpdateGooglePlayContext();
@@ -1695,9 +1897,17 @@ public partial class MainViewModel : ViewModelBase
         }
         else if (IsMacOsPlatform)
         {
-            RuntimeIdentifier = TargetFramework.Contains("maccatalyst", StringComparison.OrdinalIgnoreCase)
-                ? "maccatalyst-arm64"
-                : "osx-arm64";
+            if (TargetFramework.Contains("maccatalyst", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!RuntimeIdentifier.StartsWith("maccatalyst-", StringComparison.OrdinalIgnoreCase))
+                {
+                    RuntimeIdentifier = "maccatalyst-arm64";
+                }
+            }
+            else if (!RuntimeIdentifier.StartsWith("osx-", StringComparison.OrdinalIgnoreCase))
+            {
+                RuntimeIdentifier = "osx-arm64";
+            }
         }
         else if (string.Equals(PublishPlatform, PublisherService.WindowsPlatform, StringComparison.Ordinal))
         {
@@ -1708,9 +1918,10 @@ public partial class MainViewModel : ViewModelBase
         }
         else if (string.Equals(PublishPlatform, PublisherService.IosPlatform, StringComparison.Ordinal))
         {
-            if (!RuntimeIdentifier.StartsWith("ios-", StringComparison.OrdinalIgnoreCase))
+            if (!RuntimeIdentifier.StartsWith("ios-", StringComparison.OrdinalIgnoreCase)
+                && !RuntimeIdentifier.StartsWith("iossimulator-", StringComparison.OrdinalIgnoreCase))
             {
-                RuntimeIdentifier = "ios-arm64";
+                RuntimeIdentifier = "iossimulator-arm64";
             }
         }
         else if (string.Equals(PublishPlatform, PublisherService.LinuxPlatform, StringComparison.Ordinal))
@@ -1741,11 +1952,14 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand(CanExecute = nameof(CanPublish))]
     private async Task PublishAsync()
     {
+        SelectedSection = PublishSection.Output;
+
         // On the NuGet platform "Publish" means "pack the NuGet package", so the header button
         // runs the NuGet pipeline instead of dotnet publish.
         if (IsNuGetPlatform)
         {
             IsPublishing = true;
+            IsBusy = true;
             NotifyPublishStateChanged();
             try
             {
@@ -1755,6 +1969,7 @@ public partial class MainViewModel : ViewModelBase
             finally
             {
                 IsPublishing = false;
+                IsBusy = false;
                 NotifyPublishStateChanged();
             }
 
@@ -1814,7 +2029,14 @@ public partial class MainViewModel : ViewModelBase
 
     private bool CanPublish()
     {
-        return !IsBusy && HasProjectSelection;
+        if (IsBusy || IsPublishing || _isRefreshingOutputDirectory)
+        {
+            return false;
+        }
+
+        return IsNuGetPlatform
+            ? _nugetViewModel.HasProject && !_nugetViewModel.IsBusy
+            : ResolveProjectFilePath() is not null;
     }
 
     /// <summary>
@@ -2031,22 +2253,26 @@ public partial class MainViewModel : ViewModelBase
             return;
         }
 
-        var installed = await _publisherService.ReadInstalledAndroidPackageAsync(
-            PackageId,
-            SelectedDevice?.Serial,
-            CancellationToken.None);
-
-        _googlePlayViewModel.SetConnectedDevice(installed is null
-            ? null
-            : new GooglePlayDeviceLineState(
-                installed.VersionCode,
-                installed.InstalledByGooglePlay,
-                installed.CertificateDigests));
-
+        var packageId = PackageId;
+        var serial = SelectedDevice?.Serial;
+        var targetName = SelectedDevice?.Name ?? "the selected device";
         await RunQuickActionAsync(
-            async () => installed is null
-                ? $"{PackageId} is not installed on {SelectedDevice?.Name}."
-                : DescribeInstalledPackage(installed),
+            async () =>
+            {
+                var installed = await _publisherService.ReadInstalledAndroidPackageAsync(
+                    packageId,
+                    serial,
+                    CancellationToken.None);
+                _googlePlayViewModel.SetConnectedDevice(installed is null
+                    ? null
+                    : new GooglePlayDeviceLineState(
+                        installed.VersionCode,
+                        installed.InstalledByGooglePlay,
+                        installed.CertificateDigests));
+                return installed is null
+                    ? $"{packageId} is not installed on {targetName}."
+                    : DescribeInstalledPackage(installed);
+            },
             "Inspect installed app");
     }
 
@@ -2088,8 +2314,20 @@ public partial class MainViewModel : ViewModelBase
             return;
         }
 
+        var packageId = PackageId;
+        var serial = SelectedDevice?.Serial;
+        var targetName = SelectedDevice?.DisplayName ?? "the selected device";
+        var confirmed = await _desktopInteractionService.ConfirmAsync(
+            "Uninstall Android app",
+            $"Uninstall {packageId} from {targetName}? This permanently deletes the app and its local data from that device.");
+        if (!confirmed)
+        {
+            StatusMessage = "Uninstall cancelled.";
+            return;
+        }
+
         await RunQuickActionAsync(
-            async () => await _publisherService.UninstallAsync(PackageId, SelectedDevice?.Serial, CancellationToken.None),
+            async () => await _publisherService.UninstallAsync(packageId, serial, CancellationToken.None),
             "Uninstall app");
     }
 
@@ -2137,8 +2375,18 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand(CanExecute = nameof(CanDeleteDesktopApp))]
     private async Task DeleteDesktopAppAsync()
     {
+        var outputDirectory = OutputDirectory;
+        var confirmed = await _desktopInteractionService.ConfirmAsync(
+            "Delete published app",
+            $"Delete the published .app bundle under {outputDirectory}? Other files and projects in that folder are kept.");
+        if (!confirmed)
+        {
+            StatusMessage = "Delete cancelled.";
+            return;
+        }
+
         await RunQuickActionAsync(
-            async () => await _publisherService.DeletePublishedDesktopAppAsync(OutputDirectory, CancellationToken.None),
+            async () => await _publisherService.DeletePublishedDesktopAppAsync(outputDirectory, CancellationToken.None),
             "Delete desktop app");
     }
 
@@ -2178,6 +2426,13 @@ public partial class MainViewModel : ViewModelBase
                 return await action();
             });
             
+            if (string.Equals(message, "Screenshot cancelled.", StringComparison.Ordinal))
+            {
+                StatusMessage = message;
+                AppendLog(Environment.NewLine + $"[{actionName}] {message}" + Environment.NewLine);
+                return;
+            }
+
             // Update status
             var failed = IsFailureMessage(message);
             StatusMessage = failed
@@ -2298,6 +2553,7 @@ public partial class MainViewModel : ViewModelBase
         }
         finally
         {
+            FlushLogFinal();
             IsBusy = false;
         }
     }
@@ -2569,11 +2825,8 @@ public partial class MainViewModel : ViewModelBase
 
     private void ScheduleLogFlush()
     {
-        if (!ShouldFlushNow())
-        {
-            return;
-        }
-
+        var flushImmediately = ShouldFlushNow();
+        int version;
         lock (_logLock)
         {
             if (_logFlushScheduled)
@@ -2582,9 +2835,22 @@ public partial class MainViewModel : ViewModelBase
             }
 
             _logFlushScheduled = true;
+            version = _logFlushVersion;
         }
 
-        Dispatcher.UIThread.Post(FlushLog, DispatcherPriority.Background);
+        if (flushImmediately)
+        {
+            Dispatcher.UIThread.Post(() => FlushLog(version), DispatcherPriority.Background);
+            return;
+        }
+
+        // Always schedule a trailing flush. Without it, the final chunk of a short operation can
+        // remain in the StringBuilder forever when no later log message arrives.
+        _ = Dispatcher.UIThread.InvokeAsync(async () =>
+        {
+            await Task.Delay(LogFlushIntervalMs);
+            FlushLog(version);
+        });
     }
 
     private bool ShouldFlushNow()
@@ -2600,15 +2866,21 @@ public partial class MainViewModel : ViewModelBase
         return Interlocked.CompareExchange(ref _lastLogFlushTicks, nowTicks, previousTicks) == previousTicks;
     }
 
-    private void FlushLog()
+    private void FlushLog(int version)
     {
         string output;
         lock (_logLock)
         {
+            if (version != _logFlushVersion)
+            {
+                return;
+            }
+
             _logFlushScheduled = false;
             output = _logBuilder.ToString();
         }
 
+        Interlocked.Exchange(ref _lastLogFlushTicks, Environment.TickCount64);
         LiveOutput = output;
     }
 
@@ -2619,6 +2891,7 @@ public partial class MainViewModel : ViewModelBase
         string output;
         lock (_logLock)
         {
+            _logFlushVersion++;
             _logFlushScheduled = false;
             output = _logBuilder.ToString();
         }
@@ -2637,6 +2910,7 @@ public partial class MainViewModel : ViewModelBase
         lock (_logLock)
         {
             _logBuilder.Clear();
+            _logFlushVersion++;
             _logFlushScheduled = false;
         }
 
@@ -2731,7 +3005,12 @@ public partial class MainViewModel : ViewModelBase
 
     partial void OnCreateWindowsExecutableChanged(bool value)
     {
-        NormalizePublishSettings(PublishOptionId.CreateWindowsExecutable, value);
+        // Other platforms clear this irrelevant flag during normalization; only the visible Windows
+        // alias may change the shared apphost option.
+        if (IsWindowsPublishOptionsVisible)
+        {
+            UseAppHost = value;
+        }
     }
 
     partial void OnBuildIpaChanged(bool value)
@@ -2770,7 +3049,7 @@ public partial class MainViewModel : ViewModelBase
     public bool IsReadyToRunAutomatic => PublishOptionPolicy.IsReadyToRunAutomatic(
         PublishPlatform, TargetFramework, Configuration, PublishTrimmed);
 
-    /// <summary>True when the .NET 11 Apple workload owns trimming and MtouchLink controls it.</summary>
+    /// <summary>True when the .NET 11 Apple workload owns trimming and TrimMode controls its granularity.</summary>
     public bool IsPublishTrimmedAutomatic => PublishOptionPolicy.IsPublishTrimmedAutomatic(PublishPlatform, TargetFramework);
 
     public bool IsReadyToRunCheckBoxEnabled => IsEditorEnabled && IsReadyToRunEnabled;

@@ -37,15 +37,15 @@ public static class ApplePublishPolicy
 
     public static string PublishAotDisabledReason(string platform)
         => string.Equals(platform, PublishPlatforms.Ios, StringComparison.Ordinal)
-            ? "iOS is always trimmed and AOT is implied by the SDK."
-            : "MacCatalyst always publishes trimmed — AOT flag not applicable.";
+            ? "This app keeps the iOS workload's default compilation; NativeAOT is a separate opt-in project profile."
+            : "This app keeps the Mac Catalyst workload's default compilation; NativeAOT is a separate opt-in project profile.";
 
     /// <summary>The Apple workload forces trimming on; there is no opt-out switch to flip.</summary>
     public static bool IsPublishTrimmedEnabled() => false;
 
     /// <summary>
     /// Whether the .NET 11 Apple workload sets <c>PublishTrimmed</c> itself. Setting the property
-    /// explicitly is an error on .NET 11; <c>MtouchLink</c> is the supported control.
+    /// explicitly is an error on .NET 11; <c>TrimMode</c> controls trimming granularity.
     /// </summary>
     public static bool IsPublishTrimmedAutomatic(string? targetFramework) =>
         ProjectInspector.GetTargetFrameworkVersion(targetFramework) >= 11;
@@ -54,13 +54,13 @@ public static class ApplePublishPolicy
     {
         if (IsPublishTrimmedAutomatic(targetFramework))
         {
-            return "Trimming is on automatically: the .NET 11 Apple workload controls it with " +
-                "MtouchLink. Set MtouchLink=None in the project to relax linking.";
+            return "Trimming is on automatically: the .NET 11 Apple workload controls it. " +
+                "Set TrimMode=copy in the project to run the trimmer without removing assemblies.";
         }
 
         return string.Equals(platform, PublishPlatforms.Ios, StringComparison.Ordinal)
-            ? "iOS SDK forces PublishTrimmed=true; to relax linking set MtouchLink=None in the project."
-            : "MacCatalyst forces PublishTrimmed=true; to relax linking set MtouchLink=None in the project.";
+            ? "The iOS workload always runs the trimmer; set TrimMode=copy in the project to keep every assembly."
+            : "The Mac Catalyst workload always runs the trimmer; set TrimMode=copy in the project to keep every assembly.";
     }
 
     public static bool IsPublishSingleFileEnabled() => false;
@@ -80,4 +80,18 @@ public static class ApplePublishPolicy
 
     public static bool IsBuildIpaEnabled(string platform, string runtimeIdentifier)
         => IsArchiveOnBuildEnabled(platform, runtimeIdentifier);
+
+    public static void ValidateEvaluatedProperties(string? targetFramework, IReadOnlyDictionary<string, string>? evaluated)
+    {
+        if (ProjectInspector.GetTargetFrameworkVersion(targetFramework) < 11 || evaluated is null)
+        {
+            return;
+        }
+
+        if (evaluated.TryGetValue("PublishTrimmed", out var value) && !string.IsNullOrWhiteSpace(value))
+        {
+            throw new InvalidOperationException(
+                $"`PublishTrimmed` is set to `{value}` in the project or an imported props file. .NET 11 Apple workloads reject an explicit value. Remove it and use `TrimMode=copy` only if you want to keep every assembly.");
+        }
+    }
 }

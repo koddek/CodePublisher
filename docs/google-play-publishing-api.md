@@ -1,6 +1,6 @@
 # Google Play publishing API: what the app can do
 
-Reviewed: 2026-11-17 against the published Google Play Developer API v3 reference.
+Reviewed: 2026-11-20 against the published Google Play Developer API v3 reference and Play Console release guidance.
 
 This document separates what the API exposes from what this app actually does. A "Console only" row means the API cannot do it for a normal app, so the app offers guidance rather than a command that would fail.
 
@@ -13,8 +13,11 @@ This document separates what the API exposes from what this app actually does. A
 | Release notes | `releaseNotes[]` on a track `Release`, each `{language, text}` | Yes. The Release card takes a language and the notes text. |
 | Halt a release (pause serving) | `status: halted` in a track release | Yes. "Halt this release" sets it. A first release cannot be halted because there is no earlier release to fall back to. |
 | Remove a release from a testing line | `edits.tracks.update` with an empty `releases[]` | Yes. Testers then fall back to production, provided that version code is high enough. |
-| Change a staged rollout | `userFraction` with status `inProgress` or `halted` | Yes. The rollout percentage is a production-only control. |
-| Promote a release between lines | Same version codes written to the target track | Yes. The bundle is not uploaded again. |
+| Change a staged rollout | `userFraction` with status `inProgress` or `halted` | Yes. Production and testing tracks support an explicit staged choice; new testing releases default to full rollout. The first production release is always 100%. |
+| Promote a release between lines | Same version codes written to the target track | Yes. The bundle is not uploaded again. The app uses the live release's name, notes, status, fraction and version codes, not the next release's editable draft. Multi-release targets are excluded. Only first-production promotion forces completed 100%; other promotions preserve live status and fraction. Production and open-testing promotions require confirmation. |
+| Read review state | `applications.tracks.releases.list` | Yes. The app matches `activeArtifacts[].versionCode` from the committed upload, not a non-unique release name. A committed change is not described as "in review" until this status check reports it. |
+| Manage several active releases | Track `releases[]` | The app requires exactly one unambiguous live release for halt, remove, promote and rollout changes. It directs multi-release tracks to Play Console instead of overwriting arbitrary entries. |
+| Account and project changes | Loaded track ownership | Tracks are cleared and reloaded for the selected account and package. Responses from an older account/package are discarded, and account changes during busy work queue one reload. Management stays disabled until the current pair has loaded successfully. Disconnect removes only the account it revoked. |
 | Store images | `edits.images.upload`, `list`, `delete` | Yes. Selected images upload in the same edit as the AAB, before validate and commit. |
 | Store text (title, descriptions) | `edits.listings.update` | Not exposed. The app does not edit marketing copy; use Play Console. |
 | Upload key reset / app signing key upgrade | Console for standard Play App Signing | Console only. `appsigning.rotateAppSigningKey` accepts only a self-hosted Cloud KMS key plus proof-of-rotation; it does not apply to Google-managed keys. The app opens the official guide. |
@@ -50,7 +53,7 @@ dotnet build CodePublisher.slnx --configuration Release --no-restore
 dotnet run --project tests/CodePublisher.Tests/CodePublisher.Tests.csproj --configuration Release -- --disable-logo --progress off
 ```
 
-`GooglePlayStoreImageTests` uses a recording `HttpMessageHandler`. It proves the upload URL, media type and ordering against the edit's validate step without calling Google. No test signs in, uploads to a live app, or changes a store listing.
+`GooglePlayStoreImageTests` uses a recording `HttpMessageHandler`. It proves the upload URL, media type and ordering against the edit's validate step without calling Google. `GooglePlayApiServiceContractTests` covers live metadata, duplicate-name status matching, and empty-note commit results. `GooglePlayViewModelTests` covers account switching, multi-release guards, first-production defaults, and session clearing. No test signs in, uploads to a live app, or changes a store listing.
 
 ## Sources
 

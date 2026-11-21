@@ -138,6 +138,11 @@
         </Setter>
     </Style>
     
+    <Style Selector="Button.primary:focus">
+        <Setter Property="BorderBrush" Value="#FFFFFF" />
+        <Setter Property="BorderThickness" Value="2" />
+    </Style>
+
     <Style Selector="Button.primary:pointerover">
         <Setter Property="Background">
           <Setter.Value>
@@ -162,10 +167,10 @@
     </Style>
 
     <Style Selector="Button.compact-icon">
-        <Setter Property="Width" Value="34" />
-        <Setter Property="MinWidth" Value="34" />
-        <Setter Property="Height" Value="34" />
-        <Setter Property="MinHeight" Value="34" />
+        <Setter Property="Width" Value="40" />
+        <Setter Property="MinWidth" Value="40" />
+        <Setter Property="Height" Value="40" />
+        <Setter Property="MinHeight" Value="40" />
         <Setter Property="Padding" Value="0" />
         <Setter Property="FontSize" Value="16" />
     </Style>
@@ -607,6 +612,12 @@
         <Setter Property="BorderBrush" Value="{DynamicResource TextTertiaryColor}" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="Cursor" Value="Help" />
+        <Setter Property="Focusable" Value="True" />
+        <Setter Property="AutomationProperties.Name" Value="Option help" />
+    </Style>
+    <Style Selector="Border.option-info:focus">
+        <Setter Property="BorderBrush" Value="{DynamicResource PrimaryAccentColor}" />
+        <Setter Property="BorderThickness" Value="2" />
     </Style>
     <Style Selector="Border.option-info TextBlock">
         <Setter Property="FontSize" Value="10" />

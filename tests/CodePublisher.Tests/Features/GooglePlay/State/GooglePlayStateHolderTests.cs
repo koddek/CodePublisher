@@ -6,14 +6,14 @@ namespace CodePublisher.Tests.Features.GooglePlay.State;
 public sealed class GooglePlayStateHolderTests
 {
     [Test]
-    public async Task SetTrack_NormalizesTestingRolloutToFull()
+    public async Task SetTrack_PreservesExplicitTestingRollout()
     {
         var holder = new GooglePlayStateHolder();
         var track = new GooglePlayTrackInfo("beta", "Open testing", "Open testing", "Ready", false);
 
         holder.SetTrack(track, rolloutPercentage: 25);
 
-        await Assert.That(holder.Current.RolloutPercentage).IsEqualTo(100);
+        await Assert.That(holder.Current.RolloutPercentage).IsEqualTo(25);
     }
 
     [Test]

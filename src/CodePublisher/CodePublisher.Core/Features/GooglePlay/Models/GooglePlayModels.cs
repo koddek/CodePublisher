@@ -1,4 +1,5 @@
 using CodePublisher.Models;
+using CodePublisher.Features.GooglePlay.Services;
 
 namespace CodePublisher.Features.GooglePlay.Models;
 
@@ -34,6 +35,18 @@ public sealed record GooglePlayTrackInfo(
 {
     /// <summary>The version codes on this track, highest first.</summary>
     public IReadOnlyList<string> VersionCodes { get; init; } = [];
+
+    /// <summary>Number of active releases Play returned. Management requires exactly one.</summary>
+    public int ActiveReleaseCount { get; init; }
+
+    /// <summary>Metadata of the live release, kept separate from the editable new-release draft.</summary>
+    public string LiveReleaseName { get; init; } = string.Empty;
+    public IReadOnlyList<GooglePlayReleaseNote> LiveReleaseNotes { get; init; } = [];
+    public string LiveStatus { get; init; } = string.Empty;
+    public int? LiveRolloutPercentage { get; init; }
+
+    public bool HasUnambiguousLiveRelease => ActiveReleaseCount == 1 && VersionCodes.Count > 0;
+    public string DisplayNameWithId => $"{DisplayName} ({Id})";
 }
 
 public sealed record GooglePlayServiceAccountInfo(

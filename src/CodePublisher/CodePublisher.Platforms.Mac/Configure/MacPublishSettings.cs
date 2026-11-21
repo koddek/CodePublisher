@@ -1,14 +1,13 @@
 namespace CodePublisher.Features.Publishing.Configure;
 
 /// <summary>
-/// Normalizes the macOS share of a publish settings snapshot. Native AOT always trims (the Apple
-/// workload keeps this honest on its own builds); the macOS bundle toggle is honored and every
-/// other platform's knobs are zeroed out.
+/// Normalizes the macOS share of a publish settings snapshot. The macOS bundle toggle is honored
+/// and every other platform's knobs are zeroed out; the graph owns cross-option relationships.
 /// </summary>
 public static class MacPublishSettings
 {
     public static PublishSettingsState Apply(PublishSettingsState state)
-        => DesktopPublishSettings.Normalize(state) with
+        => state with
         {
             CreateMacAppBundle = state.CreateMacAppBundle,
             CreateWindowsExecutable = false,

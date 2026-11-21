@@ -27,6 +27,22 @@ public partial class MainViewModel
             {
                 OpenPublishFolderCommand.NotifyCanExecuteChanged();
             }
+
+            if (e.PropertyName == nameof(NuGetViewModel.OutputDirectory))
+            {
+                OnPropertyChanged(nameof(ActiveOutputDirectory));
+                OnPropertyChanged(nameof(ContextOutputText));
+            }
+
+            if (e.PropertyName == nameof(NuGetViewModel.PackCommandPreview))
+            {
+                RefreshCommandPreview();
+            }
+
+            if (e.PropertyName is nameof(NuGetViewModel.ProjectFile) or nameof(NuGetViewModel.IsBusy))
+            {
+                PublishCommand.NotifyCanExecuteChanged();
+            }
         };
     }
 }

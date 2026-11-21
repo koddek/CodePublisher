@@ -95,14 +95,14 @@ public sealed class ApplePlatformNet11Tests
     }
 
     [Test]
-    public async Task IosNet11OptOut_UsesMtouchLinkInsteadOfPublishTrimmed()
+    public async Task IosNet11OptOut_UsesTrimModeCopyInsteadOfPublishTrimmed()
     {
         var config = Configuration() with { PublishTrimmed = false };
         var command = PublishCommandBuilder.Build("/dotnet", config, "/tmp/App.csproj", "/tmp/output", null);
 
         using (Assert.Multiple())
         {
-            await Assert.That(command).Contains("-p:MtouchLink=None");
+            await Assert.That(command).Contains("-p:TrimMode=copy");
             await Assert.That(command.Any(item => item.StartsWith("-p:PublishTrimmed=", StringComparison.Ordinal))).IsFalse();
         }
     }

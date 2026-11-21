@@ -18,7 +18,7 @@ public static class WindowsPublishCommands
         var command = PublishCommandHelpers.Start(dotnetPath, "publish", projectFilePath,
             configuration.TargetFramework, configuration.Configuration, configuration.RuntimeIdentifier);
         PublishCommandHelpers.AddBooleanProperty(command, "SelfContained", configuration.SelfContained);
-        PublishCommandHelpers.AddBooleanProperty(command, "UseAppHost", configuration.CreateWindowsExecutable);
+        PublishCommandHelpers.AddBooleanProperty(command, "UseAppHost", configuration.UseAppHost);
 
         PublishCommandHelpers.AddTrimArgument(command, customTrimProperty, configuration.PublishTrimmed);
         PublishCommandHelpers.AddBooleanProperty(command, "PublishReadyToRun", configuration.PublishReadyToRun && !configuration.PublishAot);

@@ -106,12 +106,15 @@ public partial class ScreenshotDialog : Window
         
         // Run countdown
         await ShowCountdownAsync(seconds);
+        if (_cancellationTokenSource?.IsCancellationRequested != false)
+        {
+            return "Screenshot cancelled.";
+        }
         
-        // Perform the capture
+        // Perform the capture only when the countdown completed without the window closing.
         var result = await captureAction();
         
-        // Show completion
-        await ShowCompletionAsync("✓ Screenshot captured!", 2000);
+        await ShowCompletionAsync("Screenshot action finished.", 2000);
         
         return result;
     }

@@ -96,6 +96,11 @@ public partial class MainView : UserControl
         masterDetail.ColumnDefinitions[1].Width = new GridLength(1, GridUnitType.Star);
 
         var stackedHeader = width < 980;
+        if (this.FindControl<StackPanel>("HeaderIdentity") is { } headerIdentity)
+        {
+            DockPanel.SetDock(headerIdentity, stackedHeader ? Dock.Top : Dock.Left);
+        }
+
         if (this.FindControl<StackPanel>("HeaderActions") is { } headerActions)
         {
             DockPanel.SetDock(headerActions, stackedHeader ? Dock.Bottom : Dock.Right);
@@ -116,6 +121,11 @@ public partial class MainView : UserControl
             var detailMargin = width < 760 ? 12 : 20;
             detailContent.Margin = new Thickness(detailMargin);
             detailContent.Width = Math.Max(200, Math.Min(1120, width - navigationWidth - (detailMargin * 2) - 16));
+        }
+
+        if (this.FindControl<Image>("WirelessQrImage") is { } qrImage)
+        {
+            qrImage.Width = qrImage.Height = width < 620 ? 160 : 216;
         }
 
         if (this.FindControl<TextBlock>("StatusMessage") is { } statusMessage)
@@ -154,12 +164,17 @@ public partial class MainView : UserControl
     {
         if (string.Equals(e.PropertyName, nameof(MainViewModel.LiveOutput), StringComparison.Ordinal))
         {
-            if (this.FindControl<ScrollViewer>("DetailScrollViewer") is { } sv)
+            if (_viewModel?.IsOutputSection == true
+                && this.FindControl<ScrollViewer>("LiveOutputScrollViewer") is { } logScroll)
             {
-                // keep scrolled near bottom when log grows and the Output section is visible
-                if (_viewModel?.IsOutputSection == true)
+                // Follow output only when the user is already at the end of the log. Scrolling the
+                // whole detail page or pulling them away from an earlier error makes builds harder to read.
+                var isNearBottom = logScroll.Extent.Height - logScroll.Offset.Y - logScroll.Viewport.Height <= 48;
+                if (isNearBottom)
                 {
-                    sv.Offset = new Vector(sv.Offset.X, sv.Extent.Height);
+                    Dispatcher.UIThread.Post(
+                        () => logScroll.Offset = new Vector(logScroll.Offset.X, logScroll.Extent.Height),
+                        DispatcherPriority.Background);
                 }
             }
         }

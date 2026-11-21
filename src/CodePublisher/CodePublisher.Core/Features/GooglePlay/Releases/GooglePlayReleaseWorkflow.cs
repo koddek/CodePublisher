@@ -40,7 +40,7 @@ public sealed class GooglePlayReleaseWorkflow
         string accountId,
         string packageName,
         string trackId,
-        string releaseName,
+        int? versionCode,
         CancellationToken cancellationToken) =>
-        _apiService.GetReleaseStateAsync(accountId, packageName, trackId, releaseName, cancellationToken);
+        _apiService.GetReleaseStateAsync(accountId, packageName, trackId, versionCode, cancellationToken);
 }

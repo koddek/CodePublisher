@@ -55,6 +55,7 @@ public sealed class ProjectDiscoveryTests
             var viewModel = new MainViewModel(new PublisherService(), new DesktopInteractionService());
             viewModel.PublishPlatform = PublisherService.NuGetPlatform;
             viewModel.ProjectDirectory = root;
+            await WaitForDiscoveryAsync(viewModel, expectedCount: 3);
 
             using (Assert.Multiple())
             {
@@ -89,6 +90,7 @@ public sealed class ProjectDiscoveryTests
             var viewModel = new MainViewModel(new PublisherService(), new DesktopInteractionService());
             viewModel.PublishPlatform = PublisherService.MacOsPlatform;
             viewModel.ProjectDirectory = root;
+            await WaitForDiscoveryAsync(viewModel, expectedCount: 3);
             var mainLib = Path.Combine(root, "src", "MainLib", "MainLib.csproj");
             viewModel.SelectedProjectFile = mainLib;
 
@@ -108,6 +110,38 @@ public sealed class ProjectDiscoveryTests
         }
     }
 
+    private static async Task WaitForDiscoveryAsync(MainViewModel viewModel, int expectedCount)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (viewModel.AvailableProjectFiles.Count < expectedCount && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(20);
+        }
+    }
+
+    [Test]
+    public async Task ChangingPlatformDuringDiscovery_RestartsTheProjectScan()
+    {
+        var root = CreateTree();
+        try
+        {
+            var viewModel = new MainViewModel(new PublisherService(), new DesktopInteractionService());
+            viewModel.ProjectDirectory = root;
+            viewModel.PublishPlatform = PublisherService.NuGetPlatform;
+            await WaitForDiscoveryAsync(viewModel, expectedCount: 3);
+
+            using (Assert.Multiple())
+            {
+                await Assert.That(viewModel.AvailableProjectFiles.Count).IsEqualTo(3);
+                await Assert.That(viewModel.SelectedProjectFile).IsNotEmpty();
+            }
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Test]
     public async Task SingleProjectFolder_KeepsThePickerHidden()
     {
@@ -119,6 +153,7 @@ public sealed class ProjectDiscoveryTests
             var viewModel = new MainViewModel(new PublisherService(), new DesktopInteractionService());
 
             viewModel.ProjectDirectory = root;
+            await WaitForDiscoveryAsync(viewModel, expectedCount: 1);
 
             using (Assert.Multiple())
             {

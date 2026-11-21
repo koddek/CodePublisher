@@ -34,6 +34,13 @@ public static class ProjectInspector
     private static readonly HashSet<string> SkippedDiscoveryFolders =
         [with(StringComparer.OrdinalIgnoreCase), "bin", "obj", "node_modules", ".git", ".idea", ".vs", "artifacts", "packages"];
 
+    private static readonly HashSet<string> AndroidRuntimes10 = [with(StringComparer.OrdinalIgnoreCase), "android-arm", "android-arm64", "android-x64", "android-x86"];
+    private static readonly HashSet<string> AndroidRuntimes11 = [with(StringComparer.OrdinalIgnoreCase), "android-arm", "android-arm64", "android-x64"];
+    private static readonly HashSet<string> AppleRuntimes = [with(StringComparer.OrdinalIgnoreCase), "ios-arm64", "iossimulator-arm64", "iossimulator-x64", "maccatalyst-arm64", "maccatalyst-x64"];
+    private static readonly HashSet<string> MacRuntimes = [with(StringComparer.OrdinalIgnoreCase), "osx-arm64", "osx-x64"];
+    private static readonly HashSet<string> WindowsRuntimes = [with(StringComparer.OrdinalIgnoreCase), "win-x64", "win-x86", "win-arm64"];
+    private static readonly HashSet<string> LinuxRuntimes = [with(StringComparer.OrdinalIgnoreCase), "linux-x64", "linux-arm", "linux-arm64", "linux-musl-x64", "linux-musl-arm", "linux-musl-arm64", "linux-bionic-x64", "linux-bionic-arm64", "linux-loongarch64"];
+
     /// <summary>
     /// Every .csproj under the directory, recursively, skipping build output folders. A source root
     /// that holds several projects (a main library plus a source generator, tests, samples) yields
@@ -152,6 +159,40 @@ public static class ProjectInspector
         }
     }
 
+    private static void ValidateTargetFrameworkForPlatform(PublishConfiguration configuration)
+    {
+        var framework = configuration.TargetFramework.Trim();
+        var separator = framework.IndexOf('-');
+        var suffix = separator < 0 ? string.Empty : framework[(separator + 1)..];
+        var isAndroid = suffix.StartsWith("android", StringComparison.OrdinalIgnoreCase);
+        var isIos = suffix.StartsWith("ios", StringComparison.OrdinalIgnoreCase);
+        var isCatalyst = suffix.StartsWith("maccatalyst", StringComparison.OrdinalIgnoreCase);
+        var isMac = suffix.StartsWith("macos", StringComparison.OrdinalIgnoreCase);
+        var isWindows = suffix.StartsWith("windows", StringComparison.OrdinalIgnoreCase);
+        var isPlain = suffix.Length == 0;
+
+        var valid = configuration.PublishPlatform switch
+        {
+            PublishPlatforms.Android => isAndroid,
+            PublishPlatforms.Ios => isIos,
+            PublishPlatforms.MacOs => isCatalyst || isMac || isPlain,
+            PublishPlatforms.Windows => isWindows || isPlain,
+            PublishPlatforms.Linux => isPlain,
+            PublishPlatforms.NuGet => true,
+            _ => false
+        };
+        if (!valid)
+        {
+            throw new InvalidOperationException($"Target framework `{framework}` does not match the selected {configuration.PublishPlatform} platform.");
+        }
+
+        var runtimeIsCatalyst = configuration.RuntimeIdentifier.StartsWith("maccatalyst-", StringComparison.OrdinalIgnoreCase);
+        if (isCatalyst != runtimeIsCatalyst && configuration.PublishPlatform == PublishPlatforms.MacOs)
+        {
+            throw new InvalidOperationException("Mac Catalyst requires a `net*-maccatalyst` framework and a `maccatalyst-*` runtime identifier together.");
+        }
+    }
+
     public static void ValidateRuntimeForPlatform(PublishConfiguration configuration)
     {
         // NuGet packages are platform-neutral: dotnet pack needs no runtime identifier.
@@ -159,6 +200,8 @@ public static class ProjectInspector
         {
             return;
         }
+
+        ValidateTargetFrameworkForPlatform(configuration);
 
         var runtimeIdentifier = configuration.RuntimeIdentifier.Trim();
         if (string.IsNullOrWhiteSpace(runtimeIdentifier))
@@ -168,9 +211,14 @@ public static class ProjectInspector
 
         if (string.Equals(configuration.PublishPlatform, PublishPlatforms.Android, StringComparison.Ordinal))
         {
-            if (!runtimeIdentifier.StartsWith("android-", StringComparison.OrdinalIgnoreCase))
+            var supported = GetTargetFrameworkVersion(configuration.TargetFramework) >= 11
+                ? AndroidRuntimes11
+                : AndroidRuntimes10;
+            if (!supported.Contains(runtimeIdentifier))
             {
-                throw new InvalidOperationException("Android publishing requires an `android-*` runtime identifier.");
+                throw new InvalidOperationException(GetTargetFrameworkVersion(configuration.TargetFramework) >= 11
+                    ? ".NET 11 Android supports `android-arm`, `android-arm64`, and `android-x64`. The `android-x86` runtime was removed."
+                    : "Android supports `android-arm`, `android-arm64`, `android-x64`, and `android-x86` on .NET 10 and earlier.");
             }
 
             return;
@@ -178,11 +226,11 @@ public static class ProjectInspector
 
         if (string.Equals(configuration.PublishPlatform, PublishPlatforms.MacOs, StringComparison.Ordinal))
         {
-            var isMacRuntime = runtimeIdentifier.StartsWith("osx-", StringComparison.OrdinalIgnoreCase)
-                || runtimeIdentifier.StartsWith("maccatalyst-", StringComparison.OrdinalIgnoreCase);
+            var isMacRuntime = MacRuntimes.Contains(runtimeIdentifier)
+                || runtimeIdentifier.StartsWith("maccatalyst-", StringComparison.OrdinalIgnoreCase) && AppleRuntimes.Contains(runtimeIdentifier);
             if (!isMacRuntime)
             {
-                throw new InvalidOperationException("macOS publishing requires an `osx-*` or `maccatalyst-*` runtime identifier.");
+                throw new InvalidOperationException("macOS supports `osx-arm64`, `osx-x64`, `maccatalyst-arm64`, and `maccatalyst-x64`.");
             }
 
             return;
@@ -190,9 +238,9 @@ public static class ProjectInspector
 
         if (string.Equals(configuration.PublishPlatform, PublishPlatforms.Windows, StringComparison.Ordinal))
         {
-            if (!runtimeIdentifier.StartsWith("win-", StringComparison.OrdinalIgnoreCase))
+            if (!WindowsRuntimes.Contains(runtimeIdentifier))
             {
-                throw new InvalidOperationException("Windows publishing requires a `win-*` runtime identifier.");
+                throw new InvalidOperationException("Windows supports `win-x64`, `win-x86`, and `win-arm64`.");
             }
 
             return;
@@ -200,19 +248,19 @@ public static class ProjectInspector
 
         if (string.Equals(configuration.PublishPlatform, PublishPlatforms.Ios, StringComparison.Ordinal))
         {
-            if (!runtimeIdentifier.StartsWith("ios-", StringComparison.OrdinalIgnoreCase)
-                && !runtimeIdentifier.StartsWith("iossimulator-", StringComparison.OrdinalIgnoreCase))
+            if (!runtimeIdentifier.StartsWith("ios", StringComparison.OrdinalIgnoreCase)
+                || !AppleRuntimes.Contains(runtimeIdentifier))
             {
-                throw new InvalidOperationException("iOS publishing requires an `ios-*` or `iossimulator-*` runtime identifier.");
+                throw new InvalidOperationException("iOS supports `ios-arm64`, `iossimulator-arm64`, and `iossimulator-x64`.");
             }
 
             return;
         }
 
         if (string.Equals(configuration.PublishPlatform, PublishPlatforms.Linux, StringComparison.Ordinal)
-            && !runtimeIdentifier.StartsWith("linux-", StringComparison.OrdinalIgnoreCase))
+            && !LinuxRuntimes.Contains(runtimeIdentifier))
         {
-            throw new InvalidOperationException("Linux publishing requires a `linux-*` runtime identifier.");
+            throw new InvalidOperationException("Use a supported portable Linux RID such as `linux-x64`, `linux-arm64`, `linux-musl-x64`, or `linux-musl-arm64`.");
         }
     }
 

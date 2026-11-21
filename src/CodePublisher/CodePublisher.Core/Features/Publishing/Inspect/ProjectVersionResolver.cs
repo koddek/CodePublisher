@@ -27,7 +27,10 @@ public static class ProjectVersionResolver
         "VersionSuffix",
         "AssemblyVersion",
         "FileVersion",
-        "InformationalVersion"
+        "InformationalVersion",
+        "RunAOTCompilation",
+        "AndroidEnableProfiledAot",
+        "PublishTrimmed"
     ];
 
     public static async Task<IReadOnlyDictionary<string, string>?> ResolveAsync(

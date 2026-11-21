@@ -32,17 +32,17 @@
 
             <Border Classes="card">
                 <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
-                    <TextBlock Grid.Row="0" Text="Account" Classes="section-title"/>
+                    <TextBlock Grid.Row="0" Text="Step 1: Connect account" Classes="section-title"/>
                     <WrapPanel Grid.Row="1" Grid.ColumnSpan="2" ItemSpacing="8" LineSpacing="8" Margin="0,4,0,12">
                         <ComboBox MinWidth="160" MaxWidth="420" ItemsSource="{Binding Accounts}" SelectedItem="{Binding SelectedAccount}"
-                                  PlaceholderText="Connect a Google account">
+                                  PlaceholderText="Connect a Google account" AutomationProperties.Name="Google account">
                             <ComboBox.ItemTemplate>
                                 <DataTemplate x:DataType="models:GooglePlayAccountInfo">
                                     <TextBlock Text="{Binding DisplayName}"/>
                                 </DataTemplate>
                             </ComboBox.ItemTemplate>
                         </ComboBox>
-                        <Button Content="Connect Google account" Classes="primary" Command="{Binding ConnectCommand}"
+                        <Button Content="{Binding ConnectButtonText}" Classes="primary" Command="{Binding ConnectCommand}"
                                 IsEnabled="{Binding IsDesktopSession}"/>
                         <Button Classes="compact-icon" Command="{Binding DisconnectCommand}"
                                 ToolTip.Tip="Disconnect selected account" AutomationProperties.Name="Disconnect selected account">
@@ -65,6 +65,7 @@
             </Border>
 
             <Border Classes="card">
+                <Expander Header="{Binding SetupHeader}" IsExpanded="{Binding IsSetupExpanded}">
                 <StackPanel Spacing="14">
                     <WrapPanel ItemSpacing="8" LineSpacing="8">
                         <StackPanel Spacing="4" MinWidth="180">
@@ -135,12 +136,13 @@
                     <TextBlock Text="This platform supports app-session values only. Use the operating system settings or your shell profile for persistent values."
                                Classes="section-copy" Margin="0" IsVisible="{Binding !CanPersistEnvironmentVariables}"/>
                 </StackPanel>
+                </Expander>
             </Border>
 
             <Border Classes="card">
                 <StackPanel Spacing="14">
                     <WrapPanel ItemSpacing="8" LineSpacing="8">
-                        <TextBlock Text="App and release track" Classes="section-title" VerticalAlignment="Center"/>
+                        <TextBlock Text="Step 2: Choose app and release track" Classes="section-title" VerticalAlignment="Center"/>
                         <Button Classes="compact-icon" Command="{Binding RefreshTracksCommand}"
                                 ToolTip.Tip="Refresh release tracks" AutomationProperties.Name="Refresh release tracks">
                             <PathIcon Data="M17.65 6.35A7.95 7.95 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
@@ -185,11 +187,11 @@
                         <TextBlock Text="{Binding ReleaseReadiness}" Classes="section-copy" Margin="0"/>
                         <TextBlock Text="{Binding TrackLabel}" Classes="section-copy" Margin="0"/>
                         <TextBlock Text="{Binding TrackStatusLabel}" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}" Margin="0"/>
-                        <ComboBox ItemsSource="{Binding Tracks}" SelectedItem="{Binding SelectedTrack}" HorizontalAlignment="Stretch">
+                        <ComboBox ItemsSource="{Binding Tracks}" SelectedItem="{Binding SelectedTrack}" HorizontalAlignment="Stretch" AutomationProperties.Name="Release track">
                             <ComboBox.ItemTemplate>
                                 <DataTemplate x:DataType="models:GooglePlayTrackInfo">
                                     <StackPanel>
-                                        <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{Binding DisplayNameWithId}" FontWeight="SemiBold"/>
                                         <TextBlock Text="{Binding Status}" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}"/>
                                     </StackPanel>
                                 </DataTemplate>
@@ -201,6 +203,14 @@
                         <TextBlock Text="Move the release between lines" FontSize="12" FontWeight="SemiBold"/>
                         <TextBlock Classes="section-copy" Margin="0"
                                    Text="Move a tested build to the production line, or take it off a testing line so testers go back to production."/>
+                        <TextBlock Text="{Binding LiveReleaseSummary}" Classes="section-copy" Margin="0" TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding TrackManagementReason}" Foreground="{DynamicResource StatusWarningTextColor}" TextWrapping="Wrap"
+                                   IsVisible="{Binding !CanManageTrack}" Margin="0"/>
+                        <WrapPanel ItemSpacing="8" LineSpacing="8" IsVisible="{Binding CanManageTrack}">
+                            <TextBlock Text="Live rollout %" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold"/>
+                            <NumericUpDown Value="{Binding LiveRolloutPercentage}" Minimum="1" Maximum="100" FormatString="0" Width="130"
+                                           AutomationProperties.Name="Live rollout percentage" ToolTip.Tip="Percentage used only for Update rollout on the current live release"/>
+                        </WrapPanel>
                         <WrapPanel ItemSpacing="8" LineSpacing="8">
                             <Button Content="Promote to another line" Command="{Binding PromoteReleaseCommand}"
                                     IsEnabled="{Binding CanManageTrack}"/>
@@ -211,7 +221,7 @@
                             <Button Content="Update rollout" Command="{Binding UpdateRolloutCommand}"
                                     IsEnabled="{Binding CanManageTrack}"/>
                             <Button Content="New closed testing line" Command="{Binding CreateClosedTestingTrackCommand}"
-                                    IsEnabled="{Binding IsDesktopSession}"/>
+                                    IsEnabled="{Binding CanCreateClosedTrack}"/>
                         </WrapPanel>
                         <TextBlock Classes="section-copy" Margin="0"
                                    Text="A tester on a testing line keeps receiving that line's build until the line stops serving it. After that, the next update is the production build, provided the production version code is at least as high as the one on the device."/>
@@ -242,24 +252,25 @@
 
             <Border Classes="card">
                 <StackPanel Spacing="14">
-                    <TextBlock Text="Release" Classes="section-title"/>
-                    <TextBlock Text="Release name and notes are required before submission."
+                    <TextBlock Text="Step 3: Review release details" Classes="section-title"/>
+                    <TextBlock Text="Release name is required. Notes are optional; the language defaults to en-US."
                                Classes="section-copy" Foreground="{DynamicResource StatusWarningTextColor}"
                                IsVisible="{Binding !IsReleaseReady}" Margin="0"/>
                     <WrapPanel ItemSpacing="16" LineSpacing="8">
                         <StackPanel Spacing="6" MinWidth="160" MaxWidth="420">
                             <TextBlock Text="Release name" FontSize="12" FontWeight="SemiBold"/>
-                            <TextBox Text="{Binding ReleaseName}"/>
+                            <TextBox Text="{Binding ReleaseName}" AutomationProperties.Name="Release name"/>
                         </StackPanel>
                         <StackPanel Spacing="6" MinWidth="150" MaxWidth="220">
                             <TextBlock Text="Notes language" FontSize="12" FontWeight="SemiBold"/>
-                            <TextBox Text="{Binding ReleaseNotesLanguage}" PlaceholderText="en-US"/>
+                            <TextBox Text="{Binding ReleaseNotesLanguage}" PlaceholderText="en-US" AutomationProperties.Name="Release notes language"/>
                         </StackPanel>
                     </WrapPanel>
                     <StackPanel Spacing="6">
                         <TextBlock Text="Release notes" FontSize="12" FontWeight="SemiBold"/>
                         <TextBox Text="{Binding ReleaseNotes}" AcceptsReturn="True" TextWrapping="Wrap"
-                                 MinHeight="110" PlaceholderText="What changed in this release?"/>
+                                 MinHeight="110" PlaceholderText="What changed in this release?" AutomationProperties.Name="Release notes"/>
+                        <TextBlock Text="{Binding ReleaseNotesCountText}" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}" HorizontalAlignment="Right"/>
                     </StackPanel>
                     <Grid ColumnDefinitions="*,Auto">
                         <StackPanel Spacing="6">
@@ -268,8 +279,16 @@
                         </StackPanel>
                         <NumericUpDown Grid.Column="1" Value="{Binding RolloutPercentage}" Minimum="1" Maximum="100"
                                        FormatString="0" Width="130" IsEnabled="{Binding IsProductionRolloutEnabled}"
-                                       ToolTip.Tip="Percentage of eligible production users"/>
+                                       AutomationProperties.Name="New release rollout percentage"
+                                       ToolTip.Tip="Percentage of eligible users for this new release"/>
                     </Grid>
+                    <WrapPanel ItemSpacing="8" LineSpacing="8" IsEnabled="{Binding IsProductionRolloutEnabled}">
+                        <TextBlock Text="Quick rollout" VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource TextTertiaryColor}"/>
+                        <Button Content="10%" Command="{Binding SetRolloutCommand}" CommandParameter="10" AutomationProperties.Name="Set rollout to 10 percent"/>
+                        <Button Content="25%" Command="{Binding SetRolloutCommand}" CommandParameter="25" AutomationProperties.Name="Set rollout to 25 percent"/>
+                        <Button Content="50%" Command="{Binding SetRolloutCommand}" CommandParameter="50" AutomationProperties.Name="Set rollout to 50 percent"/>
+                        <Button Content="100%" Command="{Binding SetRolloutCommand}" CommandParameter="100" AutomationProperties.Name="Set rollout to 100 percent"/>
+                    </WrapPanel>
                 </StackPanel>
             </Border>
 
@@ -290,17 +309,18 @@
                             <DataTemplate>
                                 <Border Background="{DynamicResource InfoBannerBackgroundColor}" BorderBrush="{DynamicResource InfoBannerBorderColor}"
                                         BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,8">
-                                    <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="6">
-                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding Label}" FontSize="12" FontWeight="SemiBold"/>
-                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Language" FontSize="11" Foreground="{DynamicResource TextSecondaryColor}"/>
-                                        <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Language}" PlaceholderText="en-US"/>
-                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="File" FontSize="11" Foreground="{DynamicResource TextSecondaryColor}"/>
-                                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding FileName}" FontSize="12" TextWrapping="Wrap"/>
-                                        <StackPanel Grid.Row="0" Grid.Column="2" Grid.RowSpan="3" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                    <StackPanel Spacing="6">
+                                        <TextBlock Text="{Binding Label}" FontSize="12" FontWeight="SemiBold"/>
+                                        <WrapPanel ItemSpacing="8" LineSpacing="6">
+                                            <TextBlock Text="Language" VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource TextSecondaryColor}"/>
+                                            <TextBox MinWidth="120" MaxWidth="240" Text="{Binding Language}" PlaceholderText="en-US" AutomationProperties.Name="Store image language"/>
+                                        </WrapPanel>
+                                        <TextBlock Text="{Binding FileName}" FontSize="12" TextWrapping="Wrap"/>
+                                        <WrapPanel ItemSpacing="8" LineSpacing="6">
                                             <Button Content="Change" Command="{Binding BrowseCommand}" ToolTip.Tip="{Binding Hint}"/>
                                             <Button Content="Remove" Command="{Binding RemoveCommand}"/>
-                                        </StackPanel>
-                                    </Grid>
+                                        </WrapPanel>
+                                    </StackPanel>
                                 </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -316,9 +336,9 @@
 
             <Border Classes="card">
                 <StackPanel Spacing="12">
-                    <TextBlock Text="Publish" Classes="section-title"/>
+                    <TextBlock Text="Step 4: Publish" Classes="section-title"/>
                     <TextBlock Text="{Binding Activity}" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondaryColor}"/>
-                    <ProgressBar Value="{Binding ProgressValue}" IsVisible="{Binding IsProgressVisible}" Minimum="0" Maximum="100"/>
+                    <ProgressBar IsIndeterminate="{Binding IsProgressIndeterminate}" IsVisible="{Binding IsProgressVisible}" Minimum="0" Maximum="100"/>
                     <WrapPanel ItemSpacing="10" LineSpacing="10">
                         <Button Content="Build and publish" Classes="primary" Command="{Binding PublishCommand}" MinWidth="180"/>
                         <Button Classes="compact-icon" Command="{Binding CancelCommand}" IsVisible="{Binding IsProgressVisible}"
@@ -328,7 +348,7 @@
                         <Button Content="Check status" Command="{Binding CheckStatusCommand}"/>
                         <Button Content="Open Play Console" Command="{Binding OpenPlayConsoleCommand}"/>
                     </WrapPanel>
-                    <TextBlock Text="Production always asks for final confirmation." FontSize="11" Foreground="{DynamicResource TextTertiaryColor}"/>
+                    <TextBlock Text="Production and open testing ask for final confirmation. Play review and managed-publishing state appear under Check status." FontSize="11" Foreground="{DynamicResource TextTertiaryColor}" TextWrapping="Wrap"/>
                 </StackPanel>
             </Border>
         </StackPanel>

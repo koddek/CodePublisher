@@ -1,6 +1,6 @@
 # .NET 10 and .NET 11 Publishing Analysis
 
-Reviewed: 2026-11-11
+Reviewed: 2026-11-20
 
 ## Decision
 
@@ -171,7 +171,7 @@ NativeAOT is already a native executable; do not combine it with the single-file
 21. Per-platform .NET 11 option audit with SDK 11.0.100, verified with `dotnet msbuild -getProperty` on scratch projects and the installed iOS 27.2 workloads:
     - macOS, Windows and Linux desktop: `PublishReadyToRun`, `PublishAot` and `PublishSingleFile` are all unset by default. Their options stay manual and are correct as-is.
     - iOS and Mac Catalyst: `PublishReadyToRun` evaluates to `true` in Release and Debug, with or without `PublishTrimmed`. CoreCLR precompiles the whole Apple app. The app used to emit `PublishReadyToRun=false`, which disabled this; it now omits the property and shows a checked, read-only "ReadyToRun (automatic)" option.
-    - iOS and Mac Catalyst trimming: the .NET 11 workload rejects `PublishTrimmed` set to **any** value (previously it rejected only `false`). The app emitted `PublishTrimmed=true` on every Apple command, so every .NET 11 Apple publish would fail with the workload's "Use the MtouchLink property" error. The commands now omit `PublishTrimmed` on .NET 11 and use `MtouchLink=None` when the user opts out of linking. The `Publish trimmed` option is checked and read-only there. `net10.0-ios` keeps the Mono-era flags.
+    - iOS and Mac Catalyst trimming: the .NET 11 workload rejects `PublishTrimmed` set to **any** value (previously it rejected only `false`). The app emitted `PublishTrimmed=true` on every Apple command, so every .NET 11 Apple publish would fail with the workload's "Use the MtouchLink property" error. The commands now omit `PublishTrimmed` on .NET 11 and use `TrimMode=copy` when the user opts out of trimming assemblies. The `Publish trimmed` option is checked and read-only there. `net10.0-ios` keeps the Mono-era flags.
     - Mono properties listed by the .NET 11 breaking-change doc (`RunAotCompilation`, `AotAssemblies`, `MtouchInterpreter`, `UseInterpreter` and others) are not emitted by this app for Apple targets, so nothing needs removing.
 22. Two C# 15 features replace hand-written shapes. `NuGetPackOutcome` is now a `union` of `NuGetPackFailed` and `NuGetPackPacked`, so a pack result cannot carry both a failure and a package; its computed `Success`, `Message` and `Package` members keep the existing consumer API and include `null` arms for a default union. `EvaluatedPropertyLookup` is a C# 15 extension indexer over `IReadOnlyDictionary<string, string>?`, so identifier resolvers read `evaluated["ApplicationId", "PackageName"]` instead of a helper call; a null evaluation result returns no value. Both were compiled and exercised on SDK 11.0.100. Closed hierarchies and labeled jumps were evaluated and not adopted: the codebase has no fixed family of ownable subclasses switched to exhaustion, and no loop uses a search flag or `goto` that a labeled jump would replace.
 
@@ -208,6 +208,29 @@ dotnet publish Scratch.csproj -f net11.0-android -c Release -r android-arm64 \
 ```
 
 The test suite does not call live Google Play, OAuth, Android devices, or iOS devices. Those require user credentials, platform tooling, and physical/emulated devices and remain manual validation items.
+
+## 2026-11-20 defaults, migration, and lifecycle audit
+
+The default profiles now produce these commands:
+
+| Target | Default profile | Verification |
+| --- | --- | --- |
+| Android .NET 10 | Release, self-contained, `SdkOnly`, trimmed, Mono RunAOT + profiled AOT, APK | Published an APK with SDK 11.0.100 and the .NET 10 workload |
+| Android .NET 11 | Release, self-contained, `SdkOnly`, trimmed, CoreCLR automatic R2R, APK; no Mono properties | Published an APK with SDK 11.0.100 and the .NET 11 workload |
+| iOS .NET 11 | `iossimulator-arm64`, self-contained, archive/IPA off; workload owns trimming and R2R | Simulator build succeeded with SDK 11.0.100 and Xcode 27.2 |
+| iOS .NET 10 | `iossimulator-arm64`, Mono-era trim/R2R properties | Command covered by tests. Local build was not possible: workload 26.0.11017 requires Xcode 26.0, host has 27.2 |
+| macOS, Windows, Linux .NET 10/11 | Release, self-contained, apphost, single-file; trim/AOT/R2R off | Published all three RIDs on both framework versions |
+| NuGet .NET 10/11 | Release `dotnet pack` into `<project>/nupkgs` | Produced a `.nupkg` on both framework versions |
+
+The option graph now covers `SelfContained -> UseAppHost` as well as single-file and trimming prerequisites. Turning the apphost off makes a desktop publish framework-dependent and turns single-file off. Windows **Create .exe** only aliases `UseAppHost`, so it cannot contradict that state. Android linker, trimming, self-contained mode, RunAOT, and profiled AOT settle through the same graph. Apple application publishes remain self-contained because their workload always runs the trimmer. .NET 11 Apple opt-out uses `TrimMode=copy`, not deprecated `MtouchLink=None`.
+
+Project validation rejects cross-platform TFM/RID pairs, unknown RIDs, and .NET 11 `android-x86`. Publish preflight evaluates imported props as well as the project file. It rejects `RunAOTCompilation` or `AndroidEnableProfiledAot` on .NET 11 Android, including `false`, and any explicit `PublishTrimmed` on .NET 11 Apple. These checks produce recovery guidance before a build starts.
+
+Startup applies the Android profile. Reset restores Release, every option, and cleanup-off. Configuration, framework, runtime, and metadata changes normalize again and recompute only automatic output paths. The default iOS simulator profile avoids mandatory device credentials; choosing `ios-arm64` opts into signed device publication.
+
+Publish never recursively clears the configured output root. Optional bin/obj deletion is off by default and labeled as before-publish cleanup. A real `PublisherService` smoke publish preserved an unrelated `keep.txt` in a custom output folder. Clearing project selection clears the NuGet identity, output, validation state, and packed artifact, preventing stale pack/push operations.
+
+The 632-test TUnit suite passes. The app starts without console errors. A separate Avalonia harness captured the real Build workspace at the declared 320×560 minimum: the header stacks, navigation becomes icons, build controls wrap, and vertical scrolling reaches the remaining options without horizontal clipping.
 
 ## Official sources
 

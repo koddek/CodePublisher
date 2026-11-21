@@ -656,21 +656,24 @@ public sealed class AndroidDeploymentService
     public async Task<string> PrepareWirelessPairingAsync(string? previousHost, CancellationToken cancellationToken)
     {
         var adbPath = _adbPath ?? throw new InvalidOperationException(MissingAdb);
+        if (string.IsNullOrWhiteSpace(previousHost))
+        {
+            return "No earlier QR connection needed cleanup; every existing device was preserved.";
+        }
+
         var entries = await ProbeAndroidDevicesAsync(cancellationToken);
         var dropped = new List<string>();
-
-        // Drops all TCP/IP transports on the adb daemon to clear any half-open or stale connections
-        await TryDropWirelessTransportAsync([adbPath, "disconnect"], cancellationToken);
-
-        foreach (var entry in entries.Where(entry => entry.IsWirelessSerial))
+        foreach (var entry in entries.Where(entry => entry.IsWirelessSerial
+                     && AndroidWirelessDebug.TryParseEndpoint(entry.Serial, out var host, out _)
+                     && string.Equals(host, previousHost.Trim(), StringComparison.OrdinalIgnoreCase)))
         {
             await TryDropWirelessTransportAsync([adbPath, "disconnect", entry.Serial], cancellationToken);
             dropped.Add(entry.Serial);
         }
 
         return dropped.Count == 0
-            ? "Cleared earlier Wi-Fi connections and daemon state."
-            : $"Cleared {dropped.Count} earlier Wi-Fi connection(s) first: {string.Join(", ", dropped)}.";
+            ? $"No stale transport remained for the earlier QR host {previousHost}; every other device was preserved."
+            : $"Cleared {dropped.Count} earlier QR connection(s) for {previousHost}: {string.Join(", ", dropped)}.";
     }
 
     /// <summary>

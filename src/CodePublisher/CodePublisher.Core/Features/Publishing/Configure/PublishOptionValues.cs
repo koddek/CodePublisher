@@ -175,7 +175,15 @@ public sealed class PublishOptionValues
     /// <summary>Turns an option off and records it, so the resolution never turns it back on.</summary>
     public void Disable(PublishOptionId option)
     {
-        Set(option, false);
+        if (IsChoice(option))
+        {
+            State = SetValue(option, option == PublishOptionId.AndroidLinkMode ? "None" : string.Empty);
+        }
+        else
+        {
+            Set(option, false);
+        }
+
         _disabledDuringResolution.Add(option);
     }
 

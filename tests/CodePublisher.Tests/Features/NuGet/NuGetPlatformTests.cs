@@ -104,7 +104,7 @@ public sealed class NuGetPlatformTests
         var viewModel = CreateViewModel();
         viewModel.PublishPlatform = PublisherService.NuGetPlatform;
         viewModel.NuGet.UpdateContext("/proj", "/proj/Lib.csproj", "My.Lib", "1.2.3");
-        viewModel.Configuration = "Debug"; // any preview-sensitive change refreshes the preview
+        viewModel.NuGet.Configuration = "Debug"; // the shell follows the NuGet preview notification
 
         using (Assert.Multiple())
         {
@@ -145,6 +145,26 @@ public sealed class NuGetPlatformTests
         finally
         {
             Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Test]
+    public async Task NuGetOutput_EditsThePackDestinationAndHidesAppBaseline()
+    {
+        var viewModel = CreateViewModel();
+        viewModel.PublishPlatform = PublisherService.NuGetPlatform;
+        viewModel.NuGet.UpdateContext("/proj", "/proj/Lib.csproj", "Lib", "1.0.0");
+
+        viewModel.ActiveOutputDirectory = "/proj/custom-feed";
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(viewModel.NuGet.OutputDirectory).IsEqualTo("/proj/custom-feed");
+            await Assert.That(viewModel.ContextOutputText).IsEqualTo("/proj/custom-feed");
+            await Assert.That(viewModel.OutputDirectory).IsNotEqualTo("/proj/custom-feed");
+            await Assert.That(viewModel.IsKnownGoodBaselineVisible).IsFalse();
+            await Assert.That(viewModel.PublishActionText).IsEqualTo("Pack");
+            await Assert.That(viewModel.CommandPreview).Contains("/proj/custom-feed");
         }
     }
 
