@@ -190,6 +190,37 @@ public static class AndroidWirelessDebug
     }
 
     /// <summary>
+    /// Resolves the host and the last-resort address for a Connect action. A full <c>host:port</c>
+    /// supplies both. A bare host identifies the phone among the services advertised now, and only
+    /// a saved or listed endpoint is usable as the fallback, because adb connect needs a port.
+    /// </summary>
+    public static bool TryResolveConnectTarget(
+        string? address,
+        string? fallbackAddress,
+        out string host,
+        out string? fallback)
+    {
+        host = string.Empty;
+        fallback = null;
+        if (string.IsNullOrWhiteSpace(address))
+        {
+            return false;
+        }
+
+        var trimmed = address.Trim();
+        if (TryParseEndpoint(trimmed, out var parsedHost, out _))
+        {
+            host = parsedHost;
+            fallback = string.IsNullOrWhiteSpace(fallbackAddress) ? trimmed : fallbackAddress.Trim();
+            return true;
+        }
+
+        host = trimmed;
+        fallback = string.IsNullOrWhiteSpace(fallbackAddress) ? null : fallbackAddress.Trim();
+        return true;
+    }
+
+    /// <summary>
     /// Merges the adb server's mDNS list with the operating system resolver's list into one row per
     /// service. The adb server's backend is not reliable on every host: it can report nothing while
     /// the system resolver sees the same phone, so both are read and the addresses are combined.

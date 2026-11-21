@@ -57,9 +57,22 @@ public sealed class AndroidDeviceFileService
         var target = RequireSerial(serial);
         var path = RequireChangeablePath(remotePath);
 
+        // rm -f succeeds for a path that is already gone, which would report a delete that never
+        // happened. Check first; the listing can go stale while the user reads the confirmation.
+        var quotedPath = AndroidStorageLocations.QuoteForRemoteShell(path);
+        var probe = new StringBuilder();
+        var exists = await ProcessRunner.RunAsync(
+            [adbPath, "-s", target, "shell", "test", "-e", quotedPath],
+            text => probe.Append(text),
+            cancellationToken);
+        if (exists != 0)
+        {
+            throw new InvalidOperationException($"Nothing to delete: {path} is no longer on {target}.");
+        }
+
         var command = isDirectory
-            ? $"rm -rf {AndroidStorageLocations.QuoteForRemoteShell(path)}"
-            : $"rm -f {AndroidStorageLocations.QuoteForRemoteShell(path)}";
+            ? $"rm -rf {quotedPath}"
+            : $"rm -f {quotedPath}";
 
         var output = new StringBuilder();
         var exitCode = await ProcessRunner.RunAsync(

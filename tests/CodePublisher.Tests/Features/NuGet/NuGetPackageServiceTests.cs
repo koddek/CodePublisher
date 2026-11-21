@@ -25,7 +25,7 @@ public sealed class NuGetPackageServiceTests
     }
 
     private const string EmptyFeedIndex =
-        """{ "version": "3.0.0", "resources": [ { "@id": "https://api.nuget.org/v3-flatcontainer/", "@type": "PackageBaseAddress" } ] }""";
+        """{ "version": "3.0.0", "resources": [ { "@id": "https://api.nuget.org/v3-flatcontainer/", "@type": "PackageBaseAddress/3.0.0" } ] }""";
 
     private static NuGetPackageService CreateService(ImposterRunner runner, HttpClient? httpClient = null) =>
         new("/dotnet", new NuGetFeedClient(httpClient ?? new HttpClient(new StubHandler(request =>
@@ -286,7 +286,7 @@ public sealed class NuGetPackageServiceTests
                     && request.RequestUri.Host == "api.nuget.org"
                     && request.RequestUri.AbsolutePath.Contains("flatcontainer")
                         ? """{ "versions": [ "1.0.0" ] }"""
-                        : """{ "version": "3.0.0", "resources": [ { "@id": "https://api.nuget.org/v3-flatcontainer/", "@type": "PackageBaseAddress" } ] }""";
+                        : """{ "version": "3.0.0", "resources": [ { "@id": "https://api.nuget.org/v3-flatcontainer/", "@type": "PackageBaseAddress/3.0.0" } ] }""";
                 return new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent(json) };
             });
             var runner = new ImposterRunner();

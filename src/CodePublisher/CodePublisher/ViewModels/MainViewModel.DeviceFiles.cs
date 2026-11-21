@@ -524,17 +524,11 @@ public partial class MainViewModel
     /// </summary>
     private async Task ConnectWirelessToAsync(string address, string? fallbackAddress = null)
     {
-        if (!AndroidWirelessDebug.TryParseEndpoint(address, out var host, out _) || string.IsNullOrWhiteSpace(host))
+        if (!AndroidWirelessDebug.TryResolveConnectTarget(address, fallbackAddress, out var host, out var fallback))
         {
             StatusMessage = $"`{address}` is not an address with a port. Use the IP:PORT shown under Wireless debugging.";
             return;
         }
-
-        // A bare host is a valid starting point: the ports the phone publishes now are tried first. Only
-        // a full endpoint is worth keeping as the last-resort address, because a host with no port is not
-        // something `adb connect` accepts.
-        var fallback = fallbackAddress
-            ?? (AndroidWirelessDebug.TryParseEndpoint(address, out _, out _) ? address : null);
 
         AndroidWirelessConnectResult result;
         try

@@ -30,7 +30,7 @@ public static class NuGetVersionListParser
             if (resource.ValueKind == JsonValueKind.Object
                 && resource.TryGetProperty("@type", out var type)
                 && type.ValueKind == JsonValueKind.String
-                && string.Equals(type.GetString(), PackageBaseAddressResourceType, StringComparison.Ordinal)
+                && IsPackageBaseAddressType(type.GetString())
                 && resource.TryGetProperty("@id", out var id)
                 && id.ValueKind == JsonValueKind.String)
             {
@@ -40,6 +40,15 @@ public static class NuGetVersionListParser
 
         return null;
     }
+
+    /// <summary>
+    /// A V3 service index names resource types as <c>{name}/{version}</c>. nuget.org and GitHub
+    /// Packages advertise <c>PackageBaseAddress/3.0.0</c>; some feeds still use the bare name.
+    /// Both point at the same flat-container resource.
+    /// </summary>
+    private static bool IsPackageBaseAddressType(string? type) =>
+        string.Equals(type, PackageBaseAddressResourceType, StringComparison.Ordinal)
+        || (type is not null && type.StartsWith(PackageBaseAddressResourceType + "/", StringComparison.Ordinal));
 
     /// <summary>The flat-container index URL that lists every version of one package.</summary>
     public static string BuildFlatContainerIndexUrl(string packageBaseAddress, string packageId)

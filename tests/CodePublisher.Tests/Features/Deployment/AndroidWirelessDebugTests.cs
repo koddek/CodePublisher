@@ -462,4 +462,52 @@ public sealed class AndroidWirelessDebugTests
             await Assert.That(AndroidWirelessDebug.ReadStalledTransport("connecting", endpointReachable: true)).IsNotNull();
         }
     }
+
+    [Test]
+    public async Task TryResolveConnectTarget_AcceptsABareHostWithASavedFallback()
+    {
+        var resolved = AndroidWirelessDebug.TryResolveConnectTarget(
+            "192.168.1.42", "192.168.1.42:37123", out var host, out var fallback);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(resolved).IsTrue();
+            await Assert.That(host).IsEqualTo("192.168.1.42");
+            await Assert.That(fallback).IsEqualTo("192.168.1.42:37123");
+        }
+    }
+
+    [Test]
+    public async Task TryResolveConnectTarget_BareHostWithoutFallbackLetsDiscoverySupplyPorts()
+    {
+        var resolved = AndroidWirelessDebug.TryResolveConnectTarget("192.168.1.42", null, out var host, out var fallback);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(resolved).IsTrue();
+            await Assert.That(host).IsEqualTo("192.168.1.42");
+            await Assert.That(fallback).IsNull();
+        }
+    }
+
+    [Test]
+    public async Task TryResolveConnectTarget_FullEndpointIsItsOwnFallback()
+    {
+        var resolved = AndroidWirelessDebug.TryResolveConnectTarget("192.168.1.42:37123", null, out var host, out var fallback);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(resolved).IsTrue();
+            await Assert.That(host).IsEqualTo("192.168.1.42");
+            await Assert.That(fallback).IsEqualTo("192.168.1.42:37123");
+        }
+    }
+
+    [Test]
+    public async Task TryResolveConnectTarget_RejectsAnEmptyAddress()
+    {
+        var resolved = AndroidWirelessDebug.TryResolveConnectTarget("  ", null, out _, out _);
+
+        await Assert.That(resolved).IsFalse();
+    }
 }

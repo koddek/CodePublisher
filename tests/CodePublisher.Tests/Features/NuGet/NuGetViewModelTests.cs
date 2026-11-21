@@ -16,7 +16,7 @@ public sealed class NuGetViewModelTests
                 Content = new StringContent(
                     request.RequestUri!.AbsolutePath.Contains("flatcontainer")
                         ? """{ "versions": [] }"""
-                        : """{ "version": "3.0.0", "resources": [ { "@id": "https://api.nuget.org/v3-flatcontainer/", "@type": "PackageBaseAddress" } ] }""")
+                        : """{ "version": "3.0.0", "resources": [ { "@id": "https://api.nuget.org/v3-flatcontainer/", "@type": "PackageBaseAddress/3.0.0" } ] }""")
             });
     }
 

@@ -13,7 +13,7 @@ public sealed class NuGetVersionListParserTests
               "version": "3.0.0",
               "resources": [
                 { "@id": "https://api.nuget.org/v3/registration/", "@type": "RegistrationsBaseUrl" },
-                { "@id": "https://api.nuget.org/v3-flatcontainer/", "@type": "PackageBaseAddress" }
+                { "@id": "https://api.nuget.org/v3-flatcontainer/", "@type": "PackageBaseAddress/3.0.0" }
               ]
             }
             """;
@@ -21,6 +21,23 @@ public sealed class NuGetVersionListParserTests
         var baseAddress = NuGetVersionListParser.GetPackageBaseAddress(index);
 
         await Assert.That(baseAddress).IsEqualTo("https://api.nuget.org/v3-flatcontainer/");
+    }
+
+    [Test]
+    public async Task GetPackageBaseAddress_AcceptsTheBareLegacyType()
+    {
+        const string index =
+            """
+            {
+              "version": "3.0.0",
+              "resources": [
+                { "@id": "https://api.nuget.org/v3-flatcontainer/", "@type": "PackageBaseAddress" }
+              ]
+            }
+            """;
+
+        await Assert.That(NuGetVersionListParser.GetPackageBaseAddress(index))
+            .IsEqualTo("https://api.nuget.org/v3-flatcontainer/");
     }
 
     [Test]

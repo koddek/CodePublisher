@@ -19,7 +19,7 @@ public sealed class NuGetFeedClientTests
     }
 
     private const string ServiceIndex =
-        """{ "version": "3.0.0", "resources": [ { "@id": "https://nuget.pkg.github.com/omoi/", "@type": "PackageBaseAddress" } ] }""";
+        """{ "version": "3.0.0", "resources": [ { "@id": "https://nuget.pkg.github.com/omoi/", "@type": "PackageBaseAddress/3.0.0" } ] }""";
 
     [Test]
     public async Task ListVersions_ReadsServiceIndex_ThenFlatContainer()
@@ -74,7 +74,7 @@ public sealed class NuGetFeedClientTests
                 : new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new StringContent(
-                        """{ "version": "3.0.0", "resources": [ { "@id": "https://api.nuget.org/v3-flatcontainer/", "@type": "PackageBaseAddress" } ] }""")
+                        """{ "version": "3.0.0", "resources": [ { "@id": "https://api.nuget.org/v3-flatcontainer/", "@type": "PackageBaseAddress/3.0.0" } ] }""")
                 };
         });
         var client = new NuGetFeedClient(new HttpClient(handler));

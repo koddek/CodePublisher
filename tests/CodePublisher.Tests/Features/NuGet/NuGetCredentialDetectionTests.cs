@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using CodePublisher.Features.NuGet.Feeds;
 using CodePublisher.Features.NuGet.Models;
 using CodePublisher.Features.NuGet.Services;
@@ -84,6 +85,18 @@ public sealed class NuGetCredentialDetectionTests
     {
         var service = CreateService(
             runner: (args, write, ct, wd) => Task.FromResult(1),
+            env: _ => null);
+
+        var detected = await service.DetectApiKeyAsync(NuGetFeedKind.GitHubPackages, CancellationToken.None);
+
+        await Assert.That(detected).IsNull();
+    }
+
+    [Test]
+    public async Task DetectApiKey_GitHub_ReturnsNullWhenGhIsNotInstalled()
+    {
+        var service = CreateService(
+            runner: (args, write, ct, wd) => throw new Win32Exception(2, "No such file or directory"),
             env: _ => null);
 
         var detected = await service.DetectApiKeyAsync(NuGetFeedKind.GitHubPackages, CancellationToken.None);

@@ -37,12 +37,10 @@ public static class MacAppBundleService
                 return null;
             }
 
-            var normalizedOutput = Path.GetFullPath(outputDirectory);
-            var appMarker = $"{Path.DirectorySeparatorChar}.app{Path.DirectorySeparatorChar}Contents{Path.DirectorySeparatorChar}MacOS";
-            var macOsIndex = normalizedOutput.IndexOf(appMarker, StringComparison.OrdinalIgnoreCase);
-            if (macOsIndex >= 0)
+            var existingBundleRoot = FindBundleRoot(outputDirectory);
+            if (existingBundleRoot is not null)
             {
-                return normalizedOutput[..(macOsIndex + 4)];
+                return existingBundleRoot;
             }
 
             var existingBundle = FindNewestAppBundle(outputDirectory);
@@ -89,6 +87,28 @@ public static class MacAppBundleService
             writeOutput($"Created .app bundle at {bundlePath}{Environment.NewLine}");
             return bundlePath;
         }, cancellationToken);
+    }
+
+    /// <summary>
+    /// The bundle that owns an output path, or null when the output is not a bundle's MacOS folder.
+    /// The bundle name comes from the project, so any <c>.app</c> folder before Contents counts.
+    /// </summary>
+    public static string? FindBundleRoot(string outputDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(outputDirectory))
+        {
+            return null;
+        }
+
+        var normalized = Path.GetFullPath(outputDirectory);
+        var contentsMarker = $"{Path.DirectorySeparatorChar}Contents{Path.DirectorySeparatorChar}MacOS";
+        if (!normalized.EndsWith(contentsMarker, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var bundleRoot = normalized[..^contentsMarker.Length];
+        return bundleRoot.EndsWith(".app", StringComparison.OrdinalIgnoreCase) ? bundleRoot : null;
     }
 
     /// <summary>The newest <c>*.app</c> under the output directory, or null when none exists.</summary>

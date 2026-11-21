@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Net.Http;
 using System.Text;
 using CodePublisher.Features.NuGet.Build;
@@ -107,15 +108,28 @@ public sealed class NuGetPackageService
         if (kind == NuGetFeedKind.GitHubPackages)
         {
             // The GitHub CLI keeps its own token; `gh auth token` prints it when gh is installed
-            // and the user is signed in.
-            var output = new StringBuilder();
-            var exitCode = await _run(
-                ["gh", "auth", "token"],
-                text => output.Append(text),
-                cancellationToken,
-                null).ConfigureAwait(false);
-            var token = output.ToString().Trim();
-            if (exitCode == 0 && !string.IsNullOrWhiteSpace(token))
+            // and the user is signed in. A machine without gh throws from Process.Start, which is
+            // no different from having no token here.
+            string? token = null;
+            try
+            {
+                var output = new StringBuilder();
+                var exitCode = await _run(
+                    ["gh", "auth", "token"],
+                    text => output.Append(text),
+                    cancellationToken,
+                    null).ConfigureAwait(false);
+                if (exitCode == 0)
+                {
+                    token = output.ToString().Trim();
+                }
+            }
+            catch (Exception exception) when (exception is Win32Exception or IOException)
+            {
+                return null;
+            }
+
+            if (!string.IsNullOrWhiteSpace(token))
             {
                 return new DetectedCredential(token, "gh auth token (GitHub CLI)");
             }
