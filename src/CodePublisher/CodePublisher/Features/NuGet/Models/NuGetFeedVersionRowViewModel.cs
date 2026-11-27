@@ -7,9 +7,9 @@ namespace CodePublisher.Features.NuGet.Models;
 /// <summary>One version on the feed, with the Delete action on the row.</summary>
 public sealed partial class NuGetFeedVersionRowViewModel : ObservableObject
 {
-    private readonly Action<NuGetFeedVersionRowViewModel> _deleteRequested;
+    private readonly Func<NuGetFeedVersionRowViewModel, Task> _deleteRequested;
 
-    public NuGetFeedVersionRowViewModel(NuGetFeedVersion version, Action<NuGetFeedVersionRowViewModel> deleteRequested)
+    public NuGetFeedVersionRowViewModel(NuGetFeedVersion version, Func<NuGetFeedVersionRowViewModel, Task> deleteRequested)
     {
         Version = version.Version;
         _deleteRequested = deleteRequested;
@@ -20,5 +20,5 @@ public sealed partial class NuGetFeedVersionRowViewModel : ObservableObject
     public string DetailText => "listed on the feed";
 
     [RelayCommand]
-    private void Delete() => _deleteRequested(this);
+    private Task Delete() => _deleteRequested(this);
 }

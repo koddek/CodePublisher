@@ -5,4 +5,9 @@
     The app version lives in exactly one place: Directory.Version.props.
   -->
   <Import Project="Directory.Version.props" />
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
 </Project>

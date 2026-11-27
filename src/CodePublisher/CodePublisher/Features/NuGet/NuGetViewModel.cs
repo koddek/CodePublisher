@@ -529,16 +529,26 @@ public sealed partial class NuGetViewModel : ObservableObject
         }
     }
 
-    private async void RequestDeleteVersionAsync(NuGetFeedVersionRowViewModel row)
+    private async Task RequestDeleteVersionAsync(NuGetFeedVersionRowViewModel row)
     {
         if (IsFeedBusy || IsBusy)
         {
             return;
         }
 
-        var confirmed = await _interaction.ConfirmAsync(
-            "Delete NuGet version",
-            $"Delete {PackageId} {row.Version} from {SelectedFeed.Label}? This cannot be undone; consumers on that version stop receiving it.");
+        bool confirmed;
+        try
+        {
+            confirmed = await _interaction.ConfirmAsync(
+                "Delete NuGet version",
+                $"Delete {PackageId} {row.Version} from {SelectedFeed.Label}? This cannot be undone; consumers on that version stop receiving it.");
+        }
+        catch (Exception exception)
+        {
+            FeedStatus = $"Delete failed: {exception.Message}";
+            return;
+        }
+
         if (!confirmed)
         {
             return;
