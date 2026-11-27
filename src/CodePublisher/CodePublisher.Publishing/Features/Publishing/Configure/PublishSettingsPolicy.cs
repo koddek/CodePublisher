@@ -30,9 +30,11 @@ public static class PublishSettingsPolicy
     /// at all, the values the Android tooling pair is allowed to take, and the options a platform
     /// decides on the user's behalf.
     ///
-    /// These rules never settle a cross-option relationship on their own. That is the dependency
-    /// graph's job, so the two can never disagree: if the platform rules turned an option off
-    /// because a companion was missing, the graph could never turn that companion on.
+    /// Capability gates and platform invariants here can turn an option off or force a value.
+    /// Cross-option relationships between user options are primarily the dependency graph's job;
+    /// this projection is applied on top of graph output each pass. It does not, on its own,
+    /// invent a graph edge, and <see cref="PublishOptionSession"/> tracks user intent separately
+    /// so derived changes remain restorable.
     /// </summary>
     public static PublishSettingsState ApplyPlatformRules(PublishSettingsState state)
     {

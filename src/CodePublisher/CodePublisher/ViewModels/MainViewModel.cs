@@ -78,6 +78,7 @@ public partial class MainViewModel : ViewModelBase
     private bool _isAssigningAutomaticOutputDirectory;
     private bool _isOutputDirectoryManualOverride;
     private bool _isNormalizingPublishSettings;
+    private PublishOptionSession? _publishSession;
     private bool _isApplyingProjectSelection;
     private bool _isRefreshingOutputDirectory;
     private int _projectMetadataGeneration;
@@ -1203,6 +1204,7 @@ public partial class MainViewModel : ViewModelBase
             _isNormalizingPublishSettings = false;
         }
 
+        _publishSession = null;
         NormalizePublishSettings();
         RefreshAutomaticOutputDirectory();
     }
@@ -1220,10 +1222,7 @@ public partial class MainViewModel : ViewModelBase
             return;
         }
 
-        var resolution = PublishOptionResolver.Resolve(
-            BuildPublishSettingsState(),
-            changedOption,
-            changedValue);
+        var resolution = ApplyPublishChange(changedOption, changedValue);
 
         _isNormalizingPublishSettings = true;
         try
@@ -1256,6 +1255,35 @@ public partial class MainViewModel : ViewModelBase
         }
 
         ReportPublishOptionChanges(resolution);
+    }
+
+    /// <summary>
+    /// Routes a user change through the restoration-aware session. The session keeps a clean
+    /// user-intent baseline and re-derives effective options, so deselecting an option restores
+    /// what it had changed. <see cref="PublishOptionResolver"/> semantics are unchanged.
+    /// </summary>
+    private PublishOptionResolution ApplyPublishChange(PublishOptionId? changedOption, bool changedValue)
+    {
+        _publishSession ??= new PublishOptionSession(BuildPublishSettingsState());
+
+        var synced = _publishSession.SetContext(PublishPlatform, TargetFramework, RuntimeIdentifier, Configuration);
+
+        if (changedOption is not { } option)
+        {
+            return synced;
+        }
+
+        if (option == PublishOptionId.AndroidLinkMode)
+        {
+            return _publishSession.ApplyChoice(option, AndroidLinkMode, changedValue);
+        }
+
+        if (option is PublishOptionId.AndroidLinkTool or PublishOptionId.AndroidDexTool)
+        {
+            return _publishSession.ApplyChoice(option, option == PublishOptionId.AndroidLinkTool ? AndroidLinkTool : AndroidDexTool, changedValue);
+        }
+
+        return _publishSession.Apply(option, changedValue);
     }
 
     private PublishSettingsState BuildPublishSettingsState() => new(
@@ -2964,6 +2992,26 @@ public partial class MainViewModel : ViewModelBase
         NormalizePublishSettings(PublishOptionId.RunAotCompilation, value);
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(IsProfiledAotEnabled)));
         OnPropertyChanged(new PropertyChangedEventArgs(nameof(ProfiledAotDisabledReason)));
+    }
+
+    partial void OnAndroidLinkToolChanged(string value)
+    {
+        if (_isNormalizingPublishSettings)
+        {
+            return;
+        }
+
+        NormalizePublishSettings(PublishOptionId.AndroidLinkTool, true);
+    }
+
+    partial void OnAndroidDexToolChanged(string value)
+    {
+        if (_isNormalizingPublishSettings)
+        {
+            return;
+        }
+
+        NormalizePublishSettings(PublishOptionId.AndroidDexTool, true);
     }
 
     partial void OnAndroidLinkModeChanged(string value)

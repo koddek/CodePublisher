@@ -10,6 +10,12 @@ namespace CodePublisher.Features.Publishing.Configure;
 ///   - an option whose prerequisite the user turned off is turned off with it;
 ///   - two mutually exclusive options never stay on together;
 ///   - an optional companion is offered to the user instead of being forced.
+///
+/// A single <see cref="Resolve"/> call settles one snapshot and does not itself restore what an
+/// earlier auto-change replaced. Cross-call restoration (deselecting a trigger removes its
+/// contribution) is provided by <see cref="PublishOptionSession"/>, which re-derives effective
+/// output from a clean user-intent baseline. Platform invariants applied by
+/// <see cref="PublishSettingsPolicy.ApplyPlatformRules"/> are not restorable.
 /// </summary>
 public static class PublishOptionResolver
 {
@@ -24,12 +30,25 @@ public static class PublishOptionResolver
     /// It settles a mutual exclusion in the user's favor and tells the resolver that a
     /// prerequisite was turned off on purpose.</param>
     /// <param name="changedValue">Whether the changed option was turned on or off.</param>
+/// <param name="userDisabled">Options the user has explicitly turned off in earlier calls.</param>
+/// <param name="conflictWinners">Options that win their active mutual-exclusion conflicts, so a
+/// later unrelated edit or context change cannot reverse the user's choice.</param>
     public static PublishOptionResolution Resolve(
         PublishSettingsState state,
         PublishOptionId? changedOption = null,
-        bool changedValue = true)
+        bool changedValue = true,
+        IReadOnlyCollection<PublishOptionId>? userDisabled = null,
+        IReadOnlyCollection<PublishOptionId>? conflictWinners = null)
     {
         var options = PublishOptionValues.From(state);
+        if (userDisabled is not null)
+        {
+            foreach (var disabled in userDisabled)
+            {
+                options.MarkUserDisabled(disabled);
+            }
+        }
+
         if (changedOption is { } option)
         {
             // The user's change is applied to the snapshot before the graph runs, so the graph
@@ -60,7 +79,7 @@ public static class PublishOptionResolver
                         break;
 
                     case PublishOptionRelation.ConflictsWith:
-                        ApplyConflicts(options, rule, changes);
+                        ApplyConflicts(options, rule, changes, conflictWinners);
                         break;
 
                     case PublishOptionRelation.Suggests:
@@ -150,17 +169,25 @@ public static class PublishOptionResolver
     private static void ApplyConflicts(
         PublishOptionValues options,
         PublishOptionRule rule,
-        List<PublishOptionChange> changes)
+        List<PublishOptionChange> changes,
+        IReadOnlyCollection<PublishOptionId>? conflictWinners)
     {
         if (!options.IsOn(rule.Source) || !options.IsOn(rule.Target))
         {
             return;
         }
 
-        // The two cannot both stay on. The option the user changed last wins; when the caller
-        // did not say, the target gives way, which keeps the stronger option (native AOT) in
-        // charge and the weaker one (ReadyToRun, single-file) out of the way.
-        var turnedOff = options.WasChanged(rule.Target) ? rule.Source : rule.Target;
+        // The two cannot both stay on. A caller that persists conflict winners (a session)
+        // gets a stable outcome across unrelated edits and context changes. Without that, the
+        // option the user changed last wins; when the caller did not say, the target gives way,
+        // which keeps the stronger option (native AOT) in charge and the weaker one
+        // (ReadyToRun, single-file) out of the way.
+        var turnedOff = conflictWinners switch
+        {
+            not null when conflictWinners.Contains(rule.Target) => rule.Source,
+            not null when conflictWinners.Contains(rule.Source) => rule.Target,
+            _ => options.WasChanged(rule.Target) ? rule.Source : rule.Target,
+        };
         options.Disable(turnedOff);
         changes.Add(new PublishOptionChange(turnedOff, false, rule.Reason));
     }

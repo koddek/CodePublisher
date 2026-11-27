@@ -5,7 +5,10 @@ namespace CodePublisher.Features.Publishing.Configure;
 ///
 /// The resolver needs to read and write individual options while it walks the dependency graph,
 /// and it needs to remember the user's intent for each option: an option the user turned off
-/// stays off, and an option turned off as a consequence is never turned back on.
+/// stays off during a single resolution, and an option turned off as a consequence is not turned
+/// back on within that resolution. Cross-call restoration of what an auto-change replaced is
+/// provided by <c>PublishOptionSession</c>, which keeps a clean user-intent baseline; this type
+/// only additionally accepts a persisted user-disabled set.
 /// </summary>
 public sealed class PublishOptionValues
 {
@@ -79,6 +82,9 @@ public sealed class PublishOptionValues
 
     /// <summary>True when the given option is the one the user changed last.</summary>
     public bool WasChanged(PublishOptionId option) => LastChanged == option;
+
+    /// <summary>Records an option the user has turned off, independently of this call's change.</summary>
+    public void MarkUserDisabled(PublishOptionId option) => _userDisabled.Add(option);
 
     /// <summary>True when the user turned the option off on purpose.</summary>
     public bool WasDisabledByUser(PublishOptionId option) => _userDisabled.Contains(option);
