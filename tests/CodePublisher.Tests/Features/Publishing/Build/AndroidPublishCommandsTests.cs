@@ -12,16 +12,17 @@ namespace CodePublisher.Tests.Features.Publishing.Build;
 public sealed class AndroidPublishCommandsTests
 {
     [Test]
-    public async Task Net11Build_OmitsMonoOnlyAotPropertiesAndLeavesReadyToRunToTheSdk()
+    public async Task Net11Build_ClearsMonoOnlyAotPropertiesAndLeavesReadyToRunToTheSdk()
     {
         var configuration = CreateAndroidConfiguration("net11.0-android");
 
-        var command = AndroidPublishCommands.BuildCommand("/dotnet", configuration, "/tmp/App.csproj", customTrimProperty: null);
+        var command = PublishCommandBuilder.Build("/dotnet", configuration, "/tmp/App.csproj", "/tmp/output", customTrimProperty: null);
 
         using (Assert.Multiple())
         {
-            await Assert.That(command.Any(argument => argument.StartsWith("-p:RunAOTCompilation=", StringComparison.Ordinal))).IsFalse();
-            await Assert.That(command.Any(argument => argument.StartsWith("-p:AndroidEnableProfiledAot=", StringComparison.Ordinal))).IsFalse();
+            await Assert.That(command).Contains("-p:RunAOTCompilation=");
+            await Assert.That(command).Contains("-p:AndroidEnableProfiledAot=");
+            await Assert.That(command).Contains("-p:EnableLLVM=");
             await Assert.That(command.Any(argument => argument.StartsWith("-p:PublishReadyToRun=", StringComparison.Ordinal))).IsFalse();
         }
     }
@@ -31,13 +32,14 @@ public sealed class AndroidPublishCommandsTests
     {
         var configuration = CreateAndroidConfiguration("net10.0-android");
 
-        var command = AndroidPublishCommands.BuildCommand("/dotnet", configuration, "/tmp/App.csproj", customTrimProperty: null);
+        var command = PublishCommandBuilder.Build("/dotnet", configuration, "/tmp/App.csproj", "/tmp/output", customTrimProperty: null);
 
         using (Assert.Multiple())
         {
             await Assert.That(command).Contains("-p:RunAOTCompilation=false");
             await Assert.That(command).Contains("-p:AndroidEnableProfiledAot=false");
             await Assert.That(command).Contains("-p:PublishReadyToRun=false");
+            await Assert.That(command.Any(argument => argument.StartsWith("-p:EnableLLVM=", StringComparison.Ordinal))).IsFalse();
         }
     }
 
@@ -56,17 +58,18 @@ public sealed class AndroidPublishCommandsTests
     }
 
     [Test]
-    public async Task Net11Baseline_OmitsMonoOnlyAotProperties()
+    public async Task Net11Baseline_ClearsMonoOnlyAotProperties()
     {
         var configuration = CreateAndroidConfiguration("net11.0-android");
 
-        var command = AndroidPublishCommands.BuildBaselineCommand(
+        var command = PublishCommandBuilder.BuildBaseline(
             "/dotnet", configuration, "/tmp/App.csproj", "/tmp/out", customTrimProperty: null);
 
         using (Assert.Multiple())
         {
-            await Assert.That(command.Any(argument => argument.StartsWith("-p:RunAOTCompilation=", StringComparison.Ordinal))).IsFalse();
-            await Assert.That(command.Any(argument => argument.StartsWith("-p:AndroidEnableProfiledAot=", StringComparison.Ordinal))).IsFalse();
+            await Assert.That(command).Contains("-p:RunAOTCompilation=");
+            await Assert.That(command).Contains("-p:AndroidEnableProfiledAot=");
+            await Assert.That(command).Contains("-p:EnableLLVM=");
             await Assert.That(command).Contains("-p:AndroidPackageFormats=apk");
         }
     }

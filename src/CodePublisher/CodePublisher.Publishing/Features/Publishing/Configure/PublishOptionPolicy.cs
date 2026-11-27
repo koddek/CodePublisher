@@ -199,6 +199,48 @@ public static class PublishOptionPolicy
         }
     }
 
+    /// <summary>
+    /// Properties the selected target rejects at any value. PublishCommandBuilder clears these
+    /// on the command line so a declaration in the project or an imported props file cannot fail
+    /// the build. The value survives in the project for other target frameworks.
+    /// </summary>
+    public static IReadOnlyList<string> ProjectPropertiesToClear(string publishPlatform, string? targetFramework)
+    {
+        if (string.Equals(publishPlatform, PublishPlatforms.Android, StringComparison.Ordinal))
+        {
+            return AndroidPublishPolicy.PropertiesToClear(targetFramework);
+        }
+
+        if (string.Equals(publishPlatform, PublishPlatforms.Ios, StringComparison.Ordinal)
+            || string.Equals(publishPlatform, PublishPlatforms.MacOs, StringComparison.Ordinal)
+                && PublishPlatforms.IsMacCatalyst(targetFramework ?? string.Empty, string.Empty))
+        {
+            return ApplePublishPolicy.PropertiesToClear(targetFramework);
+        }
+
+        return [];
+    }
+
+    public static IReadOnlyList<string> IncompatibleProjectProperties(
+        string publishPlatform,
+        string? targetFramework,
+        IReadOnlyDictionary<string, string>? evaluated)
+    {
+        if (string.Equals(publishPlatform, PublishPlatforms.Android, StringComparison.Ordinal))
+        {
+            return AndroidPublishPolicy.IncompatibleEvaluatedProperties(targetFramework, evaluated);
+        }
+
+        if (string.Equals(publishPlatform, PublishPlatforms.Ios, StringComparison.Ordinal)
+            || string.Equals(publishPlatform, PublishPlatforms.MacOs, StringComparison.Ordinal)
+                && PublishPlatforms.IsMacCatalyst(targetFramework ?? string.Empty, string.Empty))
+        {
+            return ApplePublishPolicy.IncompatibleEvaluatedProperties(targetFramework, evaluated);
+        }
+
+        return [];
+    }
+
     public static bool IsPublishSingleFileEnabled(bool publishAot, string publishPlatform) =>
         IsPublishSingleFileEnabled(publishAot, publishPlatform, null, null);
 

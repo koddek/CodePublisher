@@ -30,6 +30,7 @@ public static class ProjectVersionResolver
         "InformationalVersion",
         "RunAOTCompilation",
         "AndroidEnableProfiledAot",
+        "EnableLLVM",
         "PublishTrimmed"
     ];
 

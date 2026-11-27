@@ -235,10 +235,15 @@ public sealed class PublisherService
                 configuration.TargetFramework,
                 configuration.RuntimeIdentifier,
                 cancellationToken);
-            PublishOptionPolicy.ValidateProjectProperties(
+            var incompatibleProperties = PublishOptionPolicy.IncompatibleProjectProperties(
                 configuration.PublishPlatform,
                 configuration.TargetFramework,
                 evaluatedProperties);
+            foreach (var property in incompatibleProperties)
+            {
+                writeOutput($"Cleared `{property}` for this {configuration.TargetFramework} publish; " +
+                    "the workload ignores the value in the project." + Environment.NewLine);
+            }
         }
 
         writeOutput(Environment.NewLine + "=== Publish started ===" + Environment.NewLine);

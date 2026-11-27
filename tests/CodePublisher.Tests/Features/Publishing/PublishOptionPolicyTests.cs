@@ -258,4 +258,50 @@ public sealed class PublishOptionPolicyTests
 
         await Assert.That(exception.Message).Contains("Remove it");
     }
+
+    [Test]
+    public async Task Net11AndroidRepair_DetectsMonoPropertiesAndKeepsNet10Untouched()
+    {
+        var evaluated = new Dictionary<string, string>
+        {
+            ["RunAOTCompilation"] = "false",
+            ["EnableLLVM"] = "true"
+        };
+
+        var detected = PublishOptionPolicy.IncompatibleProjectProperties(
+            PublisherService.AndroidPlatform, "net11.0-android", evaluated);
+        var net10 = PublishOptionPolicy.IncompatibleProjectProperties(
+            PublisherService.AndroidPlatform, "net10.0-android", evaluated);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(detected).IsEquivalentTo(["RunAOTCompilation", "EnableLLVM"]);
+            await Assert.That(net10).IsEmpty();
+        }
+    }
+
+    [Test]
+    public async Task ProjectPropertiesToClear_IsScopedToTargetAndPlatform()
+    {
+        using (Assert.Multiple())
+        {
+            await Assert.That(PublishOptionPolicy.ProjectPropertiesToClear(PublisherService.AndroidPlatform, "net11.0-android"))
+                .IsEquivalentTo(["RunAOTCompilation", "AndroidEnableProfiledAot", "EnableLLVM"]);
+            await Assert.That(PublishOptionPolicy.ProjectPropertiesToClear(PublisherService.AndroidPlatform, "net10.0-android")).IsEmpty();
+            await Assert.That(PublishOptionPolicy.ProjectPropertiesToClear(PublisherService.IosPlatform, "net11.0-ios"))
+                .IsEquivalentTo(["PublishTrimmed"]);
+            await Assert.That(PublishOptionPolicy.ProjectPropertiesToClear(PublisherService.WindowsPlatform, "net11.0-windows")).IsEmpty();
+        }
+    }
+
+    [Test]
+    public async Task Net11AppleRepair_DetectsExplicitPublishTrimmed()
+    {
+        var detected = PublishOptionPolicy.IncompatibleProjectProperties(
+            PublisherService.IosPlatform,
+            "net11.0-ios",
+            new Dictionary<string, string> { ["PublishTrimmed"] = "false" });
+
+        await Assert.That(detected).IsEquivalentTo(["PublishTrimmed"]);
+    }
 }

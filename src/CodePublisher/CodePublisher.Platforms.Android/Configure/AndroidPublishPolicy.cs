@@ -107,20 +107,38 @@ public static class AndroidPublishPolicy
     public static bool SupportsMonoAot(string? targetFramework)
         => ProjectInspector.GetTargetFrameworkVersion(targetFramework) < 11;
 
-    public static void ValidateEvaluatedProperties(string? targetFramework, IReadOnlyDictionary<string, string>? evaluated)
+    /// <summary>
+    /// Mono-only properties the .NET 11 Android SDK rejects at any value (XA1044). The publish
+    /// command clears these with an empty command-line override, so a declaration in a csproj or
+    /// any imported props file cannot stop the publish.
+    /// </summary>
+    public static IReadOnlyList<string> PropertiesToClear(string? targetFramework)
+        => SupportsMonoAot(targetFramework) ? [] : ["RunAOTCompilation", "AndroidEnableProfiledAot", "EnableLLVM"];
+
+    public static IReadOnlyList<string> IncompatibleEvaluatedProperties(
+        string? targetFramework,
+        IReadOnlyDictionary<string, string>? evaluated)
     {
         if (SupportsMonoAot(targetFramework) || evaluated is null)
+        {
+            return [];
+        }
+
+        return PropertiesToClear(targetFramework)
+            .Where(property => evaluated.TryGetValue(property, out var value) && !string.IsNullOrWhiteSpace(value))
+            .ToArray();
+    }
+
+    public static void ValidateEvaluatedProperties(string? targetFramework, IReadOnlyDictionary<string, string>? evaluated)
+    {
+        var property = IncompatibleEvaluatedProperties(targetFramework, evaluated).FirstOrDefault();
+        if (property is null)
         {
             return;
         }
 
-        foreach (var property in new[] { "RunAOTCompilation", "AndroidEnableProfiledAot" })
-        {
-            if (evaluated.TryGetValue(property, out var value) && !string.IsNullOrWhiteSpace(value))
-            {
-                throw new InvalidOperationException(
-                    $"`{property}` is set to `{value}` in the project or an imported props file. .NET 11 Android rejects this Mono-only property even when it is false (XA1044). Remove it from the project, then retry.");
-            }
-        }
+        evaluated!.TryGetValue(property, out var value);
+        throw new InvalidOperationException(
+            $"`{property}` is set to `{value}` in the project or an imported props file. .NET 11 Android rejects this Mono-only property even when it is false (XA1044). Remove it from the project, then retry.");
     }
 }

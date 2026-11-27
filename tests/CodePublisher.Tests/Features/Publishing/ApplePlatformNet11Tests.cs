@@ -56,27 +56,27 @@ public sealed class ApplePlatformNet11Tests
     };
 
     [Test]
-    public async Task IosNet11Command_OmitsTrimAndReadyToRunProperties()
+    public async Task IosNet11Command_ClearsPublishTrimmedAndLeavesReadyToRunToTheSdk()
     {
         var command = PublishCommandBuilder.Build("/dotnet", Configuration(), "/tmp/App.csproj", "/tmp/output", null);
 
         using (Assert.Multiple())
         {
-            await Assert.That(command.Any(item => item.StartsWith("-p:PublishTrimmed=", StringComparison.Ordinal))).IsFalse();
+            await Assert.That(command).Contains("-p:PublishTrimmed=");
             await Assert.That(command.Any(item => item.StartsWith("-p:PublishReadyToRun=", StringComparison.Ordinal))).IsFalse();
             await Assert.That(command).Contains("-p:PublishAot=false");
         }
     }
 
     [Test]
-    public async Task CatalystNet11Command_OmitsTrimAndReadyToRunProperties()
+    public async Task CatalystNet11Command_ClearsPublishTrimmedAndLeavesReadyToRunToTheSdk()
     {
         var config = Configuration(PublisherService.MacOsPlatform, "net11.0-maccatalyst", "maccatalyst-arm64");
         var command = PublishCommandBuilder.Build("/dotnet", config, "/tmp/App.csproj", "/tmp/output", null);
 
         using (Assert.Multiple())
         {
-            await Assert.That(command.Any(item => item.StartsWith("-p:PublishTrimmed=", StringComparison.Ordinal))).IsFalse();
+            await Assert.That(command).Contains("-p:PublishTrimmed=");
             await Assert.That(command.Any(item => item.StartsWith("-p:PublishReadyToRun=", StringComparison.Ordinal))).IsFalse();
         }
     }
@@ -95,7 +95,7 @@ public sealed class ApplePlatformNet11Tests
     }
 
     [Test]
-    public async Task IosNet11OptOut_UsesTrimModeCopyInsteadOfPublishTrimmed()
+    public async Task IosNet11OptOut_UsesTrimModeCopyAndClearsPublishTrimmed()
     {
         var config = Configuration() with { PublishTrimmed = false };
         var command = PublishCommandBuilder.Build("/dotnet", config, "/tmp/App.csproj", "/tmp/output", null);
@@ -103,7 +103,7 @@ public sealed class ApplePlatformNet11Tests
         using (Assert.Multiple())
         {
             await Assert.That(command).Contains("-p:TrimMode=copy");
-            await Assert.That(command.Any(item => item.StartsWith("-p:PublishTrimmed=", StringComparison.Ordinal))).IsFalse();
+            await Assert.That(command).Contains("-p:PublishTrimmed=");
         }
     }
 

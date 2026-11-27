@@ -81,17 +81,38 @@ public static class ApplePublishPolicy
     public static bool IsBuildIpaEnabled(string platform, string runtimeIdentifier)
         => IsArchiveOnBuildEnabled(platform, runtimeIdentifier);
 
+    /// <summary>
+    /// Properties the .NET 11 Apple SDK rejects at any value. The publish command clears them
+    /// with an empty command-line override, so a declaration in a csproj or any imported props
+    /// file cannot stop the publish.
+    /// </summary>
+    public static IReadOnlyList<string> PropertiesToClear(string? targetFramework)
+        => ProjectInspector.GetTargetFrameworkVersion(targetFramework) >= 11 ? ["PublishTrimmed"] : [];
+
+    public static IReadOnlyList<string> IncompatibleEvaluatedProperties(
+        string? targetFramework,
+        IReadOnlyDictionary<string, string>? evaluated)
+    {
+        if (evaluated is null)
+        {
+            return [];
+        }
+
+        return PropertiesToClear(targetFramework)
+            .Where(property => evaluated.TryGetValue(property, out var value) && !string.IsNullOrWhiteSpace(value))
+            .ToArray();
+    }
+
     public static void ValidateEvaluatedProperties(string? targetFramework, IReadOnlyDictionary<string, string>? evaluated)
     {
-        if (ProjectInspector.GetTargetFrameworkVersion(targetFramework) < 11 || evaluated is null)
+        var property = IncompatibleEvaluatedProperties(targetFramework, evaluated).FirstOrDefault();
+        if (property is null)
         {
             return;
         }
 
-        if (evaluated.TryGetValue("PublishTrimmed", out var value) && !string.IsNullOrWhiteSpace(value))
-        {
-            throw new InvalidOperationException(
-                $"`PublishTrimmed` is set to `{value}` in the project or an imported props file. .NET 11 Apple workloads reject an explicit value. Remove it and use `TrimMode=copy` only if you want to keep every assembly.");
-        }
+        evaluated!.TryGetValue(property, out var value);
+        throw new InvalidOperationException(
+            $"`{property}` is set to `{value}` in the project or an imported props file. .NET 11 Apple workloads reject an explicit value. Remove it and use `TrimMode=copy` only if you want to keep every assembly.");
     }
 }

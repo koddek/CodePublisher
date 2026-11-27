@@ -32,6 +32,7 @@ public static class PublishCommandBuilder
             _ => throw new InvalidOperationException($"Unknown publish platform `{configuration.PublishPlatform}`.")
         };
 
+        AddPropertyRepairs(command, configuration);
         command.Add("-o");
         command.Add(outputDirectory);
         return command;
@@ -44,7 +45,7 @@ public static class PublishCommandBuilder
         string outputDirectory,
         string? customTrimProperty)
     {
-        return configuration.PublishPlatform switch
+        var command = configuration.PublishPlatform switch
         {
             PublishPlatforms.Android =>
                 AndroidPublishCommands.BuildBaselineCommand(dotnetPath, configuration, projectFilePath, outputDirectory, customTrimProperty),
@@ -55,6 +56,22 @@ public static class PublishCommandBuilder
                 ApplePublishCommands.BuildIosBaselineCommand(dotnetPath, configuration, projectFilePath, outputDirectory, customTrimProperty),
             _ => DesktopPublishBaseline.Build(dotnetPath, configuration, projectFilePath, outputDirectory, customTrimProperty)
         };
+
+        AddPropertyRepairs(command, configuration);
+        return command;
+    }
+
+    /// <summary>
+    /// A command-line property overrides any value from the csproj or an imported props file.
+    /// An empty value lets the workload apply its own default, which is the only supported state
+    /// for Mono-only Android properties and explicit Apple trimming on .NET 11.
+    /// </summary>
+    private static void AddPropertyRepairs(List<string> command, PublishConfiguration configuration)
+    {
+        foreach (var property in PublishOptionPolicy.ProjectPropertiesToClear(configuration.PublishPlatform, configuration.TargetFramework))
+        {
+            command.Add($"-p:{property}=");
+        }
     }
 
     public static string Mask(IEnumerable<string> arguments)
