@@ -56,20 +56,19 @@ public static class AndroidPublishPolicy
             ? "Android NativeAOT is experimental in .NET 11; this app keeps the CoreCLR default instead."
             : "Android uses RunAOTCompilation instead of PublishAot.";
 
+    /// <summary>
+    /// Link Mode and trimming form a cycle in the option graph: either one can turn the other on.
+    /// The checkbox therefore stays enabled whenever trimming is possible. When Link Mode is
+    /// 'None', checking Publish trimmed makes the graph select SdkOnly; disabling the checkbox
+    /// here would strand the user with no in-app route back to a trimmed publish.
+    /// </summary>
     public static bool IsPublishTrimmedEnabled(bool selfContained, string androidLinkMode)
-        => selfContained && IsAndroidAotEnabled(androidLinkMode);
+        => selfContained;
 
     public static string PublishTrimmedDisabledReason(bool selfContained, string androidLinkMode)
-    {
-        if (!selfContained)
-        {
-            return "Trimming requires a self-contained publish.";
-        }
-
-        return IsAndroidAotEnabled(androidLinkMode)
+        => selfContained
             ? string.Empty
-            : "Android trimming is driven by Link Mode — 'None' disables the linker.";
-    }
+            : "Trimming requires a self-contained publish.";
 
     public static bool IsPublishSingleFileEnabled() => false;
 

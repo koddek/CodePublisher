@@ -35,8 +35,10 @@ public static class ApplePublishSettings
         => state with
         {
             // Apple application publishes are self-contained and always run the trimmer.
+            // The Apple commands never emit PublishSingleFile, including on Mac Catalyst.
             SelfContained = true,
             PublishTrimmed = true,
+            PublishSingleFile = false,
             RunAotCompilation = false,
             EnableProfiledAot = false,
             CreateMappingFile = false,

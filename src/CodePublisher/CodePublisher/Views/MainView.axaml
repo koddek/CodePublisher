@@ -261,31 +261,31 @@
                                                 <TextBlock Text="i"/>
                                             </Border>
                                         </StackPanel>
-                                        <StackPanel Orientation="Horizontal" Spacing="4"
+                                        <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding IsPublishAotVisible}"
                                                     ToolTip.Tip="{Binding PublishAotDisabledReason, Converter={StaticResource OptionHelp}, ConverterParameter='Ahead-Of-Time (AOT) compilation: compiles your app to native (machine) code before publishing. Faster startup, smaller runtime overhead, but longer build times and some reflection (finding code by name) may break.'}">
                                             <CheckBox Content="Publish AOT" IsChecked="{Binding PublishAot}" IsEnabled="{Binding IsPublishAotEnabled}" Margin="0,4"/>
                                             <Border Classes="option-info">
                                                 <TextBlock Text="i"/>
                                             </Border>
                                         </StackPanel>
-                                        <StackPanel Orientation="Horizontal" Spacing="4"
+                                        <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding IsReadyToRunOptionVisible}"
                                                     ToolTip.Tip="{Binding ReadyToRunDisabledReason, Converter={StaticResource OptionHelp}, ConverterParameter='ReadyToRun (R2R): partially compiles code to native machine code when publishing. Improves startup vs JIT (Just-In-Time compilation, where code is compiled on first run), but makes the output larger and cannot be used with AOT.'}">
                                             <CheckBox Content="ReadyToRun (automatic)" IsChecked="{Binding IsReadyToRunAutomatic}" IsEnabled="False" Margin="0,4"
                                                       IsVisible="{Binding IsReadyToRunAutomatic}"/>
                                             <CheckBox Content="ReadyToRun" IsChecked="{Binding PublishReadyToRun}" IsEnabled="{Binding IsReadyToRunCheckBoxEnabled}" Margin="0,4"
-                                                      IsVisible="{Binding !IsReadyToRunAutomatic}"/>
+                                                      IsVisible="{Binding IsReadyToRunVisible}"/>
                                             <Border Classes="option-info">
                                                 <TextBlock Text="i"/>
                                             </Border>
                                         </StackPanel>
-                                        <StackPanel Orientation="Horizontal" Spacing="4"
+                                        <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding IsPublishSingleFileVisible}"
                                                     ToolTip.Tip="{Binding PublishSingleFileDisabledReason, Converter={StaticResource OptionHelp}, ConverterParameter='Single-file: bundles all app files into one executable (EXE/dmg-like single file). Easier to distribute. Some native libraries may unpack to a temporary folder on first run.'}">
                                             <CheckBox Content="Single-file" IsChecked="{Binding PublishSingleFile}" IsEnabled="{Binding IsPublishSingleFileEnabled}" Margin="0,4"/>
                                             <Border Classes="option-info">
                                                 <TextBlock Text="i"/>
                                             </Border>
                                         </StackPanel>
-                                        <StackPanel Orientation="Horizontal" Spacing="4"
+                                        <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding IsUseAppHostVisible}"
                                                     ToolTip.Tip="App host: creates a small native launcher (EXE on Windows) that starts your app. This is what most users expect when launching an app. Disable only if you plan to run via 'dotnet yourapp.dll'.">
                                             <CheckBox Content="Use app host" IsChecked="{Binding UseAppHost}" IsEnabled="{Binding IsUseAppHostEnabled}" Margin="0,4"/>
                                             <Border Classes="option-info">

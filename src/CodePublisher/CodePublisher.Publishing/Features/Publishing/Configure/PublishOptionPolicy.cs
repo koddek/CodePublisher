@@ -199,7 +199,16 @@ public static class PublishOptionPolicy
         }
     }
 
-    public static bool IsPublishSingleFileEnabled(bool publishAot, string publishPlatform)
+    public static bool IsPublishSingleFileEnabled(bool publishAot, string publishPlatform) =>
+        IsPublishSingleFileEnabled(publishAot, publishPlatform, null, null);
+
+    /// <summary>Context-aware gate. Mac Catalyst rides the macOS platform entry, but the Apple
+    /// command never emits a single-file switch, so the option must stay off there.</summary>
+    public static bool IsPublishSingleFileEnabled(
+        bool publishAot,
+        string publishPlatform,
+        string? targetFramework,
+        string? runtimeIdentifier)
     {
         // Native AOT already emits a native executable; adding the single-file
         // bundler on top is redundant and can create extraction/linking surprises.
@@ -209,6 +218,9 @@ public static class PublishOptionPolicy
             return AndroidPublishPolicy.IsPublishSingleFileEnabled();
         if (string.Equals(publishPlatform, PublishPlatforms.Ios, StringComparison.Ordinal))
             return ApplePublishPolicy.IsPublishSingleFileEnabled();
+        if (string.Equals(publishPlatform, PublishPlatforms.MacOs, StringComparison.Ordinal)
+            && PublishPlatforms.IsMacCatalyst(targetFramework ?? string.Empty, runtimeIdentifier ?? string.Empty))
+            return false;
         return DesktopPublishPolicy.IsPublishSingleFileEnabled(publishAot: false);
     }
 }

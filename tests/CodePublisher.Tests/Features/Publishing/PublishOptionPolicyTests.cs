@@ -34,6 +34,26 @@ public sealed class PublishOptionPolicyTests
     }
 
     [Test]
+    public async Task AndroidTrimCheckboxStaysEnabledWhenLinkModeIsNone()
+    {
+        // Link Mode and trimming form a cycle; a hard-disabled checkbox would strand the user.
+        var enabled = AndroidPublishPolicy.IsPublishTrimmedEnabled(selfContained: true, androidLinkMode: "None");
+        var viaFacade = PublishOptionPolicy.IsPublishTrimmedEnabled(
+            publishAot: false,
+            selfContained: true,
+            publishPlatform: PublisherService.AndroidPlatform,
+            targetFramework: "net11.0-android",
+            runtimeIdentifier: "android-arm64",
+            androidLinkMode: "None");
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(enabled).IsTrue();
+            await Assert.That(viaFacade).IsTrue();
+        }
+    }
+
+    [Test]
     public async Task IsPublishTrimmedEnabled_DisablesTrimming_WhenAotEnabled()
     {
         var result = PublishOptionPolicy.IsPublishTrimmedEnabled(

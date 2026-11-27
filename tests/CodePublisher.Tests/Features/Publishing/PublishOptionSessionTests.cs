@@ -95,23 +95,6 @@ public sealed class PublishOptionSessionTests
     }
 
     [Test]
-    public async Task AnExplicitlyDisabledPrerequisiteIsNotSilentlyReEnabled()
-    {
-        // User turns self-contained off in one call, then enables trimming in a later call.
-        // Trimming requires self-contained, but the user's explicit choice is not overridden.
-        var session = new PublishOptionSession(State(selfContained: true, publishTrimmed: false));
-
-        session.Apply(PublishOptionId.SelfContained, false);
-        var trimmed = session.Apply(PublishOptionId.PublishTrimmed, true);
-
-        using (Assert.Multiple())
-        {
-            await Assert.That(trimmed.State.SelfContained).IsFalse();
-            await Assert.That(trimmed.State.PublishTrimmed).IsFalse();
-        }
-    }
-
-    [Test]
     public async Task AndroidLinkModeChoiceIsPreservedAndRestored()
     {
         var session = new PublishOptionSession(State(
@@ -218,6 +201,84 @@ public sealed class PublishOptionSessionTests
 
         session.SetContext();
         await Assert.That(session.Effective.AndroidLinkMode).IsEqualTo("SdkOnly");
+    }
+
+    [Test]
+    public async Task EnablingAndroidLinkModeClearsAnEarlierTrimmedOffChoice()
+    {
+        // The reported UI deadlock: unchecking trimming sets Link Mode to None. Choosing
+        // SdkOnly again must re-enable trimming instead of being rejected as a stale user-off.
+        var session = new PublishOptionSession(State(
+            platform: "Android", targetFramework: "net11.0-android", runtimeIdentifier: "android-arm64",
+            selfContained: true, publishTrimmed: true, androidLinkMode: "SdkOnly"));
+
+        var off = session.Apply(PublishOptionId.PublishTrimmed, false);
+        await Assert.That(off.State.AndroidLinkMode).IsEqualTo("None");
+
+        var backOn = session.ApplyChoice(PublishOptionId.AndroidLinkMode, "SdkOnly", true);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(backOn.State.AndroidLinkMode).IsEqualTo("SdkOnly");
+            await Assert.That(backOn.State.PublishTrimmed).IsTrue();
+            await Assert.That(backOn.State.PublishReadyToRun).IsTrue();
+        }
+    }
+
+    [Test]
+    public async Task EnablingTrimmedClearsAnEarlierSelfContainedOffChoice()
+    {
+        var session = new PublishOptionSession(State(selfContained: true, publishTrimmed: false));
+
+        session.Apply(PublishOptionId.SelfContained, false);
+        var trimmed = session.Apply(PublishOptionId.PublishTrimmed, true);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(trimmed.State.SelfContained).IsTrue();
+            await Assert.That(trimmed.State.PublishTrimmed).IsTrue();
+        }
+    }
+
+    [Test]
+    [Arguments("net11.0-android")]
+    [Arguments("net10.0-android")]
+    public async Task EnablingLinkModeClearsTransitiveSelfContainedOffChoice(string targetFramework)
+    {
+        var session = new PublishOptionSession(State(
+            platform: "Android", targetFramework: targetFramework, runtimeIdentifier: "android-arm64",
+            selfContained: true, publishTrimmed: true, androidLinkMode: "SdkOnly"));
+
+        session.Apply(PublishOptionId.SelfContained, false);
+        var restored = session.ApplyChoice(PublishOptionId.AndroidLinkMode, "SdkOnly", true);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(restored.State.SelfContained).IsTrue();
+            await Assert.That(restored.State.PublishTrimmed).IsTrue();
+            await Assert.That(restored.State.AndroidLinkMode).IsEqualTo("SdkOnly");
+        }
+    }
+
+    [Test]
+    public async Task UnrelatedExplicitOffChoicesSurvivePrerequisiteRecovery()
+    {
+        var session = new PublishOptionSession(State(
+            platform: "Android", targetFramework: "net11.0-android", runtimeIdentifier: "android-arm64",
+            selfContained: true, publishTrimmed: true, androidLinkMode: "SdkOnly"));
+
+        session.Apply(PublishOptionId.EnableMultiDex, false);
+        session.Apply(PublishOptionId.IncludeAab, false);
+        session.Apply(PublishOptionId.SelfContained, false);
+        var restored = session.ApplyChoice(PublishOptionId.AndroidLinkMode, "Full", true);
+
+        using (Assert.Multiple())
+        {
+            await Assert.That(restored.State.SelfContained).IsTrue();
+            await Assert.That(restored.State.PublishTrimmed).IsTrue();
+            await Assert.That(restored.State.EnableMultiDex).IsFalse();
+            await Assert.That(restored.State.IncludeAab).IsFalse();
+        }
     }
 
     [Test]

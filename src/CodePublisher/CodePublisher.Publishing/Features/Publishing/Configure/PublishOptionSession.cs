@@ -96,6 +96,15 @@ public sealed class PublishOptionSession
         {
             _userDisabled.Remove(option);
 
+            // Turning an option on is a newer explicit decision than any earlier off choice on
+            // its prerequisites. Clear those so the resolver enables what the option requires
+            // instead of rejecting the user's action. This breaks the Android trim/link-mode
+            // cycle: setting Link Mode back to SdkOnly re-enables trimming.
+            foreach (var prerequisite in Prerequisites(option))
+            {
+                _userDisabled.Remove(prerequisite);
+            }
+
             // A newer explicit choice wins its conflicts. Drop the previous winner of every
             // conflict involving this option before recording the new one.
             foreach (var partner in ConflictPartners(option))
@@ -109,6 +118,33 @@ public sealed class PublishOptionSession
         {
             _userDisabled.Add(option);
             _conflictWinners.Remove(option);
+        }
+    }
+
+    private IEnumerable<PublishOptionId> Prerequisites(PublishOptionId option)
+    {
+        var requires = PublishOptionGraph.RulesFor(_baseline.PublishPlatform)
+            .Where(rule => rule.Relation == PublishOptionRelation.Requires)
+            .ToArray();
+        var seen = new HashSet<PublishOptionId> { option };
+        var pending = new Stack<PublishOptionId>();
+        pending.Push(option);
+
+        while (pending.Count > 0)
+        {
+            var current = pending.Pop();
+            foreach (var rule in requires.Where(rule => rule.Source == current))
+            {
+                // The Android trim/link-mode cycle would revisit both options forever without
+                // the visited set.
+                if (!seen.Add(rule.Target))
+                {
+                    continue;
+                }
+
+                yield return rule.Target;
+                pending.Push(rule.Target);
+            }
         }
     }
 

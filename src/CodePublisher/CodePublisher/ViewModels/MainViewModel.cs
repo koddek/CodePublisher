@@ -276,6 +276,13 @@ public partial class MainViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsSelfContainedEnabled))]
     [NotifyPropertyChangedFor(nameof(SelfContainedDisabledReason))]
     [NotifyPropertyChangedFor(nameof(PublishActionText))]
+    [NotifyPropertyChangedFor(nameof(IsCatalystTarget))]
+    [NotifyPropertyChangedFor(nameof(IsNativeDesktopTarget))]
+    [NotifyPropertyChangedFor(nameof(IsPublishAotVisible))]
+    [NotifyPropertyChangedFor(nameof(IsPublishSingleFileVisible))]
+    [NotifyPropertyChangedFor(nameof(IsUseAppHostVisible))]
+    [NotifyPropertyChangedFor(nameof(IsReadyToRunVisible))]
+    [NotifyPropertyChangedFor(nameof(IsReadyToRunOptionVisible))]
     private string _publishPlatform = PublisherService.AndroidPlatform;
 
     [ObservableProperty]
@@ -320,6 +327,13 @@ public partial class MainViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsRunAotEnabled))]
     [NotifyPropertyChangedFor(nameof(IsSelfContainedEnabled))]
     [NotifyPropertyChangedFor(nameof(SelfContainedDisabledReason))]
+    [NotifyPropertyChangedFor(nameof(IsCatalystTarget))]
+    [NotifyPropertyChangedFor(nameof(IsNativeDesktopTarget))]
+    [NotifyPropertyChangedFor(nameof(IsPublishAotVisible))]
+    [NotifyPropertyChangedFor(nameof(IsPublishSingleFileVisible))]
+    [NotifyPropertyChangedFor(nameof(IsUseAppHostVisible))]
+    [NotifyPropertyChangedFor(nameof(IsReadyToRunVisible))]
+    [NotifyPropertyChangedFor(nameof(IsReadyToRunOptionVisible))]
     private string _targetFramework = "net11.0-android";
 
     [ObservableProperty]
@@ -332,12 +346,20 @@ public partial class MainViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsUseAppHostEnabled))]
     [NotifyPropertyChangedFor(nameof(IsSelfContainedEnabled))]
     [NotifyPropertyChangedFor(nameof(SelfContainedDisabledReason))]
+    [NotifyPropertyChangedFor(nameof(IsCatalystTarget))]
+    [NotifyPropertyChangedFor(nameof(IsNativeDesktopTarget))]
+    [NotifyPropertyChangedFor(nameof(IsPublishAotVisible))]
+    [NotifyPropertyChangedFor(nameof(IsPublishSingleFileVisible))]
+    [NotifyPropertyChangedFor(nameof(IsUseAppHostVisible))]
+    [NotifyPropertyChangedFor(nameof(IsReadyToRunVisible))]
+    [NotifyPropertyChangedFor(nameof(IsReadyToRunOptionVisible))]
     private string _runtimeIdentifier = "android-arm64";
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(PublishCommand))]
     [NotifyPropertyChangedFor(nameof(ReadyToRunDisabledReason))]
     [NotifyPropertyChangedFor(nameof(IsReadyToRunAutomatic))]
+    [NotifyPropertyChangedFor(nameof(IsReadyToRunOptionVisible))]
     private string _configuration = "Release";
 
     [ObservableProperty]
@@ -379,6 +401,7 @@ public partial class MainViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(PublishAotDisabledReason))]
     [NotifyPropertyChangedFor(nameof(ReadyToRunDisabledReason))]
     [NotifyPropertyChangedFor(nameof(IsReadyToRunAutomatic))]
+    [NotifyPropertyChangedFor(nameof(IsReadyToRunOptionVisible))]
     private bool _publishTrimmed;
 
     [ObservableProperty]
@@ -653,6 +676,28 @@ public partial class MainViewModel : ViewModelBase
 
     public bool IsIosPublishOptionsVisible => string.Equals(PublishPlatform, PublisherService.IosPlatform, StringComparison.Ordinal);
 
+    /// <summary>Mac Catalyst rides the macOS platform name but uses the Apple command path.</summary>
+    public bool IsCatalystTarget => IsMacOsPlatform && PublishPlatforms.IsMacCatalyst(TargetFramework, RuntimeIdentifier);
+
+    private bool IsWindowsPlatform => string.Equals(PublishPlatform, PublisherService.WindowsPlatform, StringComparison.Ordinal);
+
+    private bool IsLinuxPlatform => string.Equals(PublishPlatform, PublisherService.LinuxPlatform, StringComparison.Ordinal);
+
+    /// <summary>Only the native desktop command builders consume AOT, single-file, app host and manual R2R.</summary>
+    public bool IsNativeDesktopTarget => (IsMacOsPlatform && !IsCatalystTarget) || IsWindowsPlatform || IsLinuxPlatform;
+
+    public bool IsPublishAotVisible => IsNativeDesktopTarget;
+
+    public bool IsPublishSingleFileVisible => IsNativeDesktopTarget;
+
+    public bool IsUseAppHostVisible => IsNativeDesktopTarget;
+
+    public bool IsReadyToRunVisible => IsNativeDesktopTarget;
+
+    /// <summary>Hides the whole ReadyToRun row when neither a manual switch nor an SDK-owned
+    /// automatic value applies (for example .NET 10 mobile targets).</summary>
+    public bool IsReadyToRunOptionVisible => IsReadyToRunVisible || IsReadyToRunAutomatic;
+
     public bool IsIosActionsVisible => IsIosPublishOptionsVisible;
 
     /// <summary>
@@ -773,7 +818,7 @@ public partial class MainViewModel : ViewModelBase
     public bool IsRunAotEnabled => IsAndroidMonoAotVisible && PublishOptionPolicy.IsAndroidAotEnabled(AndroidLinkMode);
     public string RunAotDisabledReason => PublishOptionPolicy.AndroidAotDisabledReason(AndroidLinkMode);
 
-    public bool IsPublishSingleFileEnabled => PublishOptionPolicy.IsPublishSingleFileEnabled(PublishAot, PublishPlatform);
+    public bool IsPublishSingleFileEnabled => PublishOptionPolicy.IsPublishSingleFileEnabled(PublishAot, PublishPlatform, TargetFramework, RuntimeIdentifier);
 
     public string PublishSingleFileDisabledReason => PublishAot
         ? "Native AOT already produces a native executable; single-file bundling is not needed."
